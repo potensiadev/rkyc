@@ -23,13 +23,13 @@ export function TopBar() {
             3
           </span>
         </Button>
-        
+
         <div className="w-px h-6 bg-border mx-2" />
-        
+
         <div className="flex items-center gap-3">
           <div className="text-right">
-            <p className="text-sm font-medium text-foreground">김준호</p>
-            <p className="text-xs text-muted-foreground">기업심사팀</p>
+            <p className="text-sm font-medium text-foreground">김경민 과장</p>
+            <p className="text-xs text-muted-foreground">리스크관리부</p>
           </div>
           <Button variant="ghost" size="icon" className="rounded-full bg-secondary">
             <User className="w-5 h-5 text-muted-foreground" />
