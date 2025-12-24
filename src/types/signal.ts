@@ -82,6 +82,21 @@ export const SIGNAL_STATUS_CONFIG: Record<SignalStatus, { label: string; classNa
   resolved: { label: "완료", className: "status-resolved" },
 };
 
+export type SignalImpact = "risk" | "opportunity" | "neutral";
+export type SignalStrength = "high" | "medium" | "low";
+
+export const SIGNAL_IMPACT_CONFIG: Record<SignalImpact, { label: string; colorClass: string; bgClass: string }> = {
+  risk: { label: "위험", colorClass: "text-risk", bgClass: "bg-risk/10" },
+  opportunity: { label: "기회", colorClass: "text-opportunity", bgClass: "bg-opportunity/10" },
+  neutral: { label: "중립", colorClass: "text-muted-foreground", bgClass: "bg-muted" },
+};
+
+export const SIGNAL_STRENGTH_CONFIG: Record<SignalStrength, { label: string }> = {
+  high: { label: "높음" },
+  medium: { label: "중간" },
+  low: { label: "낮음" },
+};
+
 export interface Signal {
   id: string;
   corporationName: string;
@@ -95,6 +110,9 @@ export interface Signal {
   sourceUrl?: string;
   detectedAt: string;
   detailCategory: string;
-  relevanceNote?: string; // For industry/environment signals
-  relatedCorporations?: string[]; // For industry signals
+  relevanceNote?: string;
+  relatedCorporations?: string[];
+  impact: SignalImpact;
+  impactStrength: SignalStrength;
+  evidenceCount: number;
 }

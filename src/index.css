@@ -57,6 +57,11 @@
     --signal-review: 38 80% 50%;
     --signal-resolved: 145 45% 45%;
 
+    /* Impact colors */
+    --risk: 0 55% 50%;
+    --opportunity: 145 50% 42%;
+    --insight: 210 60% 50%;
+
     /* UI elements */
     --border: 210 20% 88%;
     --input: 210 20% 88%;

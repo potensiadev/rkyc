@@ -19,6 +19,9 @@ const mockEnvironmentSignals: Signal[] = [
     detectedAt: "3시간 전",
     detailCategory: "무역 정책",
     relevanceNote: "포스코홀딩스는 미국 수출 비중이 약 15%로, 관세 정책 변화에 따른 수익성 영향 검토가 필요할 수 있습니다.",
+    impact: "risk",
+    impactStrength: "medium",
+    evidenceCount: 4,
   },
   {
     id: "8",
@@ -33,6 +36,9 @@ const mockEnvironmentSignals: Signal[] = [
     detectedAt: "5시간 전",
     detailCategory: "에너지 정책",
     relevanceNote: "한국전력공사의 수익 구조 및 재무 상태에 직접적 영향을 미칠 수 있는 정책 변화입니다.",
+    impact: "neutral",
+    impactStrength: "medium",
+    evidenceCount: 3,
   },
 ];
 
