@@ -3,7 +3,7 @@ import { MainLayout } from "@/components/layout/MainLayout";
 import { SignalCard } from "@/components/signals/SignalCard";
 import { SignalDetailPanel } from "@/components/signals/SignalDetailPanel";
 import { Signal, SignalStatus } from "@/types/signal";
-import { Globe, Info } from "lucide-react";
+import { Globe } from "lucide-react";
 
 const mockEnvironmentSignals: Signal[] = [
   {
@@ -91,21 +91,11 @@ export default function EnvironmentSignalPage() {
           </div>
         </div>
 
-        {/* Signal type explanation */}
-        <div className="bg-card rounded-lg border border-signal-environment/30 p-5 mb-6">
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-lg bg-signal-environment/10 flex items-center justify-center shrink-0">
-              <Info className="w-4 h-4 text-signal-environment" />
-            </div>
-            <div>
-              <h3 className="text-sm font-medium text-foreground mb-1">환경 시그널 안내</h3>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                환경 시그널은 정책, 규제, 환율, 지정학적 이벤트 등 
-                외부 환경 변화에 따른 거시적 참고 정보를 기반으로 생성된 신호입니다. 
-                기업 분석을 위한 배경 정보로 활용됩니다.
-              </p>
-            </div>
-          </div>
+        {/* Signal type explanation banner */}
+        <div className="bg-muted/50 rounded-lg border border-border px-4 py-3 mb-6">
+          <p className="text-sm text-muted-foreground">
+            정책, 규제, 거시 환경 등 외부 요인 기준 시그널입니다.
+          </p>
         </div>
 
         {/* Status filters */}

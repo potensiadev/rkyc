@@ -3,7 +3,7 @@ import { MainLayout } from "@/components/layout/MainLayout";
 import { SignalCard } from "@/components/signals/SignalCard";
 import { SignalDetailPanel } from "@/components/signals/SignalDetailPanel";
 import { Signal, SignalStatus } from "@/types/signal";
-import { Building2, Info } from "lucide-react";
+import { Building2 } from "lucide-react";
 
 const mockDirectSignals: Signal[] = [
   {
@@ -122,21 +122,11 @@ export default function DirectSignalPage() {
           </div>
         </div>
 
-        {/* Signal type explanation */}
-        <div className="bg-card rounded-lg border border-signal-direct/30 p-5 mb-6">
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-lg bg-signal-direct/10 flex items-center justify-center shrink-0">
-              <Info className="w-4 h-4 text-signal-direct" />
-            </div>
-            <div>
-              <h3 className="text-sm font-medium text-foreground mb-1">직접 시그널 안내</h3>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                직접 시그널은 특정 법인과 직접적으로 관련된 공시, 내부 데이터, 
-                또는 개별 이벤트를 기반으로 AI가 감지한 참고 신호입니다. 
-                본 정보는 검토용으로 제공되며 자동 판단이나 조치를 의미하지 않습니다.
-              </p>
-            </div>
-          </div>
+        {/* Signal type explanation banner */}
+        <div className="bg-muted/50 rounded-lg border border-border px-4 py-3 mb-6">
+          <p className="text-sm text-muted-foreground">
+            기업 내부 문서, 공시, 거래 등 직접 관련 이벤트 기준 시그널입니다.
+          </p>
         </div>
 
         {/* Status filters */}
