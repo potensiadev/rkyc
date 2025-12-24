@@ -3,7 +3,7 @@ import { MainLayout } from "@/components/layout/MainLayout";
 import { SignalCard } from "@/components/signals/SignalCard";
 import { SignalDetailPanel } from "@/components/signals/SignalDetailPanel";
 import { Signal, SignalStatus } from "@/types/signal";
-import { Factory, Info } from "lucide-react";
+import { Factory } from "lucide-react";
 
 const mockIndustrySignals: Signal[] = [
   {
@@ -93,21 +93,11 @@ export default function IndustrySignalPage() {
           </div>
         </div>
 
-        {/* Signal type explanation */}
-        <div className="bg-card rounded-lg border border-signal-industry/30 p-5 mb-6">
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-lg bg-signal-industry/10 flex items-center justify-center shrink-0">
-              <Info className="w-4 h-4 text-signal-industry" />
-            </div>
-            <div>
-              <h3 className="text-sm font-medium text-foreground mb-1">산업 시그널 안내</h3>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                산업 시그널은 동일 산업 전반에 영향을 미칠 수 있는 
-                산업 리포트, 업계 뉴스, 시장 동향 정보를 기반으로 생성된 참고 신호입니다. 
-                개별 법인을 단정적으로 판단하기 위한 정보는 아닙니다.
-              </p>
-            </div>
-          </div>
+        {/* Signal type explanation banner */}
+        <div className="bg-muted/50 rounded-lg border border-border px-4 py-3 mb-6">
+          <p className="text-sm text-muted-foreground">
+            기업이 속한 산업 전반의 변화 및 동향 기준 시그널입니다.
+          </p>
         </div>
 
         {/* Status filters */}

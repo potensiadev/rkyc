@@ -37,13 +37,6 @@ const navigationItems: NavigationItem[] = [
     label: "일일 브리핑",
     icon: Newspaper,
     path: "/briefing",
-  },
-  {
-    id: "signals",
-    label: "시그널 인박스",
-    icon: Inbox,
-    path: "/",
-    badge: 12,
     subItems: [
       {
         id: "direct-signals",
@@ -64,6 +57,13 @@ const navigationItems: NavigationItem[] = [
         path: "/signals/environment",
       },
     ],
+  },
+  {
+    id: "signals",
+    label: "시그널 인박스",
+    icon: Inbox,
+    path: "/",
+    badge: 12,
   },
   {
     id: "corporations",
@@ -102,7 +102,7 @@ const bottomItems: NavigationItem[] = [
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
-  const [expandedItems, setExpandedItems] = useState<string[]>(["signals"]);
+  const [expandedItems, setExpandedItems] = useState<string[]>(["briefing"]);
   const location = useLocation();
 
   const toggleExpanded = (id: string) => {
