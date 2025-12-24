@@ -144,17 +144,17 @@ const mockSignalDetails: Record<string, ExtendedSignal> = {
     confidenceLevel: "high",
     sourceType: "mixed",
     eventClassification: "market_shift",
-    aiSummary: `생성형 AI 기술의 급속한 확산에 따라 고대역폭 메모리(HBM) 수요가 전례 없는 수준으로 급증하고 있습니다. 주요 AI 칩 제조사들의 수요 증가로 인해 HBM 공급 부족 현상이 지속되고 있으며, 이는 관련 기업들의 사업 기회로 작용할 수 있습니다.
+    aiSummary: `생성형 AI 기술의 급속한 확산에 따라 고대역폭 메모리(HBM) 수요가 전례 없는 수준으로 급증하고 있습니다. 주요 AI 칩 제조사들의 수요 증가로 인해 HBM 공급 부족 현상이 지속되고 있으며, 이는 관련 기업들의 사업 환경 변화로 관찰됩니다.
 
 SK하이닉스는 현재 글로벌 HBM 시장에서 약 50% 이상의 점유율을 보유하고 있어, 해당 산업 동향의 직접적인 영향권에 있는 것으로 분석됩니다. 삼성전자, 마이크론 등 경쟁사들도 생산 능력 확대에 나서고 있습니다.
 
-본 정보는 산업 전반의 동향을 요약한 참고 자료이며, 개별 기업의 실적이나 주가를 전망하기 위한 자료가 아닙니다.`,
+본 정보는 산업 전반의 동향을 요약한 참고 자료입니다.`,
     evidences: [
       {
         id: "e1",
         sourceType: "report",
         title: "2024년 HBM 시장 분석 보고서",
-        snippet: "HBM 시장 규모가 2024년 전년 대비 3배 이상 성장할 것으로 전망됩니다. AI 데이터센터 수요가 주요 성장 동력입니다.",
+        snippet: "HBM 시장 규모가 2024년 전년 대비 3배 이상 성장한 것으로 집계되었습니다. AI 데이터센터 수요가 주요 성장 동력으로 관찰됩니다.",
         sourceName: "한국반도체산업협회",
         sourceUrl: "https://example.com/report1",
         publishedAt: "2024-12-15",
