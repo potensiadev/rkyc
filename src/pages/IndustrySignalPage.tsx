@@ -14,12 +14,15 @@ const mockIndustrySignals: Signal[] = [
     signalSubType: "market",
     status: "review",
     title: "전기차 배터리 산업 전반 수요 둔화 조짐",
-    summary: "글로벌 전기차 시장의 성장 속도가 예상보다 더딘 것으로 나타나면서, 배터리 산업 전반에 영향을 미칠 수 있다는 분석이 제기되고 있습니다. 관련 기업 검토가 필요합니다. (요약 자료)",
+    summary: "글로벌 전기차 시장의 성장 속도가 예상보다 더딘 것으로 나타나면서, 배터리 산업 전반에 영향을 미칠 수 있습니다. (요약 자료)",
     source: "한국에너지공단",
     detectedAt: "2시간 전",
     detailCategory: "시장 동향",
     relevanceNote: "LG에너지솔루션은 글로벌 2차전지 시장 점유율 상위 기업으로, 업계 전반의 수요 변화에 직접적 영향을 받을 수 있습니다.",
     relatedCorporations: ["삼성SDI", "SK온", "CATL"],
+    impact: "risk",
+    impactStrength: "medium",
+    evidenceCount: 6,
   },
   {
     id: "7",
@@ -35,6 +38,9 @@ const mockIndustrySignals: Signal[] = [
     detailCategory: "기술 동향",
     relevanceNote: "SK하이닉스는 HBM 시장 점유율 1위 기업으로, 해당 산업 동향의 직접적 수혜 가능성이 있습니다.",
     relatedCorporations: ["삼성전자", "마이크론"],
+    impact: "opportunity",
+    impactStrength: "high",
+    evidenceCount: 8,
   },
 ];
 

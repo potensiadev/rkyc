@@ -80,6 +80,9 @@ export default {
           industry: "hsl(var(--signal-industry))",
           environment: "hsl(var(--signal-environment))",
         },
+        risk: "hsl(var(--risk))",
+        opportunity: "hsl(var(--opportunity))",
+        insight: "hsl(var(--insight))",
         surface: {
           elevated: "hsl(var(--surface-elevated))",
           sunken: "hsl(var(--surface-sunken))",

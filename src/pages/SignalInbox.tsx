@@ -1,9 +1,26 @@
 import { useState, useMemo } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
-import { SignalCard } from "@/components/signals/SignalCard";
 import { SignalDetailPanel } from "@/components/signals/SignalDetailPanel";
-import { Signal, SignalStatus } from "@/types/signal";
-import { Clock, CheckCircle2, AlertCircle } from "lucide-react";
+import { Signal, SignalStatus, SIGNAL_TYPE_CONFIG, SIGNAL_IMPACT_CONFIG, SIGNAL_STRENGTH_CONFIG } from "@/types/signal";
+import { 
+  AlertCircle, 
+  TrendingUp, 
+  TrendingDown, 
+  Lightbulb, 
+  Building2, 
+  Factory, 
+  Globe,
+  FileText,
+  Clock
+} from "lucide-react";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 const mockSignals: Signal[] = [
   {
@@ -14,11 +31,14 @@ const mockSignals: Signal[] = [
     signalSubType: "news",
     status: "new",
     title: "삼성전자, 반도체 사업부 대규모 인력 구조조정 검토",
-    summary: "삼성전자가 반도체 사업부의 경쟁력 강화를 위해 대규모 인력 재배치를 검토 중인 것으로 알려졌습니다. 이번 조치는 글로벌 반도체 시장의 수요 변화에 대응하기 위한 전략적 결정으로 분석됩니다. (참고용 요약)",
+    summary: "삼성전자가 반도체 사업부의 경쟁력 강화를 위해 대규모 인력 재배치를 검토 중인 것으로 알려졌습니다.",
     source: "연합뉴스",
     sourceUrl: "https://example.com",
     detectedAt: "10분 전",
     detailCategory: "인사/조직",
+    impact: "risk",
+    impactStrength: "high",
+    evidenceCount: 5,
   },
   {
     id: "2",
@@ -28,10 +48,13 @@ const mockSignals: Signal[] = [
     signalSubType: "financial",
     status: "new",
     title: "현대자동차 2024년 3분기 영업이익 전년 대비 15% 감소",
-    summary: "현대자동차의 2024년 3분기 영업이익이 전년 동기 대비 15% 감소한 것으로 잠정 집계되었습니다. 주요 원인으로 원자재 가격 상승과 환율 변동이 지목되고 있습니다. (검토용 자료)",
+    summary: "현대자동차의 2024년 3분기 영업이익이 전년 동기 대비 15% 감소한 것으로 잠정 집계되었습니다.",
     source: "금융감독원 전자공시",
     detectedAt: "25분 전",
     detailCategory: "실적/재무",
+    impact: "risk",
+    impactStrength: "medium",
+    evidenceCount: 3,
   },
   {
     id: "3",
@@ -41,10 +64,13 @@ const mockSignals: Signal[] = [
     signalSubType: "regulatory",
     status: "review",
     title: "공정거래위원회, 카카오 플랫폼 독점 관련 조사 착수",
-    summary: "공정거래위원회가 카카오의 플랫폼 시장 지배력 남용 혐의에 대한 본격적인 조사에 착수했습니다. 조사 결과에 따라 시정명령 또는 과징금 부과 가능성이 있습니다. (참고 정보)",
+    summary: "공정거래위원회가 카카오의 플랫폼 시장 지배력 남용 혐의에 대한 본격적인 조사에 착수했습니다.",
     source: "공정거래위원회",
     detectedAt: "1시간 전",
     detailCategory: "규제/법률",
+    impact: "risk",
+    impactStrength: "high",
+    evidenceCount: 4,
   },
   {
     id: "4",
@@ -54,12 +80,15 @@ const mockSignals: Signal[] = [
     signalSubType: "market",
     status: "review",
     title: "전기차 배터리 산업 전반 수요 둔화 조짐",
-    summary: "글로벌 전기차 시장의 성장 속도가 예상보다 더딘 것으로 나타나면서, 배터리 산업 전반에 영향을 미칠 수 있다는 분석이 제기되고 있습니다. 관련 기업 검토가 필요합니다. (요약 자료)",
+    summary: "글로벌 전기차 시장의 성장 속도가 예상보다 더딘 것으로 나타나면서, 배터리 산업 전반에 영향을 미칠 수 있습니다.",
     source: "한국에너지공단",
     detectedAt: "2시간 전",
     detailCategory: "시장 동향",
-    relevanceNote: "LG에너지솔루션은 글로벌 2차전지 시장 점유율 상위 기업으로, 업계 전반의 수요 변화에 직접적 영향을 받을 수 있습니다.",
+    relevanceNote: "LG에너지솔루션은 글로벌 2차전지 시장 점유율 상위 기업입니다.",
     relatedCorporations: ["삼성SDI", "SK온", "CATL"],
+    impact: "risk",
+    impactStrength: "medium",
+    evidenceCount: 6,
   },
   {
     id: "5",
@@ -69,10 +98,13 @@ const mockSignals: Signal[] = [
     signalSubType: "governance",
     status: "resolved",
     title: "네이버, AI 스타트업 인수 완료 공시",
-    summary: "네이버가 국내 AI 스타트업 인수를 공식 완료했습니다. 이번 인수를 통해 네이버는 AI 검색 및 추천 기술 역량을 강화할 것으로 예상됩니다. 검토 완료. (참고)",
+    summary: "네이버가 국내 AI 스타트업 인수를 공식 완료했습니다. 검토 완료.",
     source: "전자공시시스템",
     detectedAt: "어제",
     detailCategory: "인수합병",
+    impact: "opportunity",
+    impactStrength: "medium",
+    evidenceCount: 2,
   },
   {
     id: "6",
@@ -82,11 +114,14 @@ const mockSignals: Signal[] = [
     signalSubType: "macro",
     status: "new",
     title: "미국 철강 관세 인상 발표, 수출 기업 영향 전망",
-    summary: "미국 정부가 철강 및 알루미늄에 대한 추가 관세 부과를 발표했습니다. 해당 조치는 한국 철강 수출 기업들의 미국 시장 경쟁력에 영향을 미칠 수 있습니다. (검토용 요약)",
+    summary: "미국 정부가 철강 및 알루미늄에 대한 추가 관세 부과를 발표했습니다.",
     source: "외교부",
     detectedAt: "3시간 전",
     detailCategory: "무역 정책",
-    relevanceNote: "포스코홀딩스는 미국 수출 비중이 약 15%로, 관세 정책 변화에 따른 수익성 영향 검토가 필요할 수 있습니다.",
+    relevanceNote: "포스코홀딩스는 미국 수출 비중이 약 15%입니다.",
+    impact: "risk",
+    impactStrength: "high",
+    evidenceCount: 4,
   },
   {
     id: "7",
@@ -96,12 +131,15 @@ const mockSignals: Signal[] = [
     signalSubType: "market",
     status: "new",
     title: "AI 반도체 수요 급증, HBM 공급 부족 지속",
-    summary: "생성형 AI 확산에 따라 고대역폭 메모리(HBM) 수요가 급증하고 있으며, 주요 반도체 기업들의 생산 능력 확대가 요구되고 있습니다. (산업 동향 요약)",
+    summary: "생성형 AI 확산에 따라 고대역폭 메모리(HBM) 수요가 급증하고 있습니다.",
     source: "한국반도체산업협회",
     detectedAt: "4시간 전",
     detailCategory: "기술 동향",
-    relevanceNote: "SK하이닉스는 HBM 시장 점유율 1위 기업으로, 해당 산업 동향의 직접적 수혜 가능성이 있습니다.",
+    relevanceNote: "SK하이닉스는 HBM 시장 점유율 1위 기업입니다.",
     relatedCorporations: ["삼성전자", "마이크론"],
+    impact: "opportunity",
+    impactStrength: "high",
+    evidenceCount: 8,
   },
   {
     id: "8",
@@ -111,45 +149,63 @@ const mockSignals: Signal[] = [
     signalSubType: "regulatory",
     status: "review",
     title: "정부, 전기요금 체계 개편안 발표 예정",
-    summary: "정부가 내년 상반기 전기요금 체계 전면 개편안을 발표할 예정입니다. 산업용 요금 조정 및 시간대별 차등 요금제 도입이 검토되고 있습니다. (정책 동향 요약)",
+    summary: "정부가 내년 상반기 전기요금 체계 전면 개편안을 발표할 예정입니다.",
     source: "산업통상자원부",
     detectedAt: "5시간 전",
     detailCategory: "에너지 정책",
-    relevanceNote: "한국전력공사의 수익 구조 및 재무 상태에 직접적 영향을 미칠 수 있는 정책 변화입니다.",
+    relevanceNote: "한국전력공사의 수익 구조에 직접적 영향을 미칠 수 있습니다.",
+    impact: "neutral",
+    impactStrength: "medium",
+    evidenceCount: 3,
   },
 ];
 
-interface StatCardProps {
+interface KPICardProps {
   icon: React.ElementType;
   label: string;
   value: string | number;
-  subtext: string;
-  trend?: {
-    value: string;
-    positive: boolean;
-  };
+  trend?: string;
+  colorClass?: string;
+  bgClass?: string;
 }
 
-function StatCard({ icon: Icon, label, value, subtext, trend }: StatCardProps) {
+function KPICard({ icon: Icon, label, value, trend, colorClass = "text-primary", bgClass = "bg-accent" }: KPICardProps) {
   return (
     <div className="bg-card rounded-lg border border-border p-5">
-      <div className="flex items-start justify-between">
-        <div className="w-10 h-10 rounded-lg bg-accent flex items-center justify-center">
-          <Icon className="w-5 h-5 text-primary" />
+      <div className="flex items-center justify-between mb-3">
+        <div className={`w-10 h-10 rounded-lg ${bgClass} flex items-center justify-center`}>
+          <Icon className={`w-5 h-5 ${colorClass}`} />
         </div>
         {trend && (
-          <span className={`text-xs font-medium ${trend.positive ? "text-success" : "text-destructive"}`}>
-            {trend.value}
-          </span>
+          <span className="text-xs text-muted-foreground">{trend}</span>
         )}
       </div>
-      <div className="mt-4">
-        <p className="text-2xl font-semibold text-foreground">{value}</p>
-        <p className="text-sm font-medium text-foreground mt-1">{label}</p>
-        <p className="text-xs text-muted-foreground mt-0.5">{subtext}</p>
-      </div>
+      <p className="text-2xl font-semibold text-foreground">{value}</p>
+      <p className="text-sm text-muted-foreground mt-1">{label}</p>
     </div>
   );
+}
+
+function getSignalTypeIcon(category: Signal["signalCategory"]) {
+  switch (category) {
+    case "direct":
+      return Building2;
+    case "industry":
+      return Factory;
+    case "environment":
+      return Globe;
+  }
+}
+
+function getImpactIcon(impact: Signal["impact"]) {
+  switch (impact) {
+    case "risk":
+      return TrendingDown;
+    case "opportunity":
+      return TrendingUp;
+    case "neutral":
+      return FileText;
+  }
 }
 
 export default function SignalInbox() {
@@ -169,6 +225,10 @@ export default function SignalInbox() {
     new: mockSignals.filter(s => s.status === "new").length,
     review: mockSignals.filter(s => s.status === "review").length,
     resolved: mockSignals.filter(s => s.status === "resolved").length,
+    todayNew: mockSignals.filter(s => s.status === "new").length,
+    riskHigh7d: mockSignals.filter(s => s.impact === "risk").length,
+    opportunity7d: mockSignals.filter(s => s.impact === "opportunity").length,
+    loanEligible: 24,
   }), []);
 
   const handleViewDetail = (signal: Signal) => {
@@ -185,41 +245,53 @@ export default function SignalInbox() {
 
   return (
     <MainLayout>
-      <div className="max-w-6xl">
+      <div className="max-w-7xl">
         {/* Page header */}
         <div className="mb-6">
-          <h1 className="text-2xl font-semibold text-foreground">시그널 인박스</h1>
+          <h1 className="text-2xl font-semibold text-foreground">AI 감지 최신 RKYC 시그널</h1>
           <p className="text-muted-foreground mt-1">
-            AI가 감지한 모든 시그널을 시간순으로 검토합니다. 유형별 상세 검토는 하위 메뉴를 이용하세요.
+            AI가 기업, 산업, 외부 환경 이벤트를 선제적으로 모니터링하여 검토가 필요한 시그널을 자동으로 도출합니다.
           </p>
         </div>
 
-        {/* Stats - only status-based, no signal-type breakdown */}
-        <div className="grid grid-cols-3 gap-4 mb-6">
-          <StatCard
+        {/* KPI Cards */}
+        <div className="grid grid-cols-4 gap-4 mb-6">
+          <KPICard
             icon={AlertCircle}
-            label="신규 시그널"
-            value={counts.new}
-            subtext="금일 감지됨"
-            trend={{ value: "+3", positive: false }}
+            label="금일 신규 시그널"
+            value={counts.todayNew}
+            trend="오늘"
+            colorClass="text-signal-new"
+            bgClass="bg-signal-new/10"
           />
-          <StatCard
-            icon={Clock}
-            label="검토 대기"
-            value={counts.review}
-            subtext="담당자 배정 필요"
+          <KPICard
+            icon={TrendingDown}
+            label="위험 시그널 (7일)"
+            value={counts.riskHigh7d}
+            trend="최근 7일"
+            colorClass="text-risk"
+            bgClass="bg-risk/10"
           />
-          <StatCard
-            icon={CheckCircle2}
-            label="금주 완료"
-            value={counts.resolved}
-            subtext="이번 주 처리 건수"
-            trend={{ value: "+15%", positive: true }}
+          <KPICard
+            icon={TrendingUp}
+            label="기회 시그널 (7일)"
+            value={counts.opportunity7d}
+            trend="최근 7일"
+            colorClass="text-opportunity"
+            bgClass="bg-opportunity/10"
+          />
+          <KPICard
+            icon={Lightbulb}
+            label="여신 인사이트 대상 법인"
+            value={counts.loanEligible}
+            trend="참고용"
+            colorClass="text-insight"
+            bgClass="bg-insight/10"
           />
         </div>
 
-        {/* Status filters only - no signal type explanation */}
-        <div className="flex items-center justify-between gap-4 mb-6">
+        {/* Status filters */}
+        <div className="flex items-center justify-between gap-4 mb-4">
           <div className="flex items-center gap-1 bg-secondary rounded-lg p-1">
             {statusFilters.map((filter) => (
               <button
@@ -243,19 +315,85 @@ export default function SignalInbox() {
 
           <select className="text-sm border border-input rounded-md px-3 py-2 bg-card text-foreground focus:outline-none focus:ring-1 focus:ring-ring">
             <option value="recent">최신순</option>
+            <option value="impact">영향도순</option>
             <option value="corporation">기업명순</option>
           </select>
         </div>
 
-        {/* Signal list */}
-        <div className="space-y-3">
-          {filteredSignals.map((signal) => (
-            <SignalCard 
-              key={signal.id} 
-              signal={signal}
-              onViewDetail={handleViewDetail}
-            />
-          ))}
+        {/* Signal Feed Table */}
+        <div className="bg-card rounded-lg border border-border overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/50">
+                <TableHead className="w-[140px]">법인명</TableHead>
+                <TableHead className="w-[100px]">시그널 유형</TableHead>
+                <TableHead className="w-[80px]">영향</TableHead>
+                <TableHead className="w-[80px]">영향 강도</TableHead>
+                <TableHead>AI 요약 (참고용)</TableHead>
+                <TableHead className="w-[80px] text-center">근거 수</TableHead>
+                <TableHead className="w-[100px]">감지 시간</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredSignals.map((signal) => {
+                const typeConfig = SIGNAL_TYPE_CONFIG[signal.signalCategory];
+                const impactConfig = SIGNAL_IMPACT_CONFIG[signal.impact];
+                const strengthConfig = SIGNAL_STRENGTH_CONFIG[signal.impactStrength];
+                const TypeIcon = getSignalTypeIcon(signal.signalCategory);
+                const ImpactIcon = getImpactIcon(signal.impact);
+
+                return (
+                  <TableRow 
+                    key={signal.id} 
+                    className="cursor-pointer hover:bg-muted/30 transition-colors"
+                    onClick={() => handleViewDetail(signal)}
+                  >
+                    <TableCell>
+                      <div className="font-medium text-foreground">{signal.corporationName}</div>
+                      <div className="text-xs text-muted-foreground">{signal.corporationId}</div>
+                    </TableCell>
+                    <TableCell>
+                      <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium ${typeConfig.bgClass} ${typeConfig.colorClass}`}>
+                        <TypeIcon className="w-3 h-3" />
+                        {typeConfig.label}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium ${impactConfig.bgClass} ${impactConfig.colorClass}`}>
+                        <ImpactIcon className="w-3 h-3" />
+                        {impactConfig.label}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <span className={`text-xs font-medium ${
+                        signal.impactStrength === "high" 
+                          ? "text-risk" 
+                          : signal.impactStrength === "medium" 
+                            ? "text-warning" 
+                            : "text-muted-foreground"
+                      }`}>
+                        {strengthConfig.label}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <p className="text-sm text-foreground line-clamp-1">{signal.summary}</p>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-muted text-xs font-medium text-foreground">
+                        {signal.evidenceCount}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <Clock className="w-3 h-3" />
+                        {signal.detectedAt}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
         </div>
 
         {/* Empty state */}
