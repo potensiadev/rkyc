@@ -90,7 +90,7 @@ const mockTimelineSignals: Record<string, TimelineSignal[]> = {
       signalCategory: "industry",
       impact: "opportunity",
       impactStrength: "medium",
-      title: "AI 반도체 수요 급증으로 메모리 시장 회복 전망",
+      title: "AI 반도체 수요 급증으로 메모리 시장 회복 관련 정보",
     },
     {
       id: "3",
@@ -130,7 +130,7 @@ const mockTimelineSignals: Record<string, TimelineSignal[]> = {
       signalCategory: "environment",
       impact: "risk",
       impactStrength: "low",
-      title: "글로벌 경기 침체 우려로 IT 수요 둔화 전망",
+      title: "글로벌 경기 침체 우려로 IT 수요 둔화 관련 정보",
     },
     {
       id: "8",

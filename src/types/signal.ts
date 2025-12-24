@@ -53,7 +53,7 @@ export const SIGNAL_TYPE_CONFIG: Record<SignalCategory, SignalTypeInfo> = {
     id: "environment",
     label: "환경 시그널",
     description: "거시경제, 정책, 글로벌 이슈 등 외부 환경 변화 정보",
-    analysisLogic: "매크로 환경 변화를 모니터링하고, 해당 기업에 잠재적 영향이 있을 수 있는 정보를 참고용으로 제공합니다.",
+    analysisLogic: "매크로 환경 변화를 모니터링하고, 해당 기업에 잠재적 영향이 있을 수 있는 정보를 참고용으로 요약합니다.",
     evidenceSources: [
       "정부 정책 발표",
       "중앙은행 금리 결정",
