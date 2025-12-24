@@ -12,6 +12,7 @@ import SignalDetailPage from "./pages/SignalDetailPage";
 import CorporateDetailPage from "./pages/CorporateDetailPage";
 import DailyBriefingPage from "./pages/DailyBriefingPage";
 import AnalyticsStatusPage from "./pages/AnalyticsStatusPage";
+import ReportsPage from "./pages/ReportsPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -27,6 +28,7 @@ const App = () => (
           <Route path="/corporations" element={<CorporationSearch />} />
           <Route path="/briefing" element={<DailyBriefingPage />} />
           <Route path="/analytics" element={<AnalyticsStatusPage />} />
+          <Route path="/reports" element={<ReportsPage />} />
           <Route path="/signals/direct" element={<DirectSignalPage />} />
           <Route path="/signals/industry" element={<IndustrySignalPage />} />
           <Route path="/signals/environment" element={<EnvironmentSignalPage />} />
