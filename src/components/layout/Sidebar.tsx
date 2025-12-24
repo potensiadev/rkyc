@@ -7,17 +7,56 @@ import {
   Bell,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   BarChart3,
-  FileText
+  FileText,
+  Factory,
+  Globe
 } from "lucide-react";
 
-const navigationItems = [
+interface SubMenuItem {
+  id: string;
+  label: string;
+  icon: React.ElementType;
+  path: string;
+}
+
+interface NavigationItem {
+  id: string;
+  label: string;
+  icon: React.ElementType;
+  path: string;
+  badge?: number;
+  subItems?: SubMenuItem[];
+}
+
+const navigationItems: NavigationItem[] = [
   {
     id: "signals",
     label: "시그널 인박스",
     icon: Inbox,
     path: "/",
     badge: 12,
+    subItems: [
+      {
+        id: "direct-signals",
+        label: "직접 시그널",
+        icon: Building2,
+        path: "/signals/direct",
+      },
+      {
+        id: "industry-signals",
+        label: "산업 시그널",
+        icon: Factory,
+        path: "/signals/industry",
+      },
+      {
+        id: "environment-signals",
+        label: "환경 시그널",
+        icon: Globe,
+        path: "/signals/environment",
+      },
+    ],
   },
   {
     id: "corporations",
@@ -39,7 +78,7 @@ const navigationItems = [
   },
 ];
 
-const bottomItems = [
+const bottomItems: NavigationItem[] = [
   {
     id: "notifications",
     label: "알림 설정",
@@ -56,7 +95,25 @@ const bottomItems = [
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
+  const [expandedItems, setExpandedItems] = useState<string[]>(["signals"]);
   const location = useLocation();
+
+  const toggleExpanded = (id: string) => {
+    setExpandedItems(prev => 
+      prev.includes(id) 
+        ? prev.filter(item => item !== id)
+        : [...prev, id]
+    );
+  };
+
+  const isItemActive = (path: string) => location.pathname === path;
+  const isParentActive = (item: NavigationItem) => {
+    if (isItemActive(item.path)) return true;
+    if (item.subItems) {
+      return item.subItems.some(sub => isItemActive(sub.path));
+    }
+    return false;
+  };
 
   return (
     <aside
@@ -88,32 +145,75 @@ export function Sidebar() {
         </div>
 
         {/* Main navigation */}
-        <nav className="flex-1 py-4 px-2 space-y-1">
+        <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto">
           {navigationItems.map((item) => {
-            const isActive = location.pathname === item.path;
+            const isActive = isParentActive(item);
+            const isExpanded = expandedItems.includes(item.id);
+            const hasSubItems = item.subItems && item.subItems.length > 0;
+
             return (
-              <Link
-                key={item.id}
-                to={item.path}
-                className={`
-                  nav-item
-                  ${isActive ? "nav-item-active" : ""}
-                  ${collapsed ? "justify-center px-2" : ""}
-                `}
-                title={collapsed ? item.label : undefined}
-              >
-                <item.icon className="w-5 h-5 shrink-0" />
-                {!collapsed && (
-                  <>
-                    <span className="flex-1">{item.label}</span>
-                    {item.badge && (
-                      <span className="bg-sidebar-primary text-sidebar-primary-foreground text-xs px-2 py-0.5 rounded-full">
-                        {item.badge}
-                      </span>
+              <div key={item.id}>
+                {/* Parent item */}
+                <div className="flex items-center">
+                  <Link
+                    to={item.path}
+                    className={`
+                      nav-item flex-1
+                      ${isActive && !hasSubItems ? "nav-item-active" : ""}
+                      ${isActive && hasSubItems ? "text-sidebar-foreground font-medium" : ""}
+                      ${collapsed ? "justify-center px-2" : ""}
+                    `}
+                    title={collapsed ? item.label : undefined}
+                  >
+                    <item.icon className="w-5 h-5 shrink-0" />
+                    {!collapsed && (
+                      <>
+                        <span className="flex-1">{item.label}</span>
+                        {item.badge && (
+                          <span className="bg-sidebar-primary text-sidebar-primary-foreground text-xs px-2 py-0.5 rounded-full">
+                            {item.badge}
+                          </span>
+                        )}
+                      </>
                     )}
-                  </>
+                  </Link>
+                  {!collapsed && hasSubItems && (
+                    <button
+                      onClick={() => toggleExpanded(item.id)}
+                      className="p-1.5 rounded-md hover:bg-sidebar-accent text-sidebar-foreground/70 hover:text-sidebar-foreground transition-colors"
+                    >
+                      <ChevronDown 
+                        className={`w-4 h-4 transition-transform ${isExpanded ? "rotate-180" : ""}`}
+                      />
+                    </button>
+                  )}
+                </div>
+
+                {/* Sub items */}
+                {!collapsed && hasSubItems && isExpanded && (
+                  <div className="mt-1 ml-4 pl-4 border-l border-sidebar-border space-y-1">
+                    {item.subItems!.map((subItem) => {
+                      const isSubActive = isItemActive(subItem.path);
+                      return (
+                        <Link
+                          key={subItem.id}
+                          to={subItem.path}
+                          className={`
+                            flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors
+                            ${isSubActive 
+                              ? "bg-sidebar-accent text-sidebar-foreground font-medium" 
+                              : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
+                            }
+                          `}
+                        >
+                          <subItem.icon className="w-4 h-4 shrink-0" />
+                          <span>{subItem.label}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
                 )}
-              </Link>
+              </div>
             );
           })}
         </nav>

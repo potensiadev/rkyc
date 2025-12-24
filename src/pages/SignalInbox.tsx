@@ -1,10 +1,9 @@
 import { useState, useMemo } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { SignalCard } from "@/components/signals/SignalCard";
-import { SignalFilters } from "@/components/signals/SignalFilters";
-import { SignalStats } from "@/components/signals/SignalStats";
 import { SignalDetailPanel } from "@/components/signals/SignalDetailPanel";
-import { Signal, SignalCategory, SignalStatus } from "@/types/signal";
+import { Signal, SignalStatus } from "@/types/signal";
+import { Clock, CheckCircle2, AlertCircle } from "lucide-react";
 
 const mockSignals: Signal[] = [
   {
@@ -120,34 +119,69 @@ const mockSignals: Signal[] = [
   },
 ];
 
+interface StatCardProps {
+  icon: React.ElementType;
+  label: string;
+  value: string | number;
+  subtext: string;
+  trend?: {
+    value: string;
+    positive: boolean;
+  };
+}
+
+function StatCard({ icon: Icon, label, value, subtext, trend }: StatCardProps) {
+  return (
+    <div className="bg-card rounded-lg border border-border p-5">
+      <div className="flex items-start justify-between">
+        <div className="w-10 h-10 rounded-lg bg-accent flex items-center justify-center">
+          <Icon className="w-5 h-5 text-primary" />
+        </div>
+        {trend && (
+          <span className={`text-xs font-medium ${trend.positive ? "text-success" : "text-destructive"}`}>
+            {trend.value}
+          </span>
+        )}
+      </div>
+      <div className="mt-4">
+        <p className="text-2xl font-semibold text-foreground">{value}</p>
+        <p className="text-sm font-medium text-foreground mt-1">{label}</p>
+        <p className="text-xs text-muted-foreground mt-0.5">{subtext}</p>
+      </div>
+    </div>
+  );
+}
+
 export default function SignalInbox() {
   const [selectedSignal, setSelectedSignal] = useState<Signal | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [activeStatus, setActiveStatus] = useState<SignalStatus | "all">("all");
-  const [activeCategory, setActiveCategory] = useState<SignalCategory | "all">("all");
 
   const filteredSignals = useMemo(() => {
     return mockSignals.filter((signal) => {
       if (activeStatus !== "all" && signal.status !== activeStatus) return false;
-      if (activeCategory !== "all" && signal.signalCategory !== activeCategory) return false;
       return true;
     });
-  }, [activeStatus, activeCategory]);
+  }, [activeStatus]);
 
   const counts = useMemo(() => ({
     all: mockSignals.length,
     new: mockSignals.filter(s => s.status === "new").length,
     review: mockSignals.filter(s => s.status === "review").length,
     resolved: mockSignals.filter(s => s.status === "resolved").length,
-    direct: mockSignals.filter(s => s.signalCategory === "direct").length,
-    industry: mockSignals.filter(s => s.signalCategory === "industry").length,
-    environment: mockSignals.filter(s => s.signalCategory === "environment").length,
   }), []);
 
   const handleViewDetail = (signal: Signal) => {
     setSelectedSignal(signal);
     setDetailOpen(true);
   };
+
+  const statusFilters = [
+    { id: "all", label: "전체", count: counts.all },
+    { id: "new", label: "신규", count: counts.new },
+    { id: "review", label: "검토중", count: counts.review },
+    { id: "resolved", label: "완료", count: counts.resolved },
+  ];
 
   return (
     <MainLayout>
@@ -156,21 +190,62 @@ export default function SignalInbox() {
         <div className="mb-6">
           <h1 className="text-2xl font-semibold text-foreground">시그널 인박스</h1>
           <p className="text-muted-foreground mt-1">
-            AI가 감지한 기업 관련 시그널을 검토하세요. 모든 내용은 참고용으로 제공됩니다.
+            AI가 감지한 모든 시그널을 시간순으로 검토합니다. 유형별 상세 검토는 하위 메뉴를 이용하세요.
           </p>
         </div>
 
-        {/* Stats */}
-        <SignalStats />
+        {/* Stats - only status-based, no signal-type breakdown */}
+        <div className="grid grid-cols-3 gap-4 mb-6">
+          <StatCard
+            icon={AlertCircle}
+            label="신규 시그널"
+            value={counts.new}
+            subtext="금일 감지됨"
+            trend={{ value: "+3", positive: false }}
+          />
+          <StatCard
+            icon={Clock}
+            label="검토 대기"
+            value={counts.review}
+            subtext="담당자 배정 필요"
+          />
+          <StatCard
+            icon={CheckCircle2}
+            label="금주 완료"
+            value={counts.resolved}
+            subtext="이번 주 처리 건수"
+            trend={{ value: "+15%", positive: true }}
+          />
+        </div>
 
-        {/* Filters */}
-        <SignalFilters 
-          activeStatus={activeStatus}
-          activeCategory={activeCategory}
-          onStatusChange={setActiveStatus}
-          onCategoryChange={setActiveCategory}
-          counts={counts}
-        />
+        {/* Status filters only - no signal type explanation */}
+        <div className="flex items-center justify-between gap-4 mb-6">
+          <div className="flex items-center gap-1 bg-secondary rounded-lg p-1">
+            {statusFilters.map((filter) => (
+              <button
+                key={filter.id}
+                onClick={() => setActiveStatus(filter.id as SignalStatus | "all")}
+                className={`
+                  px-4 py-2 rounded-md text-sm font-medium transition-colors
+                  ${activeStatus === filter.id
+                    ? "bg-card text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                  }
+                `}
+              >
+                {filter.label}
+                <span className={`ml-2 ${activeStatus === filter.id ? "text-primary" : "text-muted-foreground"}`}>
+                  {filter.count}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          <select className="text-sm border border-input rounded-md px-3 py-2 bg-card text-foreground focus:outline-none focus:ring-1 focus:ring-ring">
+            <option value="recent">최신순</option>
+            <option value="corporation">기업명순</option>
+          </select>
+        </div>
 
         {/* Signal list */}
         <div className="space-y-3">
