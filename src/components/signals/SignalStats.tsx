@@ -1,4 +1,4 @@
-import { TrendingUp, Clock, CheckCircle2, AlertCircle } from "lucide-react";
+import { Building2, Factory, Globe, Clock, CheckCircle2, AlertCircle } from "lucide-react";
 
 interface StatCardProps {
   icon: React.ElementType;
@@ -9,14 +9,15 @@ interface StatCardProps {
     value: string;
     positive: boolean;
   };
+  colorClass?: string;
 }
 
-function StatCard({ icon: Icon, label, value, subtext, trend }: StatCardProps) {
+function StatCard({ icon: Icon, label, value, subtext, trend, colorClass }: StatCardProps) {
   return (
     <div className="bg-card rounded-lg border border-border p-5">
       <div className="flex items-start justify-between">
-        <div className="w-10 h-10 rounded-lg bg-accent flex items-center justify-center">
-          <Icon className="w-5 h-5 text-primary" />
+        <div className={`w-10 h-10 rounded-lg bg-accent flex items-center justify-center ${colorClass ? colorClass.replace('text-', 'bg-').replace(/\]$/, '/10]') : ''}`}>
+          <Icon className={`w-5 h-5 ${colorClass || 'text-primary'}`} />
         </div>
         {trend && (
           <span className={`text-xs font-medium ${trend.positive ? "text-success" : "text-destructive"}`}>
@@ -35,7 +36,7 @@ function StatCard({ icon: Icon, label, value, subtext, trend }: StatCardProps) {
 
 export function SignalStats() {
   return (
-    <div className="grid grid-cols-4 gap-4 mb-6">
+    <div className="grid grid-cols-6 gap-4 mb-6">
       <StatCard
         icon={AlertCircle}
         label="신규 시그널"
@@ -57,10 +58,25 @@ export function SignalStats() {
         trend={{ value: "+15%", positive: true }}
       />
       <StatCard
-        icon={TrendingUp}
-        label="모니터링 기업"
-        value={156}
-        subtext="전체 관리 대상"
+        icon={Building2}
+        label="직접 시그널"
+        value={5}
+        subtext="기업 직접 관련"
+        colorClass="text-signal-direct"
+      />
+      <StatCard
+        icon={Factory}
+        label="산업 시그널"
+        value={2}
+        subtext="산업 동향"
+        colorClass="text-signal-industry"
+      />
+      <StatCard
+        icon={Globe}
+        label="환경 시그널"
+        value={2}
+        subtext="외부 환경 변화"
+        colorClass="text-signal-environment"
       />
     </div>
   );
