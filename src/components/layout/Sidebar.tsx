@@ -11,7 +11,8 @@ import {
   BarChart3,
   FileText,
   Factory,
-  Globe
+  Globe,
+  Newspaper
 } from "lucide-react";
 
 interface SubMenuItem {
@@ -31,6 +32,12 @@ interface NavigationItem {
 }
 
 const navigationItems: NavigationItem[] = [
+  {
+    id: "briefing",
+    label: "일일 브리핑",
+    icon: Newspaper,
+    path: "/briefing",
+  },
   {
     id: "signals",
     label: "시그널 인박스",
