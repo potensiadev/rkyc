@@ -1,6 +1,6 @@
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
-import { SignalDetailPanel } from "@/components/signals/SignalDetailPanel";
 import { Signal, SignalStatus, SIGNAL_TYPE_CONFIG, SIGNAL_IMPACT_CONFIG, SIGNAL_STRENGTH_CONFIG } from "@/types/signal";
 import { 
   AlertCircle, 
@@ -209,8 +209,7 @@ function getImpactIcon(impact: Signal["impact"]) {
 }
 
 export default function SignalInbox() {
-  const [selectedSignal, setSelectedSignal] = useState<Signal | null>(null);
-  const [detailOpen, setDetailOpen] = useState(false);
+  const navigate = useNavigate();
   const [activeStatus, setActiveStatus] = useState<SignalStatus | "all">("all");
 
   const filteredSignals = useMemo(() => {
@@ -232,8 +231,7 @@ export default function SignalInbox() {
   }), []);
 
   const handleViewDetail = (signal: Signal) => {
-    setSelectedSignal(signal);
-    setDetailOpen(true);
+    navigate(`/signals/${signal.id}`);
   };
 
   const statusFilters = [
@@ -402,13 +400,6 @@ export default function SignalInbox() {
             <p className="text-muted-foreground">선택한 조건에 해당하는 시그널이 없습니다.</p>
           </div>
         )}
-
-        {/* Signal detail panel */}
-        <SignalDetailPanel 
-          signal={selectedSignal}
-          open={detailOpen}
-          onClose={() => setDetailOpen(false)}
-        />
       </div>
     </MainLayout>
   );

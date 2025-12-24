@@ -84,6 +84,18 @@ export const SIGNAL_STATUS_CONFIG: Record<SignalStatus, { label: string; classNa
 
 export type SignalImpact = "risk" | "opportunity" | "neutral";
 export type SignalStrength = "high" | "medium" | "low";
+export type ConfidenceLevel = "high" | "medium" | "low";
+export type SourceType = "internal" | "external" | "mixed";
+export type EvidenceSourceType = "news" | "disclosure" | "report" | "regulation" | "internal";
+export type EventClassification = 
+  | "supply_disruption" 
+  | "regulation" 
+  | "investment_ma" 
+  | "financial_change" 
+  | "governance" 
+  | "market_shift" 
+  | "policy_change"
+  | "competitive_action";
 
 export const SIGNAL_IMPACT_CONFIG: Record<SignalImpact, { label: string; colorClass: string; bgClass: string }> = {
   risk: { label: "위험", colorClass: "text-risk", bgClass: "bg-risk/10" },
@@ -96,6 +108,47 @@ export const SIGNAL_STRENGTH_CONFIG: Record<SignalStrength, { label: string }> =
   medium: { label: "중간" },
   low: { label: "낮음" },
 };
+
+export const CONFIDENCE_LEVEL_CONFIG: Record<ConfidenceLevel, { label: string; colorClass: string }> = {
+  high: { label: "높음", colorClass: "text-opportunity" },
+  medium: { label: "중간", colorClass: "text-warning" },
+  low: { label: "낮음", colorClass: "text-muted-foreground" },
+};
+
+export const SOURCE_TYPE_CONFIG: Record<SourceType, { label: string }> = {
+  internal: { label: "내부" },
+  external: { label: "외부" },
+  mixed: { label: "혼합" },
+};
+
+export const EVIDENCE_SOURCE_TYPE_CONFIG: Record<EvidenceSourceType, { label: string; colorClass: string }> = {
+  news: { label: "언론 보도", colorClass: "text-info" },
+  disclosure: { label: "공시", colorClass: "text-signal-direct" },
+  report: { label: "리포트", colorClass: "text-signal-industry" },
+  regulation: { label: "규제/법률", colorClass: "text-signal-environment" },
+  internal: { label: "내부 데이터", colorClass: "text-primary" },
+};
+
+export const EVENT_CLASSIFICATION_CONFIG: Record<EventClassification, { label: string; description: string }> = {
+  supply_disruption: { label: "공급망 이슈", description: "공급망 차질, 원자재 수급 변화 등" },
+  regulation: { label: "규제/법률", description: "규제 변화, 법적 조치, 제재 등" },
+  investment_ma: { label: "투자/M&A", description: "인수합병, 투자, 지분 변동 등" },
+  financial_change: { label: "재무 변동", description: "실적 변화, 재무 상태 변동 등" },
+  governance: { label: "지배구조", description: "경영진 변동, 주주 구조 변화 등" },
+  market_shift: { label: "시장 변화", description: "시장 점유율, 경쟁 구도 변화 등" },
+  policy_change: { label: "정책 변화", description: "정부 정책, 거시 경제 정책 변동 등" },
+  competitive_action: { label: "경쟁사 동향", description: "경쟁사의 주요 전략적 행동 등" },
+};
+
+export interface Evidence {
+  id: string;
+  sourceType: EvidenceSourceType;
+  title: string;
+  snippet: string;
+  sourceName: string;
+  sourceUrl?: string;
+  publishedAt: string;
+}
 
 export interface Signal {
   id: string;
@@ -115,4 +168,10 @@ export interface Signal {
   impact: SignalImpact;
   impactStrength: SignalStrength;
   evidenceCount: number;
+  // Extended fields for detail page
+  confidenceLevel?: ConfidenceLevel;
+  sourceType?: SourceType;
+  eventClassification?: EventClassification;
+  aiSummary?: string;
+  evidences?: Evidence[];
 }
