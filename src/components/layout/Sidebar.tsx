@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { 
-  Inbox, 
-  Building2, 
-  Settings, 
+import {
+  Inbox,
+  Building2,
+  Settings,
   Bell,
   ChevronLeft,
   ChevronRight,
@@ -12,7 +12,7 @@ import {
   FileText,
   Factory,
   Globe,
-  Newspaper
+  Newspaper,
 } from "lucide-react";
 
 interface SubMenuItem {
@@ -72,12 +72,6 @@ const navigationItems: NavigationItem[] = [
     path: "/corporations",
   },
   {
-    id: "reports",
-    label: "보고서",
-    icon: FileText,
-    path: "/reports",
-  },
-  {
     id: "analytics",
     label: "분석 현황",
     icon: BarChart3,
@@ -106,18 +100,14 @@ export function Sidebar() {
   const location = useLocation();
 
   const toggleExpanded = (id: string) => {
-    setExpandedItems(prev => 
-      prev.includes(id) 
-        ? prev.filter(item => item !== id)
-        : [...prev, id]
-    );
+    setExpandedItems((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
   };
 
   const isItemActive = (path: string) => location.pathname === path;
   const isParentActive = (item: NavigationItem) => {
     if (isItemActive(item.path)) return true;
     if (item.subItems) {
-      return item.subItems.some(sub => isItemActive(sub.path));
+      return item.subItems.some((sub) => isItemActive(sub.path));
     }
     return false;
   };
@@ -189,9 +179,7 @@ export function Sidebar() {
                       onClick={() => toggleExpanded(item.id)}
                       className="p-1.5 rounded-md hover:bg-sidebar-accent text-sidebar-foreground/70 hover:text-sidebar-foreground transition-colors"
                     >
-                      <ChevronDown 
-                        className={`w-4 h-4 transition-transform ${isExpanded ? "rotate-180" : ""}`}
-                      />
+                      <ChevronDown className={`w-4 h-4 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
                     </button>
                   )}
                 </div>
@@ -207,9 +195,10 @@ export function Sidebar() {
                           to={subItem.path}
                           className={`
                             flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors
-                            ${isSubActive 
-                              ? "bg-sidebar-accent text-sidebar-foreground font-medium" 
-                              : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
+                            ${
+                              isSubActive
+                                ? "bg-sidebar-accent text-sidebar-foreground font-medium"
+                                : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
                             }
                           `}
                         >
