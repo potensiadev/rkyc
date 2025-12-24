@@ -129,8 +129,8 @@ export function Sidebar() {
                 <span className="text-sidebar-primary-foreground font-bold text-sm">R</span>
               </div>
               <div>
-                <h1 className="text-sidebar-foreground font-semibold text-lg tracking-tight">RKYC</h1>
-                <p className="text-sidebar-foreground/50 text-[10px] -mt-0.5">고객 인텔리전스</p>
+                <h1 className="text-sidebar-foreground font-semibold text-lg tracking-tight">rKYC</h1>
+                <p className="text-sidebar-foreground/50 text-[10px] -mt-0.5">really Know Your Customer</p>
               </div>
             </div>
           )}
