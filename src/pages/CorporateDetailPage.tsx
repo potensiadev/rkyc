@@ -1,11 +1,16 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
+import { getCorporationById } from "@/data/corporations";
 import { 
-  Signal, 
-  SIGNAL_TYPE_CONFIG, 
-  SIGNAL_IMPACT_CONFIG, 
-  SIGNAL_STRENGTH_CONFIG 
-} from "@/types/signal";
+  getSignalsByCorporationId, 
+  getIntegratedTimeline,
+  getAllEvidencesForCorporation,
+  getCorporationSignalCounts,
+  formatDate,
+  getBankTransactionTypeLabel,
+} from "@/data/signals";
+import { getInsightMemoryByCorporationId } from "@/data/insightMemory";
+import { SIGNAL_TYPE_CONFIG, SIGNAL_IMPACT_CONFIG } from "@/types/signal";
 import { 
   ArrowLeft, 
   Building2, 
@@ -14,372 +19,296 @@ import {
   TrendingUp, 
   TrendingDown, 
   FileText,
-  Briefcase,
   Landmark,
-  Calendar
+  Users,
+  Banknote,
+  Calendar,
+  FileDown,
+  Link2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-
-interface CorporateProfile {
-  id: string;
-  name: string;
-  businessNumber: string;
-  industry: string;
-  industryCode: string;
-  description: string;
-  hasLoanRelationship: boolean;
-  loanStatus?: string;
-}
-
-interface TimelineSignal {
-  id: string;
-  date: string;
-  signalCategory: Signal["signalCategory"];
-  impact: Signal["impact"];
-  impactStrength: Signal["impactStrength"];
-  title: string;
-}
-
-// Mock corporate data
-const mockCorporates: Record<string, CorporateProfile> = {
-  "samsung": {
-    id: "samsung",
-    name: "삼성전자",
-    businessNumber: "124-81-00998",
-    industry: "반도체 및 전자부품 제조업",
-    industryCode: "26110",
-    description: "반도체, 디스플레이, 가전제품 및 IT 기기를 제조하는 글로벌 전자기업입니다. 메모리 반도체 및 스마트폰 분야에서 세계 선도적 위치를 차지하고 있습니다.",
-    hasLoanRelationship: true,
-    loanStatus: "기업 운영자금 대출 실행 중",
-  },
-  "skhynix": {
-    id: "skhynix",
-    name: "SK하이닉스",
-    businessNumber: "105-81-11111",
-    industry: "반도체 제조업",
-    industryCode: "26110",
-    description: "DRAM 및 NAND 플래시 메모리 반도체를 전문으로 제조하는 기업입니다. HBM(고대역폭 메모리) 시장에서 글로벌 1위를 차지하고 있습니다.",
-    hasLoanRelationship: true,
-    loanStatus: "시설자금 대출 실행 중",
-  },
-  "hyundai": {
-    id: "hyundai",
-    name: "현대자동차",
-    businessNumber: "101-81-22222",
-    industry: "자동차 제조업",
-    industryCode: "30121",
-    description: "승용차, 상용차 및 친환경 자동차를 제조하는 글로벌 자동차 기업입니다. 전기차 및 수소차 분야에서 적극적인 투자를 진행 중입니다.",
-    hasLoanRelationship: false,
-  },
-};
-
-// Mock timeline signals
-const mockTimelineSignals: Record<string, TimelineSignal[]> = {
-  "samsung": [
-    {
-      id: "1",
-      date: "2024-12-24",
-      signalCategory: "direct",
-      impact: "risk",
-      impactStrength: "high",
-      title: "반도체 사업부 대규모 인력 구조조정 검토",
-    },
-    {
-      id: "2",
-      date: "2024-12-20",
-      signalCategory: "industry",
-      impact: "opportunity",
-      impactStrength: "medium",
-      title: "AI 반도체 수요 급증으로 메모리 시장 회복 관련 정보",
-    },
-    {
-      id: "3",
-      date: "2024-12-15",
-      signalCategory: "direct",
-      impact: "neutral",
-      impactStrength: "low",
-      title: "신규 반도체 연구개발 센터 설립 계획 발표",
-    },
-    {
-      id: "4",
-      date: "2024-12-10",
-      signalCategory: "environment",
-      impact: "risk",
-      impactStrength: "medium",
-      title: "미중 반도체 규제 강화 조짐, 수출 영향 우려",
-    },
-    {
-      id: "5",
-      date: "2024-12-01",
-      signalCategory: "direct",
-      impact: "opportunity",
-      impactStrength: "high",
-      title: "분기 실적 시장 예상 상회, 주가 상승",
-    },
-    {
-      id: "6",
-      date: "2024-11-25",
-      signalCategory: "industry",
-      impact: "neutral",
-      impactStrength: "low",
-      title: "반도체 장비업체 설비 투자 동향 분석",
-    },
-    {
-      id: "7",
-      date: "2024-11-18",
-      signalCategory: "environment",
-      impact: "risk",
-      impactStrength: "low",
-      title: "글로벌 경기 침체 우려로 IT 수요 둔화 관련 정보",
-    },
-    {
-      id: "8",
-      date: "2024-10-28",
-      signalCategory: "direct",
-      impact: "neutral",
-      impactStrength: "medium",
-      title: "이사회 구성 변경 공시",
-    },
-  ],
-  "skhynix": [
-    {
-      id: "10",
-      date: "2024-12-24",
-      signalCategory: "industry",
-      impact: "opportunity",
-      impactStrength: "high",
-      title: "AI 반도체 수요 급증, HBM 공급 부족 지속",
-    },
-    {
-      id: "11",
-      date: "2024-12-18",
-      signalCategory: "direct",
-      impact: "opportunity",
-      impactStrength: "high",
-      title: "엔비디아와 HBM 공급 계약 체결",
-    },
-    {
-      id: "12",
-      date: "2024-12-10",
-      signalCategory: "direct",
-      impact: "neutral",
-      impactStrength: "low",
-      title: "청주 공장 생산능력 확대 투자 결정",
-    },
-    {
-      id: "13",
-      date: "2024-11-28",
-      signalCategory: "environment",
-      impact: "risk",
-      impactStrength: "medium",
-      title: "미국 수출 규제 확대 가능성 보도",
-    },
-  ],
-  "hyundai": [
-    {
-      id: "20",
-      date: "2024-12-22",
-      signalCategory: "direct",
-      impact: "opportunity",
-      impactStrength: "medium",
-      title: "미국 전기차 공장 가동 시작",
-    },
-    {
-      id: "21",
-      date: "2024-12-15",
-      signalCategory: "industry",
-      impact: "neutral",
-      impactStrength: "low",
-      title: "자동차 산업 전기화 전환 가속",
-    },
-    {
-      id: "22",
-      date: "2024-12-05",
-      signalCategory: "environment",
-      impact: "risk",
-      impactStrength: "medium",
-      title: "글로벌 원자재 가격 상승 지속",
-    },
-  ],
-};
-
-function getSignalTypeIcon(category: Signal["signalCategory"]) {
-  switch (category) {
-    case "direct":
-      return Building2;
-    case "industry":
-      return Factory;
-    case "environment":
-      return Globe;
-  }
-}
-
-function getImpactIcon(impact: Signal["impact"]) {
-  switch (impact) {
-    case "risk":
-      return TrendingDown;
-    case "opportunity":
-      return TrendingUp;
-    case "neutral":
-      return FileText;
-  }
-}
+import { Separator } from "@/components/ui/separator";
+import { useState } from "react";
+import ReportPreviewModal from "@/components/reports/ReportPreviewModal";
 
 export default function CorporateDetailPage() {
   const { corporateId } = useParams();
   const navigate = useNavigate();
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
 
-  const corporate = mockCorporates[corporateId || "samsung"] || mockCorporates["samsung"];
-  const timelineSignals = mockTimelineSignals[corporateId || "samsung"] || [];
+  const corporation = getCorporationById(corporateId || "1");
+  
+  if (!corporation) {
+    return (
+      <MainLayout>
+        <div className="text-center py-16">
+          <p className="text-muted-foreground">기업 정보를 찾을 수 없습니다.</p>
+          <Button variant="outline" onClick={() => navigate(-1)} className="mt-4">
+            돌아가기
+          </Button>
+        </div>
+      </MainLayout>
+    );
+  }
+
+  const signals = getSignalsByCorporationId(corporation.id);
+  const signalCounts = getCorporationSignalCounts(corporation.id);
+  const integratedTimeline = getIntegratedTimeline(corporation.id);
+  const evidences = getAllEvidencesForCorporation(corporation.id);
+  const insightMemory = getInsightMemoryByCorporationId(corporation.id);
+
+  const currentDate = new Date().toLocaleDateString('ko-KR', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
 
   return (
     <MainLayout>
-      <div className="max-w-4xl">
-        {/* Back navigation */}
-        <Button 
-          variant="ghost" 
-          className="mb-4 -ml-2 text-muted-foreground hover:text-foreground"
-          onClick={() => navigate(-1)}
-        >
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          이전 페이지로 돌아가기
-        </Button>
+      <div className="max-w-4xl mx-auto">
+        {/* Back & Actions */}
+        <div className="flex items-center justify-between mb-4">
+          <Button 
+            variant="ghost" 
+            className="-ml-2 text-muted-foreground hover:text-foreground"
+            onClick={() => navigate(-1)}
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            이전 페이지
+          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" className="gap-2">
+              <Link2 className="w-4 h-4" />
+              공유 링크
+            </Button>
+            <Button size="sm" className="gap-2" onClick={() => setShowPreviewModal(true)}>
+              <FileDown className="w-4 h-4" />
+              PDF 내보내기
+            </Button>
+          </div>
+        </div>
 
-        {/* Corporate Profile Card */}
-        <div className="bg-card rounded-lg border border-border p-6 mb-6">
-          <div className="flex items-start gap-4">
-            <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-              <Building2 className="w-6 h-6 text-primary" />
+        {/* Report Document Style */}
+        <div className="bg-card rounded-lg border border-border p-8 space-y-8">
+          
+          {/* Report Header */}
+          <div className="text-center border-b border-border pb-6">
+            <h1 className="text-xl font-bold text-foreground mb-2">
+              RKYC 기업 시그널 분석 보고서 (참고용)
+            </h1>
+            <div className="text-lg font-semibold text-foreground mb-4">{corporation.name}</div>
+            <div className="text-sm text-muted-foreground space-y-1">
+              <p>보고서 생성일: {currentDate}</p>
+              <p>생성 시스템: RKYC (Really Know Your Customer Intelligence)</p>
             </div>
-            <div className="flex-1">
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <h1 className="text-2xl font-semibold text-foreground mb-1">
-                    {corporate.name}
-                  </h1>
-                  <p className="text-sm text-muted-foreground">{corporate.businessNumber}</p>
+            <div className="mt-4 inline-block px-3 py-1.5 bg-muted rounded text-xs text-muted-foreground">
+              본 보고서는 참고 및 검토용 자료입니다.
+            </div>
+          </div>
+
+          {/* Executive Summary */}
+          <section>
+            <h2 className="text-base font-semibold text-foreground mb-3 pb-2 border-b border-border">
+              요약 (Executive Summary)
+            </h2>
+            <div className="text-sm text-muted-foreground space-y-2 leading-relaxed">
+              <p>
+                <strong className="text-foreground">{corporation.name}</strong>은(는) {corporation.industry} 분야에서 
+                {corporation.mainBusiness}을(를) 영위하는 기업입니다. 
+                본사는 {corporation.headquarters}에 소재하며, 임직원 {corporation.employeeCount}명 규모입니다.
+              </p>
+              {corporation.bankRelationship.hasRelationship && (
+                <p>
+                  당행과는 여신 {corporation.bankRelationship.loanBalance}, 수신 {corporation.bankRelationship.depositBalance} 규모의 
+                  거래 관계를 유지하고 있습니다.
+                  {corporation.bankRelationship.fxTransactions && ` 외환 거래 규모는 ${corporation.bankRelationship.fxTransactions}입니다.`}
+                </p>
+              )}
+              <p>
+                최근 직접 시그널 {signalCounts.direct}건, 산업 시그널 {signalCounts.industry}건, 
+                환경 시그널 {signalCounts.environment}건이 감지되었습니다.
+              </p>
+              <p>아래 내용은 담당자의 검토를 위해 정리된 참고 자료입니다.</p>
+            </div>
+          </section>
+
+          <Separator />
+
+          {/* Company Profile */}
+          <section>
+            <h2 className="text-base font-semibold text-foreground mb-3 pb-2 border-b border-border flex items-center gap-2">
+              <Building2 className="w-4 h-4" />
+              기업 개요
+            </h2>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div className="space-y-2">
+                <div className="flex"><span className="w-28 text-muted-foreground">기업명</span><span>{corporation.name}</span></div>
+                <div className="flex"><span className="w-28 text-muted-foreground">사업자등록번호</span><span>{corporation.businessNumber}</span></div>
+                <div className="flex"><span className="w-28 text-muted-foreground">업종</span><span>{corporation.industry}</span></div>
+                <div className="flex"><span className="w-28 text-muted-foreground">업종코드</span><span>{corporation.industryCode}</span></div>
+              </div>
+              <div className="space-y-2">
+                <div className="flex"><span className="w-28 text-muted-foreground">대표이사</span><span>{corporation.ceo}</span></div>
+                <div className="flex"><span className="w-28 text-muted-foreground">임직원 수</span><span>{corporation.employeeCount}명</span></div>
+                <div className="flex"><span className="w-28 text-muted-foreground">설립연도</span><span>{corporation.foundedYear}년</span></div>
+                <div className="flex"><span className="w-28 text-muted-foreground">본사 소재지</span><span>{corporation.headquarters}</span></div>
+              </div>
+            </div>
+            
+            {/* Key Executives */}
+            <div className="mt-4">
+              <h3 className="text-sm font-medium text-foreground mb-2 flex items-center gap-2">
+                <Users className="w-3.5 h-3.5" /> 주요 경영진 (Key Man)
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {corporation.executives.filter(e => e.isKeyMan).map((exec, i) => (
+                  <span key={i} className="text-xs bg-primary/10 text-primary px-2 py-1 rounded">
+                    {exec.name} ({exec.position})
+                  </span>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          <Separator />
+
+          {/* Bank Relationship */}
+          {corporation.bankRelationship.hasRelationship && (
+            <section>
+              <h2 className="text-base font-semibold text-foreground mb-3 pb-2 border-b border-border flex items-center gap-2">
+                <Landmark className="w-4 h-4" />
+                당행 거래 현황
+              </h2>
+              <div className="grid grid-cols-3 gap-4 text-sm">
+                <div className="bg-muted/50 rounded p-3">
+                  <div className="text-muted-foreground text-xs mb-1">수신 잔액</div>
+                  <div className="font-medium">{corporation.bankRelationship.depositBalance || "-"}</div>
+                </div>
+                <div className="bg-muted/50 rounded p-3">
+                  <div className="text-muted-foreground text-xs mb-1">여신 잔액</div>
+                  <div className="font-medium">{corporation.bankRelationship.loanBalance || "-"}</div>
+                </div>
+                <div className="bg-muted/50 rounded p-3">
+                  <div className="text-muted-foreground text-xs mb-1">외환 거래</div>
+                  <div className="font-medium">{corporation.bankRelationship.fxTransactions || "-"}</div>
                 </div>
               </div>
-
-              {/* Industry */}
-              <div className="flex items-center gap-2 mb-3">
-                <Briefcase className="w-4 h-4 text-muted-foreground" />
-                <span className="text-sm text-foreground">{corporate.industry}</span>
-                <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">
-                  {corporate.industryCode}
-                </span>
-              </div>
-
-              {/* Loan Relationship Status */}
-              <div className="flex items-center gap-2 mb-4">
-                <Landmark className="w-4 h-4 text-muted-foreground" />
-                {corporate.hasLoanRelationship ? (
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-foreground">여신 거래: 있음</span>
-                    {corporate.loanStatus && (
-                      <span className="text-xs text-primary bg-primary/10 px-2 py-0.5 rounded">
-                        {corporate.loanStatus}
-                      </span>
-                    )}
-                  </div>
-                ) : (
-                  <span className="text-sm text-muted-foreground">여신 거래: 없음</span>
+              <div className="flex gap-2 mt-3">
+                {corporation.bankRelationship.retirementPension && (
+                  <span className="text-xs bg-muted px-2 py-1 rounded">퇴직연금</span>
+                )}
+                {corporation.bankRelationship.payrollService && (
+                  <span className="text-xs bg-muted px-2 py-1 rounded">급여이체</span>
+                )}
+                {corporation.bankRelationship.corporateCard && (
+                  <span className="text-xs bg-muted px-2 py-1 rounded">법인카드</span>
                 )}
               </div>
-
-              {/* Description */}
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                {corporate.description}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Signal Timeline Section */}
-        <div className="bg-card rounded-lg border border-border p-6">
-          <div className="flex items-center gap-2 mb-6">
-            <div className="w-8 h-8 rounded-lg bg-info/10 flex items-center justify-center">
-              <Calendar className="w-4 h-4 text-info" />
-            </div>
-            <h2 className="text-lg font-medium text-foreground">시그널 타임라인</h2>
-            <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">
-              최근 60~90일
-            </span>
-          </div>
-
-          {/* Timeline */}
-          <div className="relative">
-            {/* Vertical line */}
-            <div className="absolute left-[7px] top-2 bottom-2 w-[2px] bg-border" />
-
-            <div className="space-y-0">
-              {timelineSignals.map((signal, index) => {
-                const typeConfig = SIGNAL_TYPE_CONFIG[signal.signalCategory];
-                const impactConfig = SIGNAL_IMPACT_CONFIG[signal.impact];
-                const strengthConfig = SIGNAL_STRENGTH_CONFIG[signal.impactStrength];
-                const TypeIcon = getSignalTypeIcon(signal.signalCategory);
-                const ImpactIcon = getImpactIcon(signal.impact);
-
-                return (
-                  <div 
-                    key={signal.id}
-                    className="relative pl-8 pb-6 last:pb-0 group cursor-pointer"
-                    onClick={() => navigate(`/signals/${signal.id}`)}
-                  >
-                    {/* Timeline dot */}
-                    <div className={`absolute left-0 top-1.5 w-4 h-4 rounded-full border-2 bg-card ${impactConfig.colorClass} transition-colors`} 
-                      style={{ borderColor: 'currentColor' }}
-                    />
-
-                    {/* Content card */}
-                    <div className="bg-secondary/30 rounded-lg border border-border p-4 hover:border-primary/30 hover:bg-secondary/50 transition-all">
-                      {/* Date */}
-                      <div className="text-xs text-muted-foreground mb-2">
-                        {signal.date}
-                      </div>
-
-                      {/* Badges row */}
-                      <div className="flex items-center gap-2 mb-2 flex-wrap">
-                        {/* Signal Type */}
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${typeConfig.bgClass} ${typeConfig.colorClass}`}>
-                          <TypeIcon className="w-3 h-3" />
-                          {typeConfig.label}
-                        </span>
-
-                        {/* Impact */}
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${impactConfig.bgClass} ${impactConfig.colorClass}`}>
-                          <ImpactIcon className="w-3 h-3" />
-                          {impactConfig.label}
-                        </span>
-
-                        {/* Strength */}
-                        <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">
-                          {strengthConfig.label}
-                        </span>
-                      </div>
-
-                      {/* Title */}
-                      <p className="text-sm text-foreground font-medium leading-relaxed group-hover:text-primary transition-colors">
-                        {signal.title}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Empty state */}
-          {timelineSignals.length === 0 && (
-            <div className="text-center py-12">
-              <Calendar className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
-              <p className="text-sm text-muted-foreground">
-                최근 90일간 감지된 시그널이 없습니다.
-              </p>
-            </div>
+            </section>
           )}
+
+          <Separator />
+
+          {/* Financial Overview */}
+          <section>
+            <h2 className="text-base font-semibold text-foreground mb-3 pb-2 border-b border-border flex items-center gap-2">
+              <Banknote className="w-4 h-4" />
+              재무 개요 (3개년)
+            </h2>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left py-2 text-muted-foreground font-medium">연도</th>
+                  <th className="text-right py-2 text-muted-foreground font-medium">매출액</th>
+                  <th className="text-right py-2 text-muted-foreground font-medium">영업이익</th>
+                  <th className="text-right py-2 text-muted-foreground font-medium">순이익</th>
+                  <th className="text-right py-2 text-muted-foreground font-medium">자본</th>
+                </tr>
+              </thead>
+              <tbody>
+                {corporation.financialSnapshots.map((fs) => (
+                  <tr key={fs.year} className="border-b border-border/50">
+                    <td className="py-2">{fs.year}</td>
+                    <td className="text-right py-2">{fs.revenue}</td>
+                    <td className="text-right py-2">{fs.operatingProfit}</td>
+                    <td className="text-right py-2">{fs.netProfit}</td>
+                    <td className="text-right py-2">{fs.equity}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+
+          <Separator />
+
+          {/* Shareholders */}
+          <section>
+            <h2 className="text-base font-semibold text-foreground mb-3 pb-2 border-b border-border">
+              주주 구성
+            </h2>
+            <div className="space-y-2 text-sm">
+              {corporation.shareholders.map((sh, i) => (
+                <div key={i} className="flex justify-between">
+                  <span>{sh.name} <span className="text-muted-foreground">({sh.type})</span></span>
+                  <span className="font-medium">{sh.ownership}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <Separator />
+
+          {/* Integrated Timeline */}
+          <section>
+            <h2 className="text-base font-semibold text-foreground mb-3 pb-2 border-b border-border flex items-center gap-2">
+              <Calendar className="w-4 h-4" />
+              통합 타임라인 (시그널 + 거래)
+            </h2>
+            <div className="space-y-3">
+              {integratedTimeline.slice(0, 10).map((item) => (
+                <div key={item.id} className="flex items-start gap-3 text-sm border-b border-border/50 pb-3 last:border-0">
+                  <span className="w-24 text-muted-foreground shrink-0">{item.date}</span>
+                  {item.type === "signal" ? (
+                    <>
+                      <span className={`w-14 shrink-0 text-xs px-1.5 py-0.5 rounded ${SIGNAL_TYPE_CONFIG[item.category as keyof typeof SIGNAL_TYPE_CONFIG]?.bgClass} ${SIGNAL_TYPE_CONFIG[item.category as keyof typeof SIGNAL_TYPE_CONFIG]?.colorClass}`}>
+                        {item.category === "direct" ? "직접" : item.category === "industry" ? "산업" : "환경"}
+                      </span>
+                      <span className="flex-1">{item.title}</span>
+                      {item.impact && (
+                        <span className={`text-xs ${SIGNAL_IMPACT_CONFIG[item.impact].colorClass}`}>
+                          {SIGNAL_IMPACT_CONFIG[item.impact].label}
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <span className="w-14 shrink-0 text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary">
+                        {getBankTransactionTypeLabel(item.bankTransactionType!)}
+                      </span>
+                      <span className="flex-1">{item.title}</span>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* Disclaimer */}
+          <div className="mt-8 pt-6 border-t-2 border-border">
+            <div className="bg-muted p-4 rounded text-xs text-muted-foreground leading-relaxed">
+              본 보고서는 RKYC 시스템이 감지한 시그널을 기반으로 생성된 참고 자료입니다. 
+              자동 판단, 점수화, 예측 또는 조치를 의미하지 않으며, 
+              최종 판단은 담당자 및 관련 조직의 책임 하에 이루어집니다.
+            </div>
+          </div>
         </div>
       </div>
+
+      <ReportPreviewModal
+        open={showPreviewModal}
+        onClose={() => setShowPreviewModal(false)}
+        corporationId={corporation.id}
+      />
     </MainLayout>
   );
 }

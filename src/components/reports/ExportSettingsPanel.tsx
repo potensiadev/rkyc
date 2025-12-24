@@ -29,7 +29,7 @@ const ExportSettingsPanel = ({
   corporationId,
 }: ExportSettingsPanelProps) => {
   const corporation = getCorporationById(corporationId);
-  const showLoanSection = corporation?.hasLoanRelationship ?? false;
+  const showLoanSection = corporation?.bankRelationship?.hasRelationship ?? false;
 
   const sectionLabels: { key: keyof typeof sections; label: string; conditional?: boolean }[] = [
     { key: 'summary', label: '요약' },

@@ -166,7 +166,7 @@ const ReportDocument = ({
             </div>
             <div className="flex">
               <span className="w-32 text-muted-foreground">당행 거래 여부</span>
-              <span className="text-foreground">{corporation.hasLoanRelationship ? "여신 보유" : "해당 없음"}</span>
+              <span className="text-foreground">{corporation.bankRelationship?.hasRelationship ? "여신 보유" : "해당 없음"}</span>
             </div>
           </div>
         </section>
@@ -280,7 +280,7 @@ const ReportDocument = ({
       )}
 
       {/* Loan Reference Insight - Conditional */}
-      {corporation.hasLoanRelationship && sectionsToShow.loanInsight && (
+      {corporation.bankRelationship?.hasRelationship && sectionsToShow.loanInsight && (
         <section className="mb-8">
           <h2 className="text-lg font-semibold text-foreground mb-4 pb-2 border-b border-border">
             여신 참고 관점 요약
