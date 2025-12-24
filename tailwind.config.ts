@@ -76,6 +76,9 @@ export default {
           new: "hsl(var(--signal-new))",
           review: "hsl(var(--signal-review))",
           resolved: "hsl(var(--signal-resolved))",
+          direct: "hsl(var(--signal-direct))",
+          industry: "hsl(var(--signal-industry))",
+          environment: "hsl(var(--signal-environment))",
         },
         surface: {
           elevated: "hsl(var(--surface-elevated))",

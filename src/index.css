@@ -47,6 +47,11 @@
     --info: 210 60% 50%;
     --info-foreground: 0 0% 100%;
 
+    /* Signal category colors - clearly differentiated */
+    --signal-direct: 215 65% 45%;
+    --signal-industry: 175 50% 40%;
+    --signal-environment: 35 70% 50%;
+
     /* Signal status colors */
     --signal-new: 210 70% 50%;
     --signal-review: 38 80% 50%;
