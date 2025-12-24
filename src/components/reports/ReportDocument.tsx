@@ -1,8 +1,16 @@
 import { Separator } from "@/components/ui/separator";
+import { getCorporationById, getCorporationByName, Corporation } from "@/data/corporations";
+import { 
+  getSignalsByCorporationId, 
+  getAllEvidencesForCorporation, 
+  getCorporationSignalCounts,
+  formatDate,
+} from "@/data/signals";
+import { getInsightMemoryByCorporationId } from "@/data/insightMemory";
+import { Signal, SIGNAL_TYPE_CONFIG, SIGNAL_IMPACT_CONFIG, Evidence } from "@/types/signal";
 
 interface ReportDocumentProps {
-  companyName?: string;
-  showLoanSection?: boolean;
+  corporationId: string;
   sectionsToShow?: {
     summary: boolean;
     companyOverview: boolean;
@@ -16,8 +24,7 @@ interface ReportDocumentProps {
 }
 
 const ReportDocument = ({ 
-  companyName = "삼성전자", 
-  showLoanSection = true,
+  corporationId,
   sectionsToShow = {
     summary: true,
     companyOverview: true,
@@ -29,25 +36,64 @@ const ReportDocument = ({
     disclaimer: true,
   }
 }: ReportDocumentProps) => {
+  // 중앙화된 데이터 소스에서 기업 정보 조회
+  const corporation = getCorporationById(corporationId);
+  
+  if (!corporation) {
+    return (
+      <div className="text-center py-8 text-muted-foreground">
+        기업 정보를 찾을 수 없습니다.
+      </div>
+    );
+  }
+
+  // 중앙화된 데이터 소스에서 시그널 조회
+  const signals = getSignalsByCorporationId(corporationId);
+  const signalCounts = getCorporationSignalCounts(corporationId);
+  const evidences = getAllEvidencesForCorporation(corporationId);
+  const insightMemory = getInsightMemoryByCorporationId(corporationId);
+
+  // 시그널 타임라인 (최신순)
+  const timelineSignals = [...signals].sort((a, b) => 
+    new Date(b.detectedAt).getTime() - new Date(a.detectedAt).getTime()
+  );
+
+  // 시그널 유형별 그룹화
+  const directSignals = signals.filter(s => s.signalCategory === "direct");
+  const industrySignals = signals.filter(s => s.signalCategory === "industry");
+  const environmentSignals = signals.filter(s => s.signalCategory === "environment");
+
+  // 영향 구분별 그룹화
+  const getImpactLabel = (signals: Signal[]): string => {
+    const riskCount = signals.filter(s => s.impact === "risk").length;
+    const oppCount = signals.filter(s => s.impact === "opportunity").length;
+    const neutralCount = signals.filter(s => s.impact === "neutral").length;
+    
+    const parts = [];
+    if (riskCount > 0) parts.push("위험");
+    if (oppCount > 0) parts.push("기회");
+    if (neutralCount > 0) parts.push("참고");
+    
+    return parts.join(" / ") || "참고";
+  };
+
   const currentDate = new Date().toLocaleDateString('ko-KR', {
     year: 'numeric',
     month: 'long',
     day: 'numeric'
   });
 
-  const timelineEvents = [
-    { date: "2024-12-20", type: "직접", summary: "분기 실적 발표 - 매출 전년 대비 12% 증가" },
-    { date: "2024-12-18", type: "산업", summary: "반도체 업종 수출 규제 완화 발표" },
-    { date: "2024-12-15", type: "환경", summary: "글로벌 금리 인하 기조 확대" },
-    { date: "2024-12-10", type: "직접", summary: "신규 사업 부문 투자 계획 공시" },
-  ];
-
-  const evidenceItems = [
-    { source: "금융감독원 전자공시", type: "공시", description: "2024년 3분기 연결재무제표 제출" },
-    { source: "연합뉴스", type: "뉴스", description: "삼성전자 반도체 부문 실적 개선 보도" },
-    { source: "산업통상자원부", type: "정책", description: "반도체 산업 지원 정책 발표" },
-    { source: "한국은행", type: "리포트", description: "2024년 4분기 경제전망 보고서" },
-  ];
+  // Evidence 타입 레이블
+  const getEvidenceTypeLabel = (type: Evidence["sourceType"]): string => {
+    const labels: Record<string, string> = {
+      news: "뉴스",
+      disclosure: "공시",
+      report: "리포트",
+      regulation: "정책",
+      internal: "내부",
+    };
+    return labels[type] || type;
+  };
 
   return (
     <div className="bg-white text-foreground font-sans">
@@ -58,7 +104,7 @@ const ReportDocument = ({
             RKYC 기업 시그널 분석 보고서 (참고용)
           </h1>
           <div className="text-lg font-semibold text-foreground mb-6">
-            {companyName}
+            {corporation.name}
           </div>
           <div className="text-sm text-muted-foreground space-y-1">
             <p>보고서 생성일: {currentDate}</p>
@@ -78,11 +124,12 @@ const ReportDocument = ({
           </h2>
           <div className="text-sm text-muted-foreground space-y-3 leading-relaxed">
             <p>
-              본 보고서는 {companyName}에 대해 RKYC 시스템이 최근 감지한 시그널을 요약한 참고 자료입니다.
+              본 보고서는 {corporation.name}에 대해 RKYC 시스템이 최근 감지한 시그널을 요약한 참고 자료입니다.
             </p>
             <p>
-              보고 기간 동안 직접 시그널 2건, 산업 시그널 1건, 환경 시그널 1건이 감지되었습니다. 
-              해당 시그널들은 기업의 실적 발표, 산업 정책 변화, 거시경제 동향과 관련되어 있습니다.
+              보고 기간 동안 직접 시그널 {signalCounts.direct}건, 산업 시그널 {signalCounts.industry}건, 
+              환경 시그널 {signalCounts.environment}건이 감지되었습니다. 
+              {signals.length > 0 && "해당 시그널들은 기업의 사업 활동, 산업 동향, 거시경제 환경과 관련되어 있습니다."}
             </p>
             <p>
               본 자료는 담당자의 검토를 위해 제공되며, 감지된 시그널의 맥락과 근거를 함께 정리하였습니다.
@@ -103,19 +150,23 @@ const ReportDocument = ({
           <div className="text-sm space-y-2">
             <div className="flex">
               <span className="w-32 text-muted-foreground">기업명</span>
-              <span className="text-foreground">{companyName}</span>
+              <span className="text-foreground">{corporation.name}</span>
+            </div>
+            <div className="flex">
+              <span className="w-32 text-muted-foreground">사업자등록번호</span>
+              <span className="text-foreground">{corporation.businessNumber}</span>
             </div>
             <div className="flex">
               <span className="w-32 text-muted-foreground">업종</span>
-              <span className="text-foreground">전자·반도체</span>
+              <span className="text-foreground">{corporation.industry}</span>
             </div>
             <div className="flex">
               <span className="w-32 text-muted-foreground">주요 사업</span>
-              <span className="text-foreground">반도체, 스마트폰, 디스플레이 제조 및 판매</span>
+              <span className="text-foreground">{corporation.mainBusiness}</span>
             </div>
             <div className="flex">
               <span className="w-32 text-muted-foreground">당행 거래 여부</span>
-              <span className="text-foreground">{showLoanSection ? "여신 보유" : "해당 없음"}</span>
+              <span className="text-foreground">{corporation.hasLoanRelationship ? "여신 보유" : "해당 없음"}</span>
             </div>
           </div>
         </section>
@@ -133,9 +184,13 @@ const ReportDocument = ({
             <div className="pl-4 border-l-2 border-primary/30">
               <h3 className="text-sm font-medium text-foreground mb-2">직접 시그널</h3>
               <div className="text-sm text-muted-foreground space-y-1">
-                <p>감지 건수: 2건</p>
-                <p>해당 기업의 실적 발표 및 사업 계획 관련 공시가 감지되었습니다.</p>
-                <p>영향 구분: 참고</p>
+                <p>감지 건수: {signalCounts.direct}건</p>
+                {directSignals.length > 0 ? (
+                  <p>{directSignals[0].summary}</p>
+                ) : (
+                  <p>감지된 직접 시그널이 없습니다.</p>
+                )}
+                <p>영향 구분: {getImpactLabel(directSignals)}</p>
               </div>
             </div>
 
@@ -143,9 +198,13 @@ const ReportDocument = ({
             <div className="pl-4 border-l-2 border-primary/30">
               <h3 className="text-sm font-medium text-foreground mb-2">산업 시그널</h3>
               <div className="text-sm text-muted-foreground space-y-1">
-                <p>감지 건수: 1건</p>
-                <p>반도체 업종 관련 정책 변화가 감지되었습니다.</p>
-                <p>영향 구분: 기회</p>
+                <p>감지 건수: {signalCounts.industry}건</p>
+                {industrySignals.length > 0 ? (
+                  <p>{industrySignals[0].summary}</p>
+                ) : (
+                  <p>감지된 산업 시그널이 없습니다.</p>
+                )}
+                <p>영향 구분: {getImpactLabel(industrySignals)}</p>
               </div>
             </div>
 
@@ -153,9 +212,13 @@ const ReportDocument = ({
             <div className="pl-4 border-l-2 border-primary/30">
               <h3 className="text-sm font-medium text-foreground mb-2">환경 시그널</h3>
               <div className="text-sm text-muted-foreground space-y-1">
-                <p>감지 건수: 1건</p>
-                <p>글로벌 금리 동향 변화가 감지되었습니다.</p>
-                <p>영향 구분: 참고</p>
+                <p>감지 건수: {signalCounts.environment}건</p>
+                {environmentSignals.length > 0 ? (
+                  <p>{environmentSignals[0].summary}</p>
+                ) : (
+                  <p>감지된 환경 시그널이 없습니다.</p>
+                )}
+                <p>영향 구분: {getImpactLabel(environmentSignals)}</p>
               </div>
             </div>
           </div>
@@ -172,15 +235,23 @@ const ReportDocument = ({
           <h2 className="text-lg font-semibold text-foreground mb-4 pb-2 border-b border-border">
             시그널 타임라인
           </h2>
-          <div className="space-y-3">
-            {timelineEvents.map((event, index) => (
-              <div key={index} className="flex text-sm border-b border-border/50 pb-3 last:border-0">
-                <span className="w-28 text-muted-foreground shrink-0">{event.date}</span>
-                <span className="w-16 text-muted-foreground shrink-0">{event.type}</span>
-                <span className="text-foreground">{event.summary}</span>
-              </div>
-            ))}
-          </div>
+          {timelineSignals.length > 0 ? (
+            <div className="space-y-3">
+              {timelineSignals.map((signal) => (
+                <div key={signal.id} className="flex text-sm border-b border-border/50 pb-3 last:border-0">
+                  <span className="w-28 text-muted-foreground shrink-0">
+                    {formatDate(signal.detectedAt)}
+                  </span>
+                  <span className="w-16 text-muted-foreground shrink-0">
+                    {SIGNAL_TYPE_CONFIG[signal.signalCategory].label.replace(" 시그널", "")}
+                  </span>
+                  <span className="text-foreground">{signal.title}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">감지된 시그널이 없습니다.</p>
+          )}
         </section>
       )}
 
@@ -190,20 +261,26 @@ const ReportDocument = ({
           <h2 className="text-lg font-semibold text-foreground mb-4 pb-2 border-b border-border">
             주요 근거 요약
           </h2>
-          <div className="space-y-3">
-            {evidenceItems.map((item, index) => (
-              <div key={index} className="flex text-sm border-b border-border/50 pb-3 last:border-0">
-                <span className="w-36 text-muted-foreground shrink-0">{item.source}</span>
-                <span className="w-16 text-muted-foreground shrink-0">{item.type}</span>
-                <span className="text-foreground">{item.description}</span>
-              </div>
-            ))}
-          </div>
+          {evidences.length > 0 ? (
+            <div className="space-y-3">
+              {evidences.slice(0, 5).map((evidence) => (
+                <div key={evidence.id} className="flex text-sm border-b border-border/50 pb-3 last:border-0">
+                  <span className="w-36 text-muted-foreground shrink-0">{evidence.sourceName}</span>
+                  <span className="w-16 text-muted-foreground shrink-0">
+                    {getEvidenceTypeLabel(evidence.sourceType)}
+                  </span>
+                  <span className="text-foreground">{evidence.title}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">수집된 근거가 없습니다.</p>
+          )}
         </section>
       )}
 
       {/* Loan Reference Insight - Conditional */}
-      {showLoanSection && sectionsToShow.loanInsight && (
+      {corporation.hasLoanRelationship && sectionsToShow.loanInsight && (
         <section className="mb-8">
           <h2 className="text-lg font-semibold text-foreground mb-4 pb-2 border-b border-border">
             여신 참고 관점 요약
@@ -213,10 +290,13 @@ const ReportDocument = ({
               해당 기업은 당행 여신 거래가 있는 기업으로, 최근 감지된 시그널은 
               여신 관리 관점에서 참고할 수 있는 정보를 포함하고 있습니다.
             </p>
-            <p>
-              직접 시그널로 감지된 실적 발표 내용과 산업 시그널로 감지된 정책 변화는 
-              해당 기업의 사업 환경 변화를 이해하는 데 참고될 수 있습니다.
-            </p>
+            {signals.length > 0 && (
+              <p>
+                {directSignals.length > 0 && "직접 시그널로 감지된 기업 활동 정보와 "}
+                {industrySignals.length > 0 && "산업 시그널로 감지된 업종 동향은 "}
+                해당 기업의 사업 환경 변화를 이해하는 데 참고될 수 있습니다.
+              </p>
+            )}
             <p className="italic text-xs">
               본 내용은 참고 정보이며, 여신 관련 조치나 권고를 포함하지 않습니다.
             </p>
@@ -225,7 +305,7 @@ const ReportDocument = ({
       )}
 
       {/* Insight Memory */}
-      {sectionsToShow.insightMemory && (
+      {sectionsToShow.insightMemory && insightMemory && (
         <section className="mb-8">
           <h2 className="text-lg font-semibold text-foreground mb-4 pb-2 border-b border-border">
             과거 사례 참고 (Insight Memory)
@@ -233,11 +313,11 @@ const ReportDocument = ({
           <div className="text-sm text-muted-foreground space-y-2">
             <div className="flex">
               <span className="w-40">유사 사례 건수</span>
-              <span className="text-foreground">3건</span>
+              <span className="text-foreground">{insightMemory.similarCaseCount}건</span>
             </div>
             <div className="flex">
               <span className="w-40">일반적 영향 분류</span>
-              <span className="text-foreground">단기 영향</span>
+              <span className="text-foreground">{insightMemory.impactClassification} 영향</span>
             </div>
             <p className="mt-3 text-xs italic">
               위 정보는 과거 유사 시그널 사례를 참고용으로 제공하며, 현재 상황에 대한 예측이나 판단을 의미하지 않습니다.

@@ -10,20 +10,22 @@ import ReportDocument from "./ReportDocument";
 import ExportSettingsPanel from "./ExportSettingsPanel";
 import PDFExportModal from "./PDFExportModal";
 import ShareLinkModal from "./ShareLinkModal";
+import { getCorporationById } from "@/data/corporations";
 
 interface ReportPreviewModalProps {
   open: boolean;
   onClose: () => void;
-  companyName: string;
-  showLoanSection: boolean;
+  corporationId: string;
 }
 
 const ReportPreviewModal = ({
   open,
   onClose,
-  companyName,
-  showLoanSection,
+  corporationId,
 }: ReportPreviewModalProps) => {
+  const corporation = getCorporationById(corporationId);
+  const companyName = corporation?.name ?? "기업";
+  
   const defaultFileName = `RKYC_기업시그널보고서_${companyName}_${new Date().toISOString().split('T')[0]}`;
   
   const [fileName, setFileName] = useState(defaultFileName);
@@ -53,7 +55,7 @@ const ReportPreviewModal = ({
             <div>
               <h2 className="text-lg font-semibold text-foreground">보고서 미리보기</h2>
               <p className="text-sm text-muted-foreground">
-                PDF 내보내기 전 최종 확인용 화면입니다.
+                PDF 내보내기 전 최종 확인용 화면입니다. 기존 RKYC 데이터를 기반으로 구성됩니다.
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -92,8 +94,7 @@ const ReportPreviewModal = ({
                 <div className="p-12">
                   <ScrollArea className="h-full">
                     <ReportDocument
-                      companyName={companyName}
-                      showLoanSection={showLoanSection}
+                      corporationId={corporationId}
                       sectionsToShow={sections}
                     />
                   </ScrollArea>
@@ -108,7 +109,7 @@ const ReportPreviewModal = ({
                 onFileNameChange={setFileName}
                 sections={sections}
                 onSectionChange={handleSectionChange}
-                showLoanSection={showLoanSection}
+                corporationId={corporationId}
               />
             </div>
           </div>

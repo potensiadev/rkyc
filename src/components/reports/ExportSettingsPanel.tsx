@@ -2,6 +2,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
+import { getCorporationById } from "@/data/corporations";
 
 interface ExportSettingsPanelProps {
   fileName: string;
@@ -17,7 +18,7 @@ interface ExportSettingsPanelProps {
     disclaimer: boolean;
   };
   onSectionChange: (section: keyof ExportSettingsPanelProps['sections'], checked: boolean) => void;
-  showLoanSection: boolean;
+  corporationId: string;
 }
 
 const ExportSettingsPanel = ({
@@ -25,8 +26,11 @@ const ExportSettingsPanel = ({
   onFileNameChange,
   sections,
   onSectionChange,
-  showLoanSection,
+  corporationId,
 }: ExportSettingsPanelProps) => {
+  const corporation = getCorporationById(corporationId);
+  const showLoanSection = corporation?.hasLoanRelationship ?? false;
+
   const sectionLabels: { key: keyof typeof sections; label: string; conditional?: boolean }[] = [
     { key: 'summary', label: '요약' },
     { key: 'companyOverview', label: '기업 개요' },
