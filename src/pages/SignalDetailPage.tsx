@@ -24,12 +24,27 @@ import {
   Shield,
   Database,
   Tag,
-  Info
+  Info,
+  Landmark,
+  History
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
+// Extended signal type with loan relationship
+interface ExtendedSignal extends Signal {
+  aiSummary: string;
+  evidences: Evidence[];
+  hasLoanRelationship?: boolean;
+  loanRiskInsight?: string;
+  pastCaseStats?: {
+    similarCases: number;
+    shortTermOnly: number;
+    escalatedToMidTerm: number;
+  };
+}
+
 // Mock detailed signal data
-const mockSignalDetails: Record<string, Signal & { aiSummary: string; evidences: Evidence[] }> = {
+const mockSignalDetails: Record<string, ExtendedSignal> = {
   "1": {
     id: "1",
     corporationName: "삼성전자",
@@ -49,6 +64,13 @@ const mockSignalDetails: Record<string, Signal & { aiSummary: string; evidences:
     confidenceLevel: "high",
     sourceType: "external",
     eventClassification: "governance",
+    hasLoanRelationship: true,
+    loanRiskInsight: "해당 법인은 현재 기업 운영자금 대출이 실행 중인 상태입니다. 금번 시그널에서 감지된 조직 구조조정 검토 관련 정보는 법인의 내부 경영 상황 변화를 시사할 수 있는 요소로 참고될 수 있습니다. 구조조정이 실제 시행될 경우 단기적으로 비용 부담이 발생할 가능성이 있으며, 이에 따른 현금흐름 변화 여부를 모니터링할 필요가 있습니다. 다만, 해당 정보만으로 상환 능력에 대한 판단을 내릴 수 없으며, 추가적인 재무 자료 확인이 필요합니다.",
+    pastCaseStats: {
+      similarCases: 18,
+      shortTermOnly: 11,
+      escalatedToMidTerm: 4,
+    },
     aiSummary: `삼성전자가 반도체 사업부의 경쟁력 강화를 위해 대규모 인력 재배치를 검토 중인 것으로 알려졌습니다. 복수의 언론 보도에 따르면, 이번 조치는 글로벌 반도체 시장의 수요 변화에 대응하기 위한 전략적 결정으로 분석됩니다.
 
 해당 시그널은 삼성전자를 직접 언급한 외부 뉴스 소스를 기반으로 생성되었습니다. 구조조정의 규모와 시기에 대한 구체적인 정보는 아직 공식 확인되지 않았으며, 회사 측의 공식 입장 발표가 필요한 상황입니다.
@@ -409,6 +431,63 @@ export default function SignalDetailPage() {
                 <span className="text-sm font-medium text-primary">{eventConfig.label}</span>
               </div>
               <p className="text-sm text-muted-foreground">{eventConfig.description}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Conditional Panel: Loan Risk Insight */}
+        {signal.hasLoanRelationship && 
+         signal.impact === "risk" && 
+         (signal.impactStrength === "high" || signal.impactStrength === "medium") && 
+         signal.loanRiskInsight && (
+          <div className="bg-muted/30 rounded-lg border border-border p-6 mb-6">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
+                <Landmark className="w-4 h-4 text-muted-foreground" />
+              </div>
+              <h3 className="text-lg font-medium text-foreground">여신 리스크 인사이트</h3>
+              <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">참고용</span>
+            </div>
+
+            <p className="text-sm text-foreground leading-relaxed mb-4">
+              {signal.loanRiskInsight}
+            </p>
+
+            <div className="pt-3 border-t border-border">
+              <p className="text-xs text-muted-foreground">
+                본 인사이트는 참고용으로만 제공됩니다. 최종 판단 및 조치는 담당자가 수행합니다.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Insight Memory Panel */}
+        {signal.pastCaseStats && (
+          <div className="bg-muted/30 rounded-lg border border-border p-6 mb-6">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
+                <History className="w-4 h-4 text-muted-foreground" />
+              </div>
+              <h3 className="text-lg font-medium text-foreground">인사이트 메모리 (과거 사례 참고)</h3>
+              <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">참고용</span>
+            </div>
+
+            <div className="space-y-2 mb-4">
+              <p className="text-sm text-foreground">
+                동일 산업 내 유사 사례 (최근 12개월): <span className="font-medium">{signal.pastCaseStats.similarCases}건</span>
+              </p>
+              <p className="text-sm text-foreground">
+                단기 영향으로 종결된 사례: <span className="font-medium">{signal.pastCaseStats.shortTermOnly}건</span>
+              </p>
+              <p className="text-sm text-foreground">
+                중기 관리로 확대된 사례: <span className="font-medium">{signal.pastCaseStats.escalatedToMidTerm}건</span>
+              </p>
+            </div>
+
+            <div className="pt-3 border-t border-border">
+              <p className="text-xs text-muted-foreground">
+                본 정보는 과거 사례를 요약한 것으로, 예측이나 권고를 의미하지 않습니다.
+              </p>
             </div>
           </div>
         )}
