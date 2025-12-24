@@ -8,6 +8,7 @@ import CorporationSearch from "./pages/CorporationSearch";
 import DirectSignalPage from "./pages/DirectSignalPage";
 import IndustrySignalPage from "./pages/IndustrySignalPage";
 import EnvironmentSignalPage from "./pages/EnvironmentSignalPage";
+import SignalDetailPage from "./pages/SignalDetailPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -24,6 +25,7 @@ const App = () => (
           <Route path="/signals/direct" element={<DirectSignalPage />} />
           <Route path="/signals/industry" element={<IndustrySignalPage />} />
           <Route path="/signals/environment" element={<EnvironmentSignalPage />} />
+          <Route path="/signals/:signalId" element={<SignalDetailPage />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
