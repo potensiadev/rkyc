@@ -254,10 +254,20 @@ export default function SignalDetailPage() {
           {/* Corporation Name */}
           <div className="flex items-start justify-between mb-4">
             <div>
-              <h1 className="text-2xl font-semibold text-foreground mb-1">
-                {signal.corporationName}
-              </h1>
-              <p className="text-sm text-muted-foreground">{signal.corporationId}</p>
+              <button 
+                onClick={() => {
+                  const corporateKey = signal.corporationName === "삼성전자" ? "samsung" : 
+                                       signal.corporationName === "SK하이닉스" ? "skhynix" : 
+                                       signal.corporationName === "현대자동차" ? "hyundai" : "samsung";
+                  navigate(`/corporates/${corporateKey}`);
+                }}
+                className="text-left hover:opacity-80 transition-opacity"
+              >
+                <h1 className="text-2xl font-semibold text-foreground mb-1 hover:text-primary transition-colors">
+                  {signal.corporationName}
+                </h1>
+                <p className="text-sm text-muted-foreground">{signal.corporationId}</p>
+              </button>
             </div>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Clock className="w-4 h-4" />
