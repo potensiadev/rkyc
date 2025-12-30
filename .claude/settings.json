@@ -1,0 +1,55 @@
+{
+  "project": {
+    "name": "rKYC",
+    "description": "AI 기반 기업 리스크 시그널 탐지 시스템"
+  },
+  "context": {
+    "always_include": [
+      "CLAUDE.md"
+    ],
+    "include_on_demand": [
+      "docs/dev-plan.md",
+      "docs/architecture/*.md"
+    ]
+  },
+  "agents": {
+    "backend": ".claude/agents/backend.md",
+    "worker": ".claude/agents/worker.md",
+    "database": ".claude/agents/database.md"
+  },
+  "conventions": {
+    "language": "ko",
+    "code_style": {
+      "python": {
+        "formatter": "black",
+        "linter": "ruff",
+        "type_checker": "mypy"
+      },
+      "typescript": {
+        "formatter": "prettier",
+        "linter": "eslint"
+      }
+    },
+    "commit_message": {
+      "format": "conventional",
+      "language": "en"
+    }
+  },
+  "guardrails": {
+    "forbidden_expressions": [
+      "~일 것이다",
+      "반드시",
+      "즉시 조치 필요",
+      "확실히",
+      "틀림없이"
+    ],
+    "required": {
+      "signal": ["evidence"],
+      "api": ["error_handling", "validation"]
+    }
+  },
+  "memory": {
+    "session_log_path": "docs/sessions/",
+    "update_claude_md_on_complete": true
+  }
+}
