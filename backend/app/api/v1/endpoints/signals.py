@@ -193,14 +193,14 @@ async def update_signal_status(
     if not signal_index:
         raise HTTPException(status_code=404, detail="Signal not found")
 
-    # Raw SQL로 업데이트 (Enum 호환성 문제 회피)
+    # Raw SQL로 업데이트 (CAST 함수 사용)
     await db.execute(
         text("""
             UPDATE rkyc_signal_index
-            SET signal_status = :status::signal_status_enum,
+            SET signal_status = CAST(:status AS signal_status_enum),
                 reviewed_at = CASE WHEN :status = 'REVIEWED' THEN :now ELSE reviewed_at END,
                 last_updated_at = :now
-            WHERE signal_id = :signal_id
+            WHERE signal_id = CAST(:signal_id AS uuid)
         """),
         {"status": status_value, "now": now, "signal_id": str(signal_id)}
     )
@@ -228,15 +228,15 @@ async def dismiss_signal(
     if not signal_index:
         raise HTTPException(status_code=404, detail="Signal not found")
 
-    # Raw SQL로 업데이트 (Enum 호환성 문제 회피)
+    # Raw SQL로 업데이트 (CAST 함수 사용)
     await db.execute(
         text("""
             UPDATE rkyc_signal_index
-            SET signal_status = 'DISMISSED'::signal_status_enum,
+            SET signal_status = CAST('DISMISSED' AS signal_status_enum),
                 dismissed_at = :now,
                 dismiss_reason = :reason,
                 last_updated_at = :now
-            WHERE signal_id = :signal_id
+            WHERE signal_id = CAST(:signal_id AS uuid)
         """),
         {"now": now, "reason": dismiss_request.reason, "signal_id": str(signal_id)}
     )
