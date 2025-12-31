@@ -1,8 +1,8 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
-import { getCorporationById } from "@/data/corporations";
-import { 
-  getSignalsByCorporationId, 
+import { getCorporationById, CORPORATIONS } from "@/data/corporations";
+import {
+  getSignalsByCorporationId,
   getIntegratedTimeline,
   getAllEvidencesForCorporation,
   getCorporationSignalCounts,
@@ -11,13 +11,13 @@ import {
 } from "@/data/signals";
 import { getInsightMemoryByCorporationId } from "@/data/insightMemory";
 import { SIGNAL_TYPE_CONFIG, SIGNAL_IMPACT_CONFIG } from "@/types/signal";
-import { 
-  ArrowLeft, 
-  Building2, 
-  Factory, 
-  Globe, 
-  TrendingUp, 
-  TrendingDown, 
+import {
+  ArrowLeft,
+  Building2,
+  Factory,
+  Globe,
+  TrendingUp,
+  TrendingDown,
   FileText,
   Landmark,
   Users,
@@ -25,19 +25,41 @@ import {
   Calendar,
   FileDown,
   Link2,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useState } from "react";
 import ReportPreviewModal from "@/components/reports/ReportPreviewModal";
+import { useCorporation, useSignals } from "@/hooks/useApi";
 
 export default function CorporateDetailPage() {
   const { corporateId } = useParams();
   const navigate = useNavigate();
   const [showPreviewModal, setShowPreviewModal] = useState(false);
 
-  const corporation = getCorporationById(corporateId || "1");
-  
+  // API 훅 사용
+  const { data: apiCorporation, isLoading: isLoadingCorp } = useCorporation(corporateId || "");
+  const { data: apiSignals, isLoading: isLoadingSignals } = useSignals({ corp_id: corporateId });
+
+  // Mock 데이터 fallback (API에 없는 상세 정보용)
+  const mockCorporation = getCorporationById(corporateId || "1");
+
+  // 로딩 상태
+  if (isLoadingCorp) {
+    return (
+      <MainLayout>
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="w-6 h-6 animate-spin text-primary mr-2" />
+          <span className="text-muted-foreground">기업 정보를 불러오는 중...</span>
+        </div>
+      </MainLayout>
+    );
+  }
+
+  // API 데이터 우선, 없으면 Mock 사용
+  const corporation = apiCorporation || mockCorporation;
+
   if (!corporation) {
     return (
       <MainLayout>
@@ -51,8 +73,14 @@ export default function CorporateDetailPage() {
     );
   }
 
-  const signals = getSignalsByCorporationId(corporation.id);
-  const signalCounts = getCorporationSignalCounts(corporation.id);
+  // API 시그널 카운트 또는 Mock 카운트
+  const signalCounts = apiSignals ? {
+    direct: apiSignals.filter(s => s.signalCategory === 'direct').length,
+    industry: apiSignals.filter(s => s.signalCategory === 'industry').length,
+    environment: apiSignals.filter(s => s.signalCategory === 'environment').length,
+  } : getCorporationSignalCounts(corporation.id);
+
+  // Mock 데이터 (상세 정보용)
   const integratedTimeline = getIntegratedTimeline(corporation.id);
   const evidences = getAllEvidencesForCorporation(corporation.id);
   const insightMemory = getInsightMemoryByCorporationId(corporation.id);

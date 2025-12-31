@@ -3,24 +3,39 @@ rKYC Signals API Endpoints
 Query operations for signals (PRD 14.7.3)
 
 Endpoints:
-- GET    /signals                - 시그널 목록 (필터링 지원)
-- GET    /signals/{signal_id}    - 시그널 상세
+- GET    /signals                    - 시그널 목록 (필터링 지원)
+- GET    /signals/{signal_id}        - 시그널 기본 조회
+- GET    /signals/{signal_id}/detail - 시그널 상세 (Evidence 포함)
+- PATCH  /signals/{signal_id}/status - 상태 변경
+- POST   /signals/{signal_id}/dismiss - 기각
 """
 
 from typing import Optional
 from uuid import UUID
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from app.core.database import get_db
 from app.models.signal import (
     SignalIndex,
+    Signal,
+    Evidence,
     SignalType,
     EventType,
     ImpactDirection,
     ImpactStrength,
+    SignalStatus,
 )
-from app.schemas.signal import SignalIndexResponse, SignalListResponse
+from app.schemas.signal import (
+    SignalIndexResponse,
+    SignalListResponse,
+    SignalDetailResponse,
+    SignalStatusUpdate,
+    SignalDismissRequest,
+    EvidenceResponse,
+    SignalStatusEnum,
+)
 
 router = APIRouter()
 
@@ -31,6 +46,7 @@ async def list_signals(
     event_type: Optional[EventType] = Query(None, description="이벤트 타입 필터"),
     impact_direction: Optional[ImpactDirection] = Query(None, description="영향 방향 필터"),
     impact_strength: Optional[ImpactStrength] = Query(None, description="영향 강도 필터"),
+    signal_status: Optional[SignalStatus] = Query(None, description="시그널 상태 필터"),
     corp_id: Optional[str] = Query(None, description="기업 ID 필터"),
     industry_code: Optional[str] = Query(None, description="업종코드 필터"),
     limit: int = Query(50, ge=1, le=1000),
@@ -65,6 +81,9 @@ async def list_signals(
     if industry_code:
         query = query.where(SignalIndex.industry_code == industry_code)
 
+    if signal_status:
+        query = query.where(SignalIndex.signal_status == signal_status)
+
     # Count total
     count_query = select(func.count()).select_from(query.subquery())
     total_result = await db.execute(count_query)
@@ -83,7 +102,7 @@ async def get_signal(
     signal_id: UUID,
     db: AsyncSession = Depends(get_db),
 ):
-    """시그널 상세 조회"""
+    """시그널 기본 조회"""
 
     query = select(SignalIndex).where(SignalIndex.signal_id == signal_id)
     result = await db.execute(query)
@@ -93,3 +112,143 @@ async def get_signal(
         raise HTTPException(status_code=404, detail="Signal not found")
 
     return signal
+
+
+@router.get("/{signal_id}/detail", response_model=SignalDetailResponse)
+async def get_signal_detail(
+    signal_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """시그널 상세 조회 (Evidence 포함)"""
+
+    # SignalIndex에서 기본 정보
+    index_query = select(SignalIndex).where(SignalIndex.signal_id == signal_id)
+    index_result = await db.execute(index_query)
+    signal_index = index_result.scalar_one_or_none()
+
+    if not signal_index:
+        raise HTTPException(status_code=404, detail="Signal not found")
+
+    # Signal 원본에서 전체 summary
+    signal_query = select(Signal).where(Signal.signal_id == signal_id)
+    signal_result = await db.execute(signal_query)
+    signal = signal_result.scalar_one_or_none()
+
+    # Evidence 조회
+    evidence_query = select(Evidence).where(Evidence.signal_id == signal_id)
+    evidence_result = await db.execute(evidence_query)
+    evidences = evidence_result.scalars().all()
+
+    return SignalDetailResponse(
+        signal_id=signal_index.signal_id,
+        corp_id=signal_index.corp_id,
+        corp_name=signal_index.corp_name,
+        industry_code=signal_index.industry_code,
+        signal_type=signal_index.signal_type,
+        event_type=signal_index.event_type,
+        impact_direction=signal_index.impact_direction,
+        impact_strength=signal_index.impact_strength,
+        confidence=signal_index.confidence,
+        title=signal_index.title,
+        summary=signal.summary if signal else signal_index.summary_short or "",
+        summary_short=signal_index.summary_short,
+        signal_status=signal_index.signal_status or SignalStatusEnum.NEW,
+        evidence_count=signal_index.evidence_count,
+        detected_at=signal_index.detected_at,
+        reviewed_at=signal_index.reviewed_at,
+        dismissed_at=signal_index.dismissed_at,
+        dismiss_reason=signal_index.dismiss_reason,
+        evidences=[
+            EvidenceResponse(
+                evidence_id=e.evidence_id,
+                signal_id=e.signal_id,
+                evidence_type=e.evidence_type,
+                ref_type=e.ref_type,
+                ref_value=e.ref_value,
+                snippet=e.snippet,
+                meta=e.meta,
+                created_at=e.created_at,
+            )
+            for e in evidences
+        ],
+    )
+
+
+@router.patch("/{signal_id}/status")
+async def update_signal_status(
+    signal_id: UUID,
+    status_update: SignalStatusUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    """시그널 상태 변경 (NEW → REVIEWED)"""
+
+    now = datetime.utcnow()
+
+    # rkyc_signal 업데이트
+    signal_query = select(Signal).where(Signal.signal_id == signal_id)
+    signal_result = await db.execute(signal_query)
+    signal = signal_result.scalar_one_or_none()
+
+    if not signal:
+        raise HTTPException(status_code=404, detail="Signal not found")
+
+    # 상태 변경
+    new_status = SignalStatus(status_update.status.value)
+    signal.signal_status = new_status
+    if new_status == SignalStatus.REVIEWED:
+        signal.reviewed_at = now
+    signal.last_updated_at = now
+
+    # rkyc_signal_index도 동기화
+    index_query = select(SignalIndex).where(SignalIndex.signal_id == signal_id)
+    index_result = await db.execute(index_query)
+    signal_index = index_result.scalar_one_or_none()
+
+    if signal_index:
+        signal_index.signal_status = new_status
+        if new_status == SignalStatus.REVIEWED:
+            signal_index.reviewed_at = now
+        signal_index.last_updated_at = now
+
+    await db.commit()
+
+    return {"message": "Status updated", "status": status_update.status.value}
+
+
+@router.post("/{signal_id}/dismiss")
+async def dismiss_signal(
+    signal_id: UUID,
+    dismiss_request: SignalDismissRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """시그널 기각 (사유 포함)"""
+
+    now = datetime.utcnow()
+
+    # rkyc_signal 업데이트
+    signal_query = select(Signal).where(Signal.signal_id == signal_id)
+    signal_result = await db.execute(signal_query)
+    signal = signal_result.scalar_one_or_none()
+
+    if not signal:
+        raise HTTPException(status_code=404, detail="Signal not found")
+
+    signal.signal_status = SignalStatus.DISMISSED
+    signal.dismissed_at = now
+    signal.dismiss_reason = dismiss_request.reason
+    signal.last_updated_at = now
+
+    # rkyc_signal_index도 동기화
+    index_query = select(SignalIndex).where(SignalIndex.signal_id == signal_id)
+    index_result = await db.execute(index_query)
+    signal_index = index_result.scalar_one_or_none()
+
+    if signal_index:
+        signal_index.signal_status = SignalStatus.DISMISSED
+        signal_index.dismissed_at = now
+        signal_index.dismiss_reason = dismiss_request.reason
+        signal_index.last_updated_at = now
+
+    await db.commit()
+
+    return {"message": "Signal dismissed", "reason": dismiss_request.reason}

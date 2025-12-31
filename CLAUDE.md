@@ -472,11 +472,51 @@ rkyc/
 - Worker 미구현으로 Job이 QUEUED 상태 유지
 - LLM API 키 설정 후 실제 분석 가능
 
-## 다음 세션 작업 (세션 5)
+### 세션 5 (2026-01-01) - Signal 상태 관리 API 및 Detail 페이지 API 연동 ✅
+**목표**: Signal 상태 관리 API 구현 및 Frontend Detail 페이지 API 연동
 
-### Phase 1: 시그널 상태 관리 API
-1. PATCH /signals/{id}/status 구현
-2. POST /signals/{id}/dismiss 구현
+**완료 항목**:
+1. DB 마이그레이션 SQL 생성
+   - `backend/sql/migration_v3_signal_status.sql`
+   - signal_status_enum (NEW, REVIEWED, DISMISSED) 생성
+   - rkyc_signal, rkyc_signal_index에 상태 컬럼 추가
+   - 인덱스 추가 (idx_signal_status, idx_signal_index_status)
+
+2. Backend 모델 업데이트
+   - `app/models/signal.py` - SignalStatus Enum, Signal/Evidence 모델 추가
+   - `app/schemas/signal.py` - SignalDetailResponse, EvidenceResponse, DashboardSummaryResponse 추가
+
+3. Backend API 구현
+   - GET /signals/{id}/detail - 시그널 상세 (Evidence 포함)
+   - PATCH /signals/{id}/status - 상태 변경
+   - POST /signals/{id}/dismiss - 기각 처리
+   - GET /dashboard/summary - Dashboard 통계
+   - `app/api/v1/endpoints/dashboard.py` 신규
+
+4. Frontend API 연동
+   - `src/lib/api.ts` - getSignalDetail, updateSignalStatus, dismissSignal, getDashboardSummary
+   - `src/hooks/useApi.ts` - useSignalDetail, useUpdateSignalStatus, useDismissSignal, useDashboardSummary
+
+5. Frontend 페이지 수정
+   - `SignalDetailPage.tsx` - API 연동, 검토 완료/기각 버튼, Evidence 목록 표시
+   - `CorporateDetailPage.tsx` - useCorporation, useSignals 훅 연동
+
+**API 엔드포인트 추가**:
+| Method | Endpoint | 설명 |
+|--------|----------|------|
+| GET | /signals/{id}/detail | 시그널 상세 (Evidence 포함) |
+| PATCH | /signals/{id}/status | 상태 변경 (NEW → REVIEWED) |
+| POST | /signals/{id}/dismiss | 기각 처리 (사유 필수) |
+| GET | /dashboard/summary | Dashboard 통계 |
+
+**주의**: DB 마이그레이션 필요
+- `backend/sql/migration_v3_signal_status.sql`을 Supabase SQL Editor에서 실행
+
+## 다음 세션 작업 (세션 6)
+
+### Phase 1: DB 마이그레이션 적용
+1. Supabase에 migration_v3_signal_status.sql 실행
+2. Railway 재배포
 
 ### Phase 2: Worker 기초
 1. Celery + Redis 설정
@@ -492,4 +532,4 @@ rkyc/
 - **Backend 로컬 실행**: `cd backend && uvicorn app.main:app --reload`
 
 ---
-*Last Updated: 2025-12-31 (세션 4 완료 - Demo Mode UI 및 Job API)*
+*Last Updated: 2026-01-01 (세션 5 완료 - Signal 상태 관리 API 및 Detail 페이지 연동)*

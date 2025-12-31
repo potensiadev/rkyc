@@ -16,14 +16,10 @@ import {
   FileText,
   Clock
 } from "lucide-react";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+
+import { GravityGrid } from "@/components/dashboard/GravityGrid";
+import { LevitatingCard } from "@/components/dashboard/LevitatingCard";
+import { SpotlightSearch } from "@/components/dashboard/SpotlightSearch";
 
 interface KPICardProps {
   icon: React.ElementType;
@@ -144,116 +140,60 @@ export default function SignalInbox() {
 
   return (
     <MainLayout>
-      <div className="max-w-7xl">
+      <div className="max-w-[1600px] mx-auto p-6">
         {/* Demo Panel (Demo Mode에서만 표시) */}
         <DemoPanel />
 
-        <div className="mb-6">
-          <h1 className="text-2xl font-semibold text-foreground">AI 감지 최신 RKYC 시그널</h1>
-          <p className="text-muted-foreground mt-1">
-            AI가 기업, 산업, 외부 환경 이벤트를 선제적으로 모니터링하여 검토가 필요한 시그널을 자동으로 도출합니다.
-          </p>
+        {/* 1. Spotlight Search */}
+        <div className="mb-12">
+          <SpotlightSearch onSearch={(q, m) => console.log(q, m)} />
         </div>
 
-        <div className="grid grid-cols-4 gap-4 mb-6">
+        {/* KPI Cards - Kept as "Satellites" */}
+        <div className="grid grid-cols-4 gap-4 mb-10">
           <KPICard icon={AlertCircle} label="금일 신규 시그널" value={counts.todayNew} trend="오늘" colorClass="text-signal-new" bgClass="bg-signal-new/10" />
           <KPICard icon={TrendingDown} label="위험 시그널 (7일)" value={counts.riskHigh7d} trend="최근 7일" colorClass="text-risk" bgClass="bg-risk/10" />
           <KPICard icon={TrendingUp} label="기회 시그널 (7일)" value={counts.opportunity7d} trend="최근 7일" colorClass="text-opportunity" bgClass="bg-opportunity/10" />
           <KPICard icon={Lightbulb} label="여신 거래 법인" value={counts.loanEligible} trend="참고용" colorClass="text-insight" bgClass="bg-insight/10" />
         </div>
 
-        <div className="flex items-center justify-between gap-4 mb-4">
-          <div className="flex items-center gap-1 bg-secondary rounded-lg p-1">
+        {/* Filters and Title */}
+        <div className="flex items-center justify-between gap-4 mb-6">
+          <div className="flex items-center gap-1 bg-secondary/50 backdrop-blur-sm rounded-lg p-1 border border-border/50">
             {statusFilters.map((filter) => (
               <button
                 key={filter.id}
                 onClick={() => setActiveStatus(filter.id as typeof activeStatus)}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeStatus === filter.id ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ${activeStatus === filter.id ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground hover:bg-background/50"}`}
               >
                 {filter.label}
                 <span className={`ml-2 ${activeStatus === filter.id ? "text-primary" : "text-muted-foreground"}`}>{filter.count}</span>
               </button>
             ))}
           </div>
-          <select className="text-sm border border-input rounded-md px-3 py-2 bg-card text-foreground">
+          <select className="text-sm border border-input rounded-md px-3 py-2 bg-card text-foreground focus:ring-2 focus:ring-primary/20 outline-none">
             <option value="recent">최신순</option>
             <option value="impact">영향도순</option>
             <option value="corporation">기업명순</option>
           </select>
         </div>
 
-        <div className="bg-card rounded-lg border border-border overflow-hidden">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/50">
-                <TableHead className="w-[140px]">법인명</TableHead>
-                <TableHead className="w-[100px]">시그널 유형</TableHead>
-                <TableHead className="w-[80px]">영향</TableHead>
-                <TableHead className="w-[80px]">영향 강도</TableHead>
-                <TableHead>AI 요약 (참고용)</TableHead>
-                <TableHead className="w-[80px] text-center">근거 수</TableHead>
-                <TableHead className="w-[100px]">감지 시간</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredSignals.map((signal) => {
-                const typeConfig = SIGNAL_TYPE_CONFIG[signal.signalCategory];
-                const impactConfig = SIGNAL_IMPACT_CONFIG[signal.impact];
-                const strengthConfig = SIGNAL_STRENGTH_CONFIG[signal.impactStrength];
-                const TypeIcon = getSignalTypeIcon(signal.signalCategory);
-                const ImpactIcon = getImpactIcon(signal.impact);
-
-                return (
-                  <TableRow key={signal.id} className="cursor-pointer hover:bg-muted/30 transition-colors" onClick={() => handleRowClick(signal.id)}>
-                    <TableCell>
-                      <div 
-                        className="font-medium text-foreground hover:text-primary hover:underline cursor-pointer"
-                        onClick={(e) => handleCompanyClick(signal.corporationId, e)}
-                      >
-                        {signal.corporationName}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium ${typeConfig.bgClass} ${typeConfig.colorClass}`}>
-                        <TypeIcon className="w-3 h-3" />
-                        {typeConfig.label}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium ${impactConfig.bgClass} ${impactConfig.colorClass}`}>
-                        <ImpactIcon className="w-3 h-3" />
-                        {impactConfig.label}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <span className={`text-xs font-medium ${signal.impactStrength === "high" ? "text-risk" : signal.impactStrength === "medium" ? "text-warning" : "text-muted-foreground"}`}>
-                        {strengthConfig.label}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <p className="text-sm text-foreground line-clamp-1">{signal.summary}</p>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-muted text-xs font-medium text-foreground">
-                        {signal.evidenceCount}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <Clock className="w-3 h-3" />
-                        {formatRelativeTime(signal.detectedAt)}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </div>
+        {/* 2. Levitating Asset Grid */}
+        <GravityGrid>
+          {filteredSignals.map((signal, idx) => (
+            <LevitatingCard
+              key={signal.id}
+              signal={signal}
+              index={idx}
+              onClick={handleRowClick}
+            />
+          ))}
+        </GravityGrid>
 
         {filteredSignals.length === 0 && (
-          <div className="text-center py-16 bg-card rounded-lg border border-border">
-            <p className="text-muted-foreground">선택한 조건에 해당하는 시그널이 없습니다.</p>
+          <div className="text-center py-32 bg-card/30 rounded-2xl border border-dashed border-border/50">
+            <p className="text-muted-foreground text-lg">선택한 조건에 해당하는 시그널이 없습니다.</p>
+            <p className="text-sm text-muted-foreground/50 mt-2">다른 검색어나 필터를 시도해보세요.</p>
           </div>
         )}
       </div>

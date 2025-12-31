@@ -17,6 +17,8 @@ export interface ApiCorporation {
   updated_at: string;
 }
 
+export type SignalStatusType = 'NEW' | 'REVIEWED' | 'DISMISSED';
+
 export interface ApiSignal {
   index_id: string;
   signal_id: string;
@@ -32,6 +34,40 @@ export interface ApiSignal {
   summary_short: string;
   evidence_count: number;
   detected_at: string;
+  // Session 5: Status fields
+  signal_status: SignalStatusType | null;
+  reviewed_at: string | null;
+  dismissed_at: string | null;
+  dismiss_reason: string | null;
+}
+
+// Evidence 응답 타입
+export interface ApiEvidence {
+  evidence_id: string;
+  signal_id: string;
+  evidence_type: 'INTERNAL_FIELD' | 'DOC' | 'EXTERNAL';
+  ref_type: 'SNAPSHOT_KEYPATH' | 'DOC_PAGE' | 'URL';
+  ref_value: string;
+  snippet: string | null;
+  meta: Record<string, unknown> | null;
+  created_at: string;
+}
+
+// Signal 상세 응답 (Evidence 포함)
+export interface ApiSignalDetail extends ApiSignal {
+  summary: string; // 전체 요약
+  evidences: ApiEvidence[];
+}
+
+// Dashboard 요약 통계
+export interface ApiDashboardSummary {
+  total_signals: number;
+  new_signals: number;
+  risk_signals: number;
+  opportunity_signals: number;
+  by_type: Record<string, number>;
+  by_status: Record<string, number>;
+  generated_at: string;
 }
 
 export interface ApiListResponse<T> {
@@ -80,6 +116,7 @@ export interface GetSignalsParams {
   corp_id?: string;
   signal_type?: 'DIRECT' | 'INDUSTRY' | 'ENVIRONMENT';
   impact_direction?: 'RISK' | 'OPPORTUNITY' | 'NEUTRAL';
+  signal_status?: SignalStatusType;
   skip?: number;
   limit?: number;
 }
@@ -90,6 +127,7 @@ export async function getSignals(params?: GetSignalsParams): Promise<ApiListResp
   if (params?.corp_id) searchParams.set('corp_id', params.corp_id);
   if (params?.signal_type) searchParams.set('signal_type', params.signal_type);
   if (params?.impact_direction) searchParams.set('impact_direction', params.impact_direction);
+  if (params?.signal_status) searchParams.set('signal_status', params.signal_status);
   if (params?.skip) searchParams.set('skip', params.skip.toString());
   if (params?.limit) searchParams.set('limit', params.limit.toString());
 
@@ -149,4 +187,40 @@ export async function triggerAnalyzeJob(corpId: string): Promise<JobTriggerRespo
 
 export async function getJobStatus(jobId: string): Promise<JobStatusResponse> {
   return fetchApi<JobStatusResponse>(`/api/v1/jobs/${jobId}`);
+}
+
+// ============================================================
+// Session 5: Signal Detail & Status APIs
+// ============================================================
+
+// Signal 상세 조회 (Evidence 포함)
+export async function getSignalDetail(signalId: string): Promise<ApiSignalDetail> {
+  return fetchApi<ApiSignalDetail>(`/api/v1/signals/${signalId}/detail`);
+}
+
+// Signal 상태 변경
+export async function updateSignalStatus(
+  signalId: string,
+  status: SignalStatusType
+): Promise<{ message: string; status: string }> {
+  return fetchApi(`/api/v1/signals/${signalId}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  });
+}
+
+// Signal 기각
+export async function dismissSignal(
+  signalId: string,
+  reason: string
+): Promise<{ message: string; reason: string }> {
+  return fetchApi(`/api/v1/signals/${signalId}/dismiss`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  });
+}
+
+// Dashboard 요약 통계
+export async function getDashboardSummary(): Promise<ApiDashboardSummary> {
+  return fetchApi<ApiDashboardSummary>('/api/v1/dashboard/summary');
 }

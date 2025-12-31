@@ -1,16 +1,15 @@
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useNavigate } from "react-router-dom";
-import { 
-  Calendar, 
-  TrendingDown, 
-  TrendingUp, 
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Calendar,
+  TrendingDown,
+  TrendingUp,
   FileText,
-  Building2,
-  Factory,
-  Globe,
-  ChevronRight
+  AlertTriangle,
+  ArrowUpRight
 } from "lucide-react";
-import { Signal, SIGNAL_TYPE_CONFIG } from "@/types/signal";
+import { Signal } from "@/types/signal";
 
 interface BriefingSignal {
   id: string;
@@ -77,27 +76,8 @@ const referenceEvents: BriefingSignal[] = [
     title: "한국은행 기준금리 동결 결정",
     summary: "물가 안정세 속 경기 불확실성 고려한 결정",
   },
-  {
-    id: "12",
-    corporationName: "규제 환경",
-    signalCategory: "environment",
-    title: "금융위원회, 기업대출 건전성 관리 강화 예고",
-    summary: "2025년 1분기 시행 예정, 세부 지침 추후 발표",
-  },
 ];
 
-function getSignalTypeIcon(category: Signal["signalCategory"]) {
-  switch (category) {
-    case "direct":
-      return Building2;
-    case "industry":
-      return Factory;
-    case "environment":
-      return Globe;
-  }
-}
-
-// Get today's date in Korean format
 function getTodayDate() {
   const today = new Date();
   const year = today.getFullYear();
@@ -117,7 +97,7 @@ export default function DailyBriefingPage() {
 
   return (
     <MainLayout>
-      <div className="max-w-4xl">
+      <div className="max-w-4xl space-y-8">
         {/* Header with Date */}
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-2">
@@ -129,164 +109,95 @@ export default function DailyBriefingPage() {
               <h1 className="text-2xl font-semibold text-foreground">일일 RKYC 브리핑</h1>
             </div>
           </div>
-          <p className="text-sm text-muted-foreground mt-3 pl-[52px]">
-            오늘 감지된 주요 시그널을 요약합니다. 상세 검토가 필요한 항목은 해당 시그널을 선택하여 확인하세요.
+          <p className="text-muted-foreground">
+            오늘 감지된 주요 시그널과 놓쳐서는 안 될 중요 이슈를 정리해 드립니다.
           </p>
         </div>
 
-        {/* Section 1: Today's Risk Signals */}
-        <section className="mb-8">
+        {/* Risk Signals */}
+        <section>
           <div className="flex items-center gap-2 mb-4">
-            <div className="w-8 h-8 rounded-lg bg-risk/10 flex items-center justify-center">
-              <TrendingDown className="w-4 h-4 text-risk" />
-            </div>
-            <h2 className="text-lg font-medium text-foreground">금일 위험 시그널</h2>
-            <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">
-              {todayRiskSignals.length}건
-            </span>
+            <AlertTriangle className="w-5 h-5 text-red-500" />
+            <h2 className="text-lg font-semibold">주요 위험(Risk) 시그널</h2>
           </div>
 
-          <div className="bg-card rounded-lg border border-border divide-y divide-border">
-            {todayRiskSignals.map((signal) => {
-              const typeConfig = SIGNAL_TYPE_CONFIG[signal.signalCategory];
-              const TypeIcon = getSignalTypeIcon(signal.signalCategory);
-
-              return (
-                <div
-                  key={signal.id}
-                  onClick={() => handleSignalClick(signal.id)}
-                  className="p-4 hover:bg-secondary/30 cursor-pointer transition-colors group"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-sm font-medium text-foreground">
-                          {signal.corporationName}
-                        </span>
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs ${typeConfig.bgClass} ${typeConfig.colorClass}`}>
-                          <TypeIcon className="w-3 h-3" />
-                          {typeConfig.label}
-                        </span>
-                      </div>
-                      <p className="text-sm text-foreground font-medium mb-1">
-                        {signal.title}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {signal.summary}
-                      </p>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0 mt-1 group-hover:text-primary transition-colors" />
+          <div className="grid gap-4">
+            {todayRiskSignals.map((signal) => (
+              <Card
+                key={signal.id}
+                className="cursor-pointer hover:border-red-400/50 transition-colors"
+                onClick={() => handleSignalClick(signal.id)}
+              >
+                <CardHeader className="pb-2">
+                  <div className="flex justify-between items-start">
+                    <span className="text-xs font-medium text-muted-foreground">{signal.corporationName}</span>
+                    <span className="px-2 py-0.5 bg-red-100 text-red-700 text-[10px] rounded font-bold dark:bg-red-900/30 dark:text-red-400">RISK</span>
                   </div>
-                </div>
-              );
-            })}
+                  <CardTitle className="text-base leading-tight">{signal.title}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">{signal.summary}</p>
+                </CardContent>
+              </Card>
+            ))}
           </div>
         </section>
 
-        {/* Section 2: Today's Opportunity Signals */}
-        <section className="mb-8">
+        {/* Opportunity Signals */}
+        <section>
           <div className="flex items-center gap-2 mb-4">
-            <div className="w-8 h-8 rounded-lg bg-opportunity/10 flex items-center justify-center">
-              <TrendingUp className="w-4 h-4 text-opportunity" />
-            </div>
-            <h2 className="text-lg font-medium text-foreground">금일 기회 시그널</h2>
-            <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">
-              {todayOpportunitySignals.length}건
-            </span>
+            <TrendingUp className="w-5 h-5 text-green-500" />
+            <h2 className="text-lg font-semibold">기회(Opportunity) 시그널</h2>
           </div>
 
-          <div className="bg-card rounded-lg border border-border divide-y divide-border">
-            {todayOpportunitySignals.map((signal) => {
-              const typeConfig = SIGNAL_TYPE_CONFIG[signal.signalCategory];
-              const TypeIcon = getSignalTypeIcon(signal.signalCategory);
-
-              return (
-                <div
-                  key={signal.id}
-                  onClick={() => handleSignalClick(signal.id)}
-                  className="p-4 hover:bg-secondary/30 cursor-pointer transition-colors group"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-sm font-medium text-foreground">
-                          {signal.corporationName}
-                        </span>
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs ${typeConfig.bgClass} ${typeConfig.colorClass}`}>
-                          <TypeIcon className="w-3 h-3" />
-                          {typeConfig.label}
-                        </span>
-                      </div>
-                      <p className="text-sm text-foreground font-medium mb-1">
-                        {signal.title}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {signal.summary}
-                      </p>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0 mt-1 group-hover:text-primary transition-colors" />
+          <div className="grid gap-4">
+            {todayOpportunitySignals.map((signal) => (
+              <Card
+                key={signal.id}
+                className="cursor-pointer hover:border-green-400/50 transition-colors"
+                onClick={() => handleSignalClick(signal.id)}
+              >
+                <CardHeader className="pb-2">
+                  <div className="flex justify-between items-start">
+                    <span className="text-xs font-medium text-muted-foreground">{signal.corporationName}</span>
+                    <span className="px-2 py-0.5 bg-green-100 text-green-700 text-[10px] rounded font-bold dark:bg-green-900/30 dark:text-green-400">OPPORTUNITY</span>
                   </div>
-                </div>
-              );
-            })}
+                  <CardTitle className="text-base leading-tight">{signal.title}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">{signal.summary}</p>
+                </CardContent>
+              </Card>
+            ))}
           </div>
         </section>
 
-        {/* Section 3: Reference Events */}
-        <section className="mb-8">
+        {/* Reference Events */}
+        <section>
           <div className="flex items-center gap-2 mb-4">
-            <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
-              <FileText className="w-4 h-4 text-muted-foreground" />
-            </div>
-            <h2 className="text-lg font-medium text-foreground">참고 이벤트</h2>
-            <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">
-              {referenceEvents.length}건
-            </span>
+            <FileText className="w-5 h-5 text-zinc-500" />
+            <h2 className="text-lg font-semibold">참고(Reference) 이슈</h2>
           </div>
 
-          <div className="bg-card rounded-lg border border-border divide-y divide-border">
-            {referenceEvents.map((event) => {
-              const typeConfig = SIGNAL_TYPE_CONFIG[event.signalCategory];
-              const TypeIcon = getSignalTypeIcon(event.signalCategory);
-
-              return (
-                <div
-                  key={event.id}
-                  className="p-4 hover:bg-secondary/30 cursor-pointer transition-colors group"
-                  onClick={() => handleSignalClick(event.id)}
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-sm text-muted-foreground">
-                          {event.corporationName}
-                        </span>
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs ${typeConfig.bgClass} ${typeConfig.colorClass}`}>
-                          <TypeIcon className="w-3 h-3" />
-                          {typeConfig.label}
-                        </span>
-                      </div>
-                      <p className="text-sm text-foreground font-medium mb-1">
-                        {event.title}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {event.summary}
-                      </p>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0 mt-1 group-hover:text-primary transition-colors" />
-                  </div>
+          <div className="grid gap-4">
+            {referenceEvents.map((signal) => (
+              <div
+                key={signal.id}
+                className="flex items-start gap-4 p-4 border border-border rounded-lg bg-card hover:bg-muted/50 transition-colors cursor-pointer"
+                onClick={() => handleSignalClick(signal.id)}
+              >
+                <div className="mt-1">
+                  <ArrowUpRight className="w-4 h-4 text-muted-foreground" />
                 </div>
-              );
-            })}
+                <div>
+                  <h3 className="font-medium text-foreground">{signal.title}</h3>
+                  <p className="text-sm text-muted-foreground mt-1">{signal.summary}</p>
+                </div>
+              </div>
+            ))}
           </div>
         </section>
 
-        {/* Footer note */}
-        <div className="text-center py-6 border-t border-border">
-          <p className="text-xs text-muted-foreground">
-            본 브리핑은 AI가 자동으로 생성한 참고 자료입니다. 최종 판단은 담당자가 수행합니다.
-          </p>
-        </div>
       </div>
     </MainLayout>
   );

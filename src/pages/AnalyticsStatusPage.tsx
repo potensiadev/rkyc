@@ -1,9 +1,10 @@
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useNavigate } from "react-router-dom";
-import { 
-  Radio, 
-  Clock, 
-  CheckCircle2, 
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  Radio,
+  Clock,
+  CheckCircle2,
   AlertCircle,
   Building2,
   Factory,
@@ -11,106 +12,65 @@ import {
   ChevronRight
 } from "lucide-react";
 
-interface KpiCard {
-  id: string;
-  title: string;
-  value: number;
-  icon: React.ElementType;
-}
-
-const kpiCards: KpiCard[] = [
+// Mock Data
+const kpiCards = [
   {
     id: "detected-today",
-    title: "오늘 감지된 시그널",
+    title: "금일 감지",
     value: 24,
     icon: Radio,
   },
   {
     id: "pending-review",
-    title: "검토 대기 시그널",
+    title: "검토 대기",
     value: 18,
     icon: Clock,
   },
   {
     id: "in-review",
-    title: "검토 중 시그널",
+    title: "검토 중",
     value: 5,
     icon: AlertCircle,
   },
   {
     id: "completed",
-    title: "검토 완료 시그널",
+    title: "처리 완료",
     value: 142,
     icon: CheckCircle2,
   },
 ];
 
-interface SignalTypeData {
-  id: string;
-  label: string;
-  count: number;
-  icon: React.ElementType;
-  colorClass: string;
-}
-
-const signalTypeData: SignalTypeData[] = [
+const signalTypeData = [
   {
     id: "direct",
     label: "직접 시그널",
     count: 45,
     icon: Building2,
-    colorClass: "bg-primary/20",
+    progressClass: "bg-blue-500",
   },
   {
     id: "industry",
     label: "산업 시그널",
     count: 78,
     icon: Factory,
-    colorClass: "bg-accent",
+    progressClass: "bg-purple-500",
   },
   {
     id: "environment",
     label: "환경 시그널",
     count: 43,
     icon: Globe,
-    colorClass: "bg-muted",
+    progressClass: "bg-emerald-500",
   },
 ];
 
-interface ImpactData {
-  id: string;
-  label: string;
-  count: number;
-  dotClass: string;
-}
-
-const impactData: ImpactData[] = [
-  { id: "risk", label: "위험", count: 32, dotClass: "bg-destructive/60" },
-  { id: "opportunity", label: "기회", count: 28, dotClass: "bg-primary/60" },
-  { id: "reference", label: "참고", count: 106, dotClass: "bg-muted-foreground/40" },
+const impactData = [
+  { id: "risk", label: "위험", count: 32, dotClass: "bg-red-500" },
+  { id: "opportunity", label: "기회", count: 28, dotClass: "bg-green-500" },
+  { id: "reference", label: "참고", count: 106, dotClass: "bg-zinc-500" },
 ];
 
-interface ProcessingFlowData {
-  id: string;
-  label: string;
-  count: number;
-}
-
-const processingFlowData: ProcessingFlowData[] = [
-  { id: "new", label: "신규", count: 18 },
-  { id: "in-progress", label: "검토 중", count: 5 },
-  { id: "completed", label: "검토 완료", count: 142 },
-];
-
-interface RecentSignal {
-  id: string;
-  corporateName: string;
-  signalType: "direct" | "industry" | "environment";
-  impact: "risk" | "opportunity" | "reference";
-  detectedAt: string;
-}
-
-const recentSignals: RecentSignal[] = [
+const recentSignals = [
   {
     id: "sig-1",
     corporateName: "삼성전자",
@@ -141,40 +101,18 @@ const recentSignals: RecentSignal[] = [
   },
 ];
 
-const signalTypeLabels = {
-  direct: "직접",
-  industry: "산업",
-  environment: "환경",
-};
-
-const signalTypeStyles = {
-  direct: "bg-primary/10 text-primary",
-  industry: "bg-accent text-accent-foreground",
-  environment: "bg-muted text-muted-foreground",
-};
-
-const impactLabels = {
-  risk: "위험",
-  opportunity: "기회",
-  reference: "참고",
-};
-
-const impactStyles = {
-  risk: "bg-destructive/10 text-destructive/80",
-  opportunity: "bg-primary/10 text-primary",
-  reference: "bg-muted text-muted-foreground",
-};
-
 export default function AnalyticsStatusPage() {
   const navigate = useNavigate();
   const totalSignalTypes = signalTypeData.reduce((sum, item) => sum + item.count, 0);
 
   return (
     <MainLayout>
-      <div className="max-w-6xl space-y-6">
+      <div className="max-w-6xl space-y-6 text-foreground">
         {/* Page Header */}
         <div className="mb-2">
-          <h1 className="text-2xl font-semibold text-foreground">분석 현황</h1>
+          <h1 className="text-2xl font-semibold">
+            분석 현황
+          </h1>
           <p className="text-muted-foreground mt-1">
             RKYC 시스템이 감지·분석 중인 시그널 현황을 한눈에 확인할 수 있습니다.
             <br />
@@ -184,166 +122,115 @@ export default function AnalyticsStatusPage() {
 
         {/* KPI Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {kpiCards.map((card) => (
-            <div
-              key={card.id}
-              className="bg-card rounded-lg border border-border p-5"
-            >
-              <div className="flex items-start justify-between">
+          {kpiCards.map((card, idx) => (
+            <Card key={card.id}>
+              <CardContent className="p-5 flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">{card.title}</p>
-                  <p className="text-3xl font-semibold text-foreground mt-1">
+                  <p className="text-sm font-medium text-muted-foreground">{card.title}</p>
+                  <div className="text-2xl font-bold mt-1">
                     {card.value}
-                  </p>
+                  </div>
                 </div>
-                <div className="w-10 h-10 rounded-lg bg-muted/50 flex items-center justify-center">
-                  <card.icon className="w-5 h-5 text-muted-foreground" />
+                <div className="text-muted-foreground/50">
+                  <card.icon className="w-8 h-8" />
                 </div>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           ))}
         </div>
 
-        {/* Two Column Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Signal Type Distribution */}
-          <div className="bg-card rounded-lg border border-border p-6">
-            <h2 className="font-medium text-foreground mb-4">시그널 유형별 현황</h2>
-            <div className="space-y-4">
-              {signalTypeData.map((item) => {
-                const percentage = Math.round((item.count / totalSignalTypes) * 100);
-                return (
-                  <div key={item.id}>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <div className="flex items-center gap-2">
-                        <item.icon className="w-4 h-4 text-muted-foreground" />
-                        <span className="text-sm text-foreground">{item.label}</span>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Signal Distribution */}
+          <Card className="lg:col-span-1">
+            <CardContent className="p-6">
+              <h3 className="font-semibold mb-4">시그널 유형 분포</h3>
+              <div className="space-y-4">
+                {signalTypeData.map((item) => {
+                  const percentage = Math.round((item.count / totalSignalTypes) * 100);
+                  return (
+                    <div key={item.id}>
+                      <div className="flex justify-between text-sm mb-1">
+                        <span className="flex items-center gap-2">
+                          <item.icon className="w-3 h-3 text-muted-foreground" /> {item.label}
+                        </span>
+                        <span className="text-muted-foreground">{percentage}%</span>
                       </div>
-                      <span className="text-sm font-medium text-foreground">{item.count}</span>
+                      <div className="h-2 bg-secondary rounded-full overflow-hidden">
+                        <div
+                          className={`h-full ${item.progressClass}`}
+                          style={{ width: `${percentage}%` }}
+                        />
+                      </div>
                     </div>
-                    <div className="h-2 bg-muted rounded-full overflow-hidden">
-                      <div 
-                        className={`h-full ${item.colorClass} rounded-full transition-all`}
-                        style={{ width: `${percentage}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            <p className="text-xs text-muted-foreground mt-4">
-              총 {totalSignalTypes}건의 시그널이 분석 대상으로 등록되어 있습니다.
-            </p>
-          </div>
-
-          {/* Impact Category Overview */}
-          <div className="bg-card rounded-lg border border-border p-6">
-            <h2 className="font-medium text-foreground mb-4">영향 구분 현황</h2>
-            <div className="space-y-3">
-              {impactData.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex items-center justify-between py-3 border-b border-border last:border-0"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={`w-2.5 h-2.5 rounded-full ${item.dotClass}`} />
-                    <span className="text-sm text-foreground">{item.label}</span>
-                  </div>
-                  <span className="text-lg font-medium text-foreground">{item.count}</span>
-                </div>
-              ))}
-            </div>
-            <p className="text-xs text-muted-foreground mt-4">
-              영향 구분은 시그널 내용에 따라 분류되며, 판단 기준이 아닙니다.
-            </p>
-          </div>
-        </div>
-
-        {/* Signal Processing Flow */}
-        <div className="bg-card rounded-lg border border-border p-6">
-          <h2 className="font-medium text-foreground mb-4">시그널 처리 흐름</h2>
-          <div className="flex items-center justify-center gap-4 py-4">
-            {processingFlowData.map((item, index) => (
-              <div key={item.id} className="flex items-center gap-4">
-                <div className="text-center min-w-[100px]">
-                  <div className="w-16 h-16 mx-auto rounded-full bg-muted/50 border border-border flex items-center justify-center mb-2">
-                    <span className="text-2xl font-semibold text-foreground">{item.count}</span>
-                  </div>
-                  <span className="text-sm text-muted-foreground">{item.label}</span>
-                </div>
-                {index < processingFlowData.length - 1 && (
-                  <ChevronRight className="w-5 h-5 text-muted-foreground/50" />
-                )}
+                  )
+                })}
               </div>
-            ))}
-          </div>
-          <p className="text-xs text-muted-foreground text-center mt-2">
-            모든 시그널은 담당자 검토를 거쳐 처리됩니다.
-          </p>
-        </div>
 
-        {/* Recently Detected Signals */}
-        <div className="bg-card rounded-lg border border-border overflow-hidden">
-          <div className="px-6 py-4 border-b border-border">
-            <h2 className="font-medium text-foreground">최근 감지된 주요 시그널</h2>
-            <p className="text-sm text-muted-foreground mt-0.5">최근 감지된 시그널 (참고용)</p>
-          </div>
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border bg-muted/30">
-                <th className="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  법인명
-                </th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  시그널 유형
-                </th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  영향 구분
-                </th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  감지 시각
-                </th>
-                <th className="w-12"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {recentSignals.map((signal) => (
-                <tr
-                  key={signal.id}
-                  onClick={() => navigate(`/signals/${signal.id}`)}
-                  className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors cursor-pointer group"
-                >
-                  <td className="px-6 py-4">
-                    <span className="font-medium text-foreground">{signal.corporateName}</span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${signalTypeStyles[signal.signalType]}`}>
-                      {signalTypeLabels[signal.signalType]}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${impactStyles[signal.impact]}`}>
-                      {impactLabels[signal.impact]}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-muted-foreground">
-                    {signal.detectedAt}
-                  </td>
-                  <td className="px-6 py-4">
-                    <ChevronRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              <div className="mt-8">
+                <h3 className="font-semibold mb-4">영향도 평가</h3>
+                <div className="space-y-2">
+                  {impactData.map((item) => (
+                    <div key={item.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-2 h-2 rounded-full ${item.dotClass}`} />
+                        <span className="text-sm">{item.label}</span>
+                      </div>
+                      <span className="font-semibold">{item.count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
-        {/* Compliance Disclaimer */}
-        <p className="text-xs text-muted-foreground text-center py-4">
-          본 화면의 모든 정보는 참고 및 검토용으로 제공되며,
-          <br />
-          자동 판단, 점수화, 또는 조치를 의미하지 않습니다.
-        </p>
+          {/* Recent Signals List */}
+          <Card className="lg:col-span-2">
+            <CardContent className="p-0">
+              <div className="px-6 py-4 border-b border-border flex justify-between items-center">
+                <h3 className="font-semibold">최근 감지된 시그널</h3>
+                <span className="text-xs text-muted-foreground">실시간 업데이트 중</span>
+              </div>
+
+              <div className="divide-y divide-border">
+                {recentSignals.map((signal) => (
+                  <div
+                    key={signal.id}
+                    className="flex items-center justify-between p-4 hover:bg-muted/50 transition-colors cursor-pointer"
+                    onClick={() => navigate(`/signals/${signal.id}`)}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-lg bg-secondary flex items-center justify-center text-muted-foreground">
+                        <Building2 className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <p className="font-medium">{signal.corporateName}</p>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded border ${signal.signalType === 'direct' ? 'border-blue-500/30 text-blue-500' :
+                            signal.signalType === 'industry' ? 'border-purple-500/30 text-purple-500' :
+                              'border-emerald-500/30 text-emerald-500'
+                          }`}>
+                          {signal.signalType === 'direct' ? '직접' : signal.signalType === 'industry' ? '산업' : '환경'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-6">
+                      <div className={`px-2 py-1 rounded text-xs font-medium ${signal.impact === 'risk' ? 'bg-red-500/10 text-red-500' :
+                          signal.impact === 'opportunity' ? 'bg-green-500/10 text-green-500' :
+                            'bg-zinc-500/10 text-zinc-500'
+                        }`}>
+                        {signal.impact === 'risk' ? '위험' : signal.impact === 'opportunity' ? '기회' : '참고'}
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs text-muted-foreground">{signal.detectedAt}</p>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </MainLayout>
   );

@@ -6,7 +6,7 @@ SQLAlchemy models for signal tables (PRD 14.7)
 from datetime import datetime
 from uuid import UUID
 from sqlalchemy import Column, String, Integer, Text, TIMESTAMP, Enum as SQLEnum
-from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlalchemy.dialects.postgresql import UUID as PGUUID, JSONB
 import enum
 from app.core.database import Base
 
@@ -59,6 +59,14 @@ class ConfidenceLevel(str, enum.Enum):
     LOW = "LOW"
 
 
+class SignalStatus(str, enum.Enum):
+    """시그널 상태 (Session 5)"""
+
+    NEW = "NEW"  # 신규
+    REVIEWED = "REVIEWED"  # 검토 완료
+    DISMISSED = "DISMISSED"  # 기각
+
+
 class SignalIndex(Base):
     """
     시그널 인덱스 테이블 (Dashboard 전용, 조인 금지!)
@@ -95,5 +103,99 @@ class SignalIndex(Base):
     # Foreign key reference (for detail lookup only)
     signal_id = Column(PGUUID(as_uuid=True), nullable=False)
 
+    # Status fields (Session 5)
+    signal_status = Column(
+        SQLEnum(SignalStatus, name="signal_status_enum"),
+        default=SignalStatus.NEW,
+        nullable=True,
+    )
+    reviewed_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    dismissed_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    dismiss_reason = Column(Text, nullable=True)
+
     def __repr__(self):
         return f"<SignalIndex(corp_name='{self.corp_name}', event_type='{self.event_type}')>"
+
+
+class Signal(Base):
+    """
+    시그널 원본 테이블 (PRD 14.7.1)
+    rkyc_signal - 시그널 상세 정보 저장
+    """
+
+    __tablename__ = "rkyc_signal"
+
+    # Primary Key
+    signal_id = Column(PGUUID(as_uuid=True), primary_key=True)
+
+    # Corp info
+    corp_id = Column(String(20), nullable=False)
+
+    # Signal info
+    signal_type = Column(SQLEnum(SignalType, name="signal_type_enum"), nullable=False)
+    event_type = Column(SQLEnum(EventType, name="event_type_enum"), nullable=False)
+    event_signature = Column(String(64), nullable=False, comment="sha256 해시 (중복 방지)")
+    snapshot_version = Column(Integer, nullable=False)
+
+    # Impact
+    impact_direction = Column(
+        SQLEnum(ImpactDirection, name="impact_direction_enum"), nullable=False
+    )
+    impact_strength = Column(
+        SQLEnum(ImpactStrength, name="impact_strength_enum"), nullable=False
+    )
+    confidence = Column(
+        SQLEnum(ConfidenceLevel, name="confidence_level"), nullable=False
+    )
+
+    # Content
+    summary = Column(Text, nullable=False, comment="전체 요약")
+
+    # Status fields (Session 5)
+    signal_status = Column(
+        SQLEnum(SignalStatus, name="signal_status_enum"),
+        default=SignalStatus.NEW,
+        nullable=True,
+    )
+    reviewed_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    dismissed_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    dismiss_reason = Column(Text, nullable=True)
+
+    # Timestamps
+    last_updated_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
+    created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<Signal(corp_id='{self.corp_id}', event_type='{self.event_type}')>"
+
+
+class Evidence(Base):
+    """
+    시그널 근거 테이블 (PRD 14.7.2)
+    rkyc_evidence - 시그널별 출처/근거 정보
+    """
+
+    __tablename__ = "rkyc_evidence"
+
+    # Primary Key
+    evidence_id = Column(PGUUID(as_uuid=True), primary_key=True)
+
+    # Foreign key to signal
+    signal_id = Column(PGUUID(as_uuid=True), nullable=False)
+
+    # Evidence info
+    evidence_type = Column(
+        String(20), nullable=False, comment="INTERNAL_FIELD, DOC, EXTERNAL"
+    )
+    ref_type = Column(
+        String(20), nullable=False, comment="SNAPSHOT_KEYPATH, DOC_PAGE, URL"
+    )
+    ref_value = Column(Text, nullable=False, comment="JSON Pointer or URL")
+    snippet = Column(Text, nullable=True, comment="관련 텍스트 스니펫")
+    meta = Column(JSONB, nullable=True, comment="추가 메타데이터")
+
+    # Timestamps
+    created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<Evidence(signal_id='{self.signal_id}', type='{self.evidence_type}')>"

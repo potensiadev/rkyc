@@ -9,12 +9,20 @@ import {
   getSignals,
   getCorporation,
   getSignal,
+  getSignalDetail,
+  updateSignalStatus,
+  dismissSignal,
+  getDashboardSummary,
   triggerAnalyzeJob,
   getJobStatus,
   ApiCorporation,
   ApiSignal,
+  ApiSignalDetail,
+  ApiEvidence,
+  ApiDashboardSummary,
   GetSignalsParams,
   JobStatusResponse,
+  SignalStatusType,
 } from '@/lib/api';
 import { Signal, SignalCategory, SignalStatus, SignalImpact, SignalStrength } from '@/types/signal';
 import { Corporation, CORPORATIONS } from '@/data/corporations';
@@ -60,6 +68,13 @@ function mapApiCorporationToFrontend(api: ApiCorporation): Corporation {
   };
 }
 
+function mapSignalStatus(status: SignalStatusType | null): SignalStatus {
+  if (!status || status === 'NEW') return 'new';
+  if (status === 'REVIEWED') return 'review';
+  if (status === 'DISMISSED') return 'resolved';
+  return 'new';
+}
+
 function mapApiSignalToFrontend(api: ApiSignal): Signal {
   const signalCategory = api.signal_type.toLowerCase() as SignalCategory;
   const impact = api.impact_direction.toLowerCase() as SignalImpact;
@@ -71,7 +86,7 @@ function mapApiSignalToFrontend(api: ApiSignal): Signal {
     corporationId: api.corp_id,
     signalCategory,
     signalSubType: getSubTypeFromEventType(api.event_type),
-    status: 'new' as SignalStatus,
+    status: mapSignalStatus(api.signal_status),
     title: api.title,
     summary: api.summary_short,
     source: 'rKYC System',
@@ -262,3 +277,60 @@ export function useJobStatus(jobId: string, options?: { enabled?: boolean; refet
     },
   });
 }
+
+// ============================================================
+// Session 5: Signal Detail & Status Hooks
+// ============================================================
+
+// Signal 상세 조회 훅 (Evidence 포함)
+export function useSignalDetail(signalId: string) {
+  return useQuery({
+    queryKey: ['signal', signalId, 'detail'],
+    queryFn: () => getSignalDetail(signalId),
+    enabled: !!signalId,
+  });
+}
+
+// Signal 상태 변경 훅
+export function useUpdateSignalStatus() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ signalId, status }: { signalId: string; status: SignalStatusType }) =>
+      updateSignalStatus(signalId, status),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['signal', variables.signalId] });
+      queryClient.invalidateQueries({ queryKey: ['signals'] });
+      queryClient.invalidateQueries({ queryKey: ['signalStats'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+  });
+}
+
+// Signal 기각 훅
+export function useDismissSignal() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ signalId, reason }: { signalId: string; reason: string }) =>
+      dismissSignal(signalId, reason),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['signal', variables.signalId] });
+      queryClient.invalidateQueries({ queryKey: ['signals'] });
+      queryClient.invalidateQueries({ queryKey: ['signalStats'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+  });
+}
+
+// Dashboard 요약 통계 훅
+export function useDashboardSummary() {
+  return useQuery({
+    queryKey: ['dashboard', 'summary'],
+    queryFn: getDashboardSummary,
+    staleTime: 1 * 60 * 1000, // 1분
+  });
+}
+
+// API 타입 re-export (페이지에서 직접 사용)
+export type { ApiSignalDetail, ApiEvidence, ApiDashboardSummary, SignalStatusType };
