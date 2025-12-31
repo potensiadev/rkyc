@@ -33,7 +33,7 @@ async def list_signals(
     impact_strength: Optional[ImpactStrength] = Query(None, description="영향 강도 필터"),
     corp_id: Optional[str] = Query(None, description="기업 ID 필터"),
     industry_code: Optional[str] = Query(None, description="업종코드 필터"),
-    limit: int = Query(50, ge=1, le=100),
+    limit: int = Query(50, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
 ):
