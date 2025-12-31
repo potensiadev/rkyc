@@ -269,11 +269,21 @@ SNAPSHOT → DOC_INGEST → EXTERNAL → CONTEXT → SIGNAL → VALIDATION → I
   - POST /api/v1/jobs/analyze/run
   - GET /api/v1/jobs/{job_id}
   - useAnalyzeJob, useJobStatus 훅
+- [x] **Signal 상태 관리 API 구현** ✅ 세션 5 완료
+  - PATCH /api/v1/signals/{id}/status - 상태 변경
+  - POST /api/v1/signals/{id}/dismiss - 기각 처리
+  - GET /api/v1/signals/{id}/detail - 상세 조회 (Evidence 포함)
+  - GET /api/v1/dashboard/summary - Dashboard 통계
+- [x] **Frontend Detail 페이지 API 연동** ✅ 세션 5 완료
+  - SignalDetailPage - 검토 완료/기각 버튼, Evidence 목록
+  - CorporateDetailPage - API 연동
+- [x] **DB 마이그레이션 적용** ✅ 세션 5 완료
+  - signal_status_enum (NEW, REVIEWED, DISMISSED)
+  - rkyc_signal, rkyc_signal_index 상태 컬럼 추가
 
-### 대기 중 (세션 5에서)
-- [ ] 시그널 상태 변경 API (PATCH /signals/{id}/status)
-- [ ] 시그널 기각 API (POST /signals/{id}/dismiss)
+### 대기 중 (세션 6에서)
 - [ ] Worker 구현 시작 (Celery + Redis + LLM)
+- [ ] 실시간 업데이트 (Supabase Realtime)
 
 ## 파일 구조
 
@@ -302,19 +312,23 @@ rkyc/
     ├── app/
     │   ├── api/v1/endpoints/
     │   │   ├── corporations.py
-    │   │   ├── signals.py
-    │   │   └── jobs.py      # Job API ✅
+    │   │   ├── signals.py   # 상태 변경/기각/상세 API ✅
+    │   │   ├── jobs.py      # Job API ✅
+    │   │   └── dashboard.py # Dashboard 통계 API ✅
     │   ├── models/
-    │   │   └── job.py       # Job 모델 ✅
+    │   │   ├── job.py       # Job 모델 ✅
+    │   │   └── signal.py    # Signal/Evidence 모델 ✅
     │   ├── schemas/
-    │   │   └── job.py       # Job 스키마 ✅
+    │   │   ├── job.py       # Job 스키마 ✅
+    │   │   └── signal.py    # Signal 상세/Evidence 스키마 ✅
     │   ├── services/
     │   └── worker/
     └── sql/
         ├── schema.sql       # DDL v1 (구버전)
         ├── schema_v2.sql    # DDL v2 (PRD 14장 기준) ✅
         ├── seed.sql         # 시드 v1 (구버전)
-        └── seed_v2.sql      # 시드 v2 (29개 시그널) ✅
+        ├── seed_v2.sql      # 시드 v2 (29개 시그널) ✅
+        └── migration_v3_signal_status.sql  # 상태 컬럼 마이그레이션 ✅
 ```
 
 ## 세션 로그
@@ -512,13 +526,32 @@ rkyc/
 **주의**: DB 마이그레이션 필요
 - `backend/sql/migration_v3_signal_status.sql`을 Supabase SQL Editor에서 실행
 
+### 세션 5-2 (2026-01-01) - API 배포 및 E2E 테스트 ✅
+**목표**: Signal 상태 관리 API 배포 및 Frontend 연동 검증
+
+**완료 항목**:
+1. SQL 타입 캐스팅 오류 수정
+   - `::signal_status_enum` → `CAST(:status AS signal_status_enum)`
+   - asyncpg에서 `::` 연산자가 파라미터 바인딩과 충돌
+2. Railway 재배포 트리거 (empty commit)
+3. API 테스트 (curl)
+   - PATCH /signals/{id}/status → ✅ 성공
+   - POST /signals/{id}/dismiss → ✅ 성공
+   - GET /signals/{id}/detail → ✅ 성공 (REVIEWED 상태 확인)
+4. Frontend E2E 테스트 (Playwright)
+   - 메인 페이지 (Signal Inbox) → ✅ 데이터 로드 정상
+   - Signal Detail 페이지 → ✅ Evidence, 검토 완료 상태 표시
+   - Demo Mode 패널 → ✅ 표시 정상
+
+**기술 이슈 해결**:
+| 문제 | 원인 | 해결 |
+|------|------|------|
+| SQL syntax error near ":" | asyncpg에서 `::` 연산자 파싱 오류 | `CAST()` 함수로 변경 |
+| Railway 구버전 배포 | auto-deploy 미작동 | empty commit으로 재배포 트리거 |
+
 ## 다음 세션 작업 (세션 6)
 
-### Phase 1: DB 마이그레이션 적용
-1. Supabase에 migration_v3_signal_status.sql 실행
-2. Railway 재배포
-
-### Phase 2: Worker 기초
+### Phase 1: Worker 기초
 1. Celery + Redis 설정
 2. LLM API 키 설정 (Anthropic, OpenAI 등)
 3. 분석 파이프라인 구현
@@ -532,4 +565,4 @@ rkyc/
 - **Backend 로컬 실행**: `cd backend && uvicorn app.main:app --reload`
 
 ---
-*Last Updated: 2026-01-01 (세션 5 완료 - Signal 상태 관리 API 및 Detail 페이지 연동)*
+*Last Updated: 2026-01-01 (세션 5-2 완료 - API 배포 및 E2E 테스트 검증)*

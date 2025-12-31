@@ -15,10 +15,13 @@
 - [x] **Frontend-Backend 연동** ✅ 세션 3 완료
 - [x] **Demo Mode UI (PRD 5.4)** ✅ 세션 4 완료
 - [x] **Job Trigger API** ✅ 세션 4 완료
+- [x] **Signal 상태 관리 API** ✅ 세션 5 완료
+- [x] **Frontend Detail 페이지 API 연동** ✅ 세션 5 완료
+- [x] **E2E 테스트 검증 (Playwright)** ✅ 세션 5-2 완료
 
 ### 구현 대기
 - [ ] Worker (Celery + Redis + LLM)
-- [ ] 시그널 상태 관리 API (PATCH /signals/{id}/status)
+- [ ] 실시간 업데이트 (Supabase Realtime)
 
 ---
 
@@ -55,12 +58,18 @@ PATCH  /api/v1/corporations/{id}      # ✅ 수정
 DELETE /api/v1/corporations/{id}      # ⏳ 삭제 (soft delete) - 미구현
 ```
 
-### 2.2 시그널 관리 API (부분 완료)
+### 2.2 시그널 관리 API ✅ 세션 5 완료
 ```
 GET    /api/v1/signals                # ✅ 목록 (필터: corp_id, signal_type, event_type, impact 등)
 GET    /api/v1/signals/{id}           # ✅ 상세
-PATCH  /api/v1/signals/{id}/status    # ⏳ 상태 변경 - 미구현
-POST   /api/v1/signals/{id}/dismiss   # ⏳ 기각 (사유 포함) - 미구현
+GET    /api/v1/signals/{id}/detail    # ✅ 상세 (Evidence 포함)
+PATCH  /api/v1/signals/{id}/status    # ✅ 상태 변경 (NEW → REVIEWED)
+POST   /api/v1/signals/{id}/dismiss   # ✅ 기각 (사유 포함)
+```
+
+### 2.4 Dashboard API ✅ 세션 5 완료
+```
+GET    /api/v1/dashboard/summary      # ✅ Dashboard 통계
 ```
 
 ### 2.3 분석 작업 API ✅ 세션 4 완료
@@ -283,16 +292,17 @@ GOOGLE_API_KEY=...
 
 ---
 
-## 다음 단계 (세션 5에서)
+## 다음 단계 (세션 6에서)
 
-### 우선순위 1: 시그널 상태 관리 API
-1. PATCH /signals/{id}/status 구현
-2. POST /signals/{id}/dismiss 구현
-
-### 우선순위 2: Worker 기초
+### 우선순위 1: Worker 기초
 1. Celery + Redis 설정
 2. LLM API 키 설정 (Anthropic, OpenAI 등)
 3. 분석 파이프라인 구현
+
+### 우선순위 2: 실시간 업데이트
+1. Supabase Realtime 구독 설정
+2. 시그널 상태 변경 알림
+3. 분석 진행 상태 표시
 
 ---
 
@@ -337,6 +347,37 @@ GOOGLE_API_KEY=...
   - Demo Panel UI 정상 동작 확인
 - **현재 상태**: Worker 미구현으로 Job이 QUEUED 상태 유지
 
+### 세션 5 (2026-01-01)
+- **Signal 상태 관리 API 구현**
+  - GET /signals/{id}/detail - 시그널 상세 (Evidence 포함)
+  - PATCH /signals/{id}/status - 상태 변경 (NEW → REVIEWED)
+  - POST /signals/{id}/dismiss - 기각 처리 (사유 필수)
+  - GET /dashboard/summary - Dashboard 통계
+- **Backend 모델 업데이트**
+  - `app/models/signal.py` - Signal, Evidence, SignalStatus 모델
+  - `app/schemas/signal.py` - SignalDetailResponse, EvidenceResponse
+  - `app/api/v1/endpoints/dashboard.py` - Dashboard API
+- **DB 마이그레이션**
+  - `migration_v3_signal_status.sql` - signal_status_enum 추가
+  - Supabase에 마이그레이션 적용 완료
+- **Frontend API 연동**
+  - SignalDetailPage - 검토 완료/기각 버튼, Evidence 목록
+  - CorporateDetailPage - useCorporation, useSignals 훅 연동
+
+### 세션 5-2 (2026-01-01)
+- **SQL 타입 캐스팅 오류 수정**
+  - `::signal_status_enum` → `CAST(:status AS signal_status_enum)`
+  - asyncpg에서 `::` 연산자가 파라미터 바인딩과 충돌
+- **Railway 재배포** (empty commit으로 트리거)
+- **API 테스트 완료 (curl)**
+  - PATCH /signals/{id}/status → ✅ 성공
+  - POST /signals/{id}/dismiss → ✅ 성공
+  - GET /signals/{id}/detail → ✅ 성공
+- **Frontend E2E 테스트 (Playwright)**
+  - Signal Inbox 메인 페이지 → ✅ 데이터 로드 정상
+  - Signal Detail 페이지 → ✅ Evidence, REVIEWED 상태 표시
+  - Demo Mode 패널 → ✅ 표시 정상
+
 ---
 
-*Last Updated: 2025-12-31 (세션 4 완료 - Demo Mode UI 및 Job API)*
+*Last Updated: 2026-01-01 (세션 5-2 완료 - API 배포 및 E2E 테스트 검증)*
