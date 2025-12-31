@@ -294,10 +294,6 @@ GOOGLE_API_KEY=...
 2. LLM API 키 설정 (Anthropic, OpenAI 등)
 3. 분석 파이프라인 구현
 
-### 우선순위 3: Railway 재배포
-1. Backend Job API 배포
-2. Vercel VITE_DEMO_MODE=true 설정
-
 ---
 
 ## 세션 로그
@@ -335,6 +331,10 @@ GOOGLE_API_KEY=...
 - **Frontend Job 훅 추가**
   - `useAnalyzeJob`, `useJobStatus` 훅 구현
   - Job 상태 폴링 (QUEUED/RUNNING 시 2초 간격)
+- **배포 완료**
+  - Railway 재배포 (Job API 반영)
+  - Vercel VITE_DEMO_MODE=true 설정
+  - Demo Panel UI 정상 동작 확인
 - **현재 상태**: Worker 미구현으로 Job이 QUEUED 상태 유지
 
 ---
