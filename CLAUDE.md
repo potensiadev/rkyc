@@ -26,19 +26,19 @@
 
 ## 기술 스택
 
-### Frontend (완료)
+### Frontend (배포 완료 ✅)
 - Framework: React 18 + TypeScript + Vite
 - UI: shadcn/ui + Tailwind CSS
 - State: TanStack Query
 - Routing: React Router v6
-- Deploy: Vercel (https://rkyc.vercel.app/)
+- Deploy: **Vercel** (https://rkyc-wine.vercel.app/)
 
-### Backend (구현 완료 ✅)
+### Backend (배포 완료 ✅)
 - Framework: FastAPI + Python 3.11+
 - ORM: SQLAlchemy 2.0 + asyncpg
 - Validation: Pydantic v2
-- Auth: Supabase Auth (JWT) - 예정
-- Deploy: Railway/Render - 예정
+- Auth: Supabase Auth (JWT) - PRD 2.3에 따라 대회 범위 제외
+- Deploy: **Railway** (https://rkyc-production.up.railway.app)
 - **pgbouncer 호환**: `statement_cache_size=0` 설정 필수
 
 ### Worker (구현 예정)
@@ -253,11 +253,17 @@ SNAPSHOT → DOC_INGEST → EXTERNAL → CONTEXT → SIGNAL → VALIDATION → I
   - 기업 CRUD API (`/api/v1/corporations`)
   - 시그널 조회 API (`/api/v1/signals`)
   - pgbouncer 호환 설정 적용
+- [x] **Railway 배포 완료** (https://rkyc-production.up.railway.app)
+- [x] **Frontend-Backend 연동 완료**
+  - API 클라이언트 (`src/lib/api.ts`)
+  - TanStack Query 훅 (`src/hooks/useApi.ts`)
+  - SignalInbox, CorporationSearch 페이지 API 전환
+- [x] **Vercel 환경변수 및 CORS 설정 완료**
 
-### 대기 중 (세션 3에서)
-- [ ] Frontend-Backend 연동 (API 호출 연결)
-- [ ] 인증 플로우 구현 (Supabase Auth)
+### 대기 중 (세션 4에서)
+- [ ] Demo Mode UI 구현 (PRD 부록 A)
 - [ ] Worker 구현 시작 (Celery + Redis)
+- [ ] 시그널 상태 변경 API (PATCH /signals/{id}/status)
 
 ## 파일 구조
 
@@ -276,7 +282,10 @@ rkyc/
 │   ├── components/
 │   ├── pages/
 │   ├── hooks/
-│   └── data/                # Mock 데이터
+│   │   └── useApi.ts        # API 훅 (TanStack Query)
+│   ├── lib/
+│   │   └── api.ts           # API 클라이언트
+│   └── data/                # Mock 데이터 (Demo Mode용)
 └── backend/                 # Backend (구현 예정)
     ├── app/
     │   ├── api/
@@ -383,17 +392,44 @@ rkyc/
 | DB 비밀번호 인증 실패 | 특수문자 URL 인코딩 누락 | `!` → `%21` 인코딩 |
 | prepared statement 충돌 | pgbouncer transaction mode 비호환 | `statement_cache_size=0` 설정 |
 
-## 다음 세션 작업 (세션 3)
+### 세션 3 (2025-12-31) - Railway 배포 및 Frontend 연동 ✅
+**목표**: Backend를 Railway에 배포하고 Frontend와 연동
 
-### Phase 1: Frontend-Backend 연동
-1. Frontend API 클라이언트 구현 (axios/fetch)
-2. Mock 데이터 → 실제 API 호출로 전환
-3. 에러 처리 및 로딩 상태 구현
+**완료 항목**:
+1. Railway 배포 설정
+   - `backend/Procfile` - uvicorn 시작 명령
+   - `backend/railway.toml` - Nixpacks 빌드 설정
+   - `backend/runtime.txt` - Python 3.11
+   - 환경변수 설정 (DATABASE_URL, SUPABASE_*, SECRET_KEY, CORS_ORIGINS)
+2. Frontend API 클라이언트 구현
+   - `src/lib/api.ts` - fetch 기반 API 클라이언트
+   - `src/hooks/useApi.ts` - TanStack Query 훅 + 데이터 변환
+3. 페이지 API 전환
+   - `SignalInbox.tsx` - useSignals 훅 적용
+   - `CorporationSearch.tsx` - useCorporations 훅 적용
+   - 로딩/에러 상태 UI 추가
+4. CORS 설정
+   - Railway CORS_ORIGINS에 Vercel 도메인 추가
 
-### Phase 2: 인증 구현
-1. Supabase Auth 설정
-2. 로그인/로그아웃 UI
-3. JWT 토큰 기반 API 인증
+**배포 URL**:
+- Frontend: https://rkyc-wine.vercel.app/
+- Backend: https://rkyc-production.up.railway.app
+- API Health: https://rkyc-production.up.railway.app/health
+
+**환경변수 (Vercel)**:
+- `VITE_API_URL=https://rkyc-production.up.railway.app`
+- `VITE_DEMO_MODE=false`
+
+## 다음 세션 작업 (세션 4)
+
+### Phase 1: Demo Mode UI (PRD 부록 A)
+1. "분석 실행(시연용)" 버튼 구현
+2. "접속/조회는 분석을 실행하지 않습니다" 안내 문구
+3. VITE_DEMO_MODE 환경변수로 제어
+
+### Phase 2: 시그널 상태 관리 API
+1. PATCH /signals/{id}/status 구현
+2. POST /signals/{id}/dismiss 구현
 
 ### Phase 3: Worker 기초
 1. Celery + Redis 설정
@@ -401,11 +437,12 @@ rkyc/
 3. LLM 연동 준비
 
 ### 참고 사항
+- **인증은 PRD 2.3에 따라 대회 범위 제외** - 구현하지 않음
 - **schema_v2.sql, seed_v2.sql 사용** (v1은 deprecated)
 - ADR 문서의 결정 사항 준수
 - Guardrails 규칙 (금지 표현, evidence 필수) 적용
 - Dashboard에서는 rkyc_signal_index 사용 (조인 금지)
-- **Backend 실행**: `cd backend && uvicorn app.main:app --reload`
+- **Backend 로컬 실행**: `cd backend && uvicorn app.main:app --reload`
 
 ---
-*Last Updated: 2025-12-31 (Backend API 구현 완료)*
+*Last Updated: 2025-12-31 (Railway 배포 및 Frontend 연동 완료)*

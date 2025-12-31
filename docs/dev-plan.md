@@ -11,12 +11,13 @@
 - [x] ADR 작성 (5개)
 - [x] **Backend API (FastAPI)** ✅ 세션 2 완료
 - [x] **Database (Supabase PostgreSQL)** ✅ 세션 2 완료
+- [x] **Railway 배포** ✅ 세션 3 완료
+- [x] **Frontend-Backend 연동** ✅ 세션 3 완료
 
 ### 구현 대기
 - [ ] Worker (Celery + Redis)
 - [ ] LLM Integration (litellm)
-- [ ] 인증/인가 (Supabase Auth)
-- [ ] Frontend-Backend 연동
+- [ ] Demo Mode UI (PRD 부록 A)
 
 ---
 
@@ -70,17 +71,26 @@ GET    /api/v1/analysis/jobs          # ⏳ 작업 목록 - Worker 연동 필요
 
 ---
 
-## Phase 3: 인증 및 권한
+## Phase 3: Railway 배포 및 Frontend 연동 ✅ 완료
 
-### 3.1 Supabase Auth 연동
-- [ ] JWT 검증 미들웨어
-- [ ] 사용자 세션 관리
-- [ ] 리프레시 토큰 처리
+### 3.1 Railway 배포 ✅
+- [x] Procfile, railway.toml, runtime.txt 생성
+- [x] 환경변수 설정 (DATABASE_URL, SUPABASE_*, SECRET_KEY, CORS_ORIGINS)
+- [x] 배포 완료: https://rkyc-production.up.railway.app
 
-### 3.2 권한 관리
-- [ ] 역할 정의 (admin, analyst, viewer)
-- [ ] 기업 담당자 할당
-- [ ] RLS 정책 적용
+### 3.2 Frontend API 클라이언트 ✅
+- [x] `src/lib/api.ts` - fetch 기반 API 클라이언트
+- [x] `src/hooks/useApi.ts` - TanStack Query 훅 + 데이터 변환
+- [x] SignalInbox, CorporationSearch 페이지 API 전환
+
+### 3.3 CORS 및 환경변수 ✅
+- [x] Railway CORS_ORIGINS에 Vercel 도메인 추가
+- [x] Vercel 환경변수: VITE_API_URL, VITE_DEMO_MODE
+
+### 참고: 인증 (PRD 2.3에 따라 대회 범위 제외)
+- ~~JWT 검증 미들웨어~~
+- ~~사용자 세션 관리~~
+- ~~역할 정의 (admin, analyst, viewer)~~
 
 ---
 
@@ -113,14 +123,14 @@ INSIGHT    → 최종 인사이트 생성
 
 ---
 
-## Phase 5: Frontend 연동
+## Phase 5: Frontend 연동 ✅ 완료
 
-### 5.1 API 클라이언트
-- [ ] Mock → 실제 API 전환
-- [ ] TanStack Query 설정
-- [ ] 에러 핸들링
+### 5.1 API 클라이언트 ✅
+- [x] Mock → 실제 API 전환
+- [x] TanStack Query 설정
+- [x] 에러 핸들링 (로딩/에러 상태 UI)
 
-### 5.2 실시간 업데이트
+### 5.2 실시간 업데이트 (미구현 - 향후)
 - [ ] Supabase Realtime 구독
 - [ ] 시그널 상태 변경 알림
 - [ ] 분석 진행 상태 표시
@@ -148,17 +158,22 @@ INSIGHT    → 최종 인사이트 생성
 
 ## Phase 7: 배포
 
-### 7.1 Backend 배포
-- [ ] Railway/Render 설정
-- [ ] 환경 변수 구성
-- [ ] 도메인 연결
+### 7.1 Backend 배포 ✅ 완료
+- [x] Railway 설정 (Nixpacks 빌드)
+- [x] 환경 변수 구성
+- [x] 도메인: https://rkyc-production.up.railway.app
 
-### 7.2 Worker 배포
+### 7.2 Frontend 배포 ✅ 완료
+- [x] Vercel 설정
+- [x] 환경 변수 구성 (VITE_API_URL, VITE_DEMO_MODE)
+- [x] 도메인: https://rkyc-wine.vercel.app
+
+### 7.3 Worker 배포 (미구현)
 - [ ] Redis 인스턴스 (Railway/Upstash)
 - [ ] Worker 컨테이너 배포
 - [ ] 스케일링 설정
 
-### 7.3 모니터링
+### 7.4 모니터링 (미구현)
 - [ ] Sentry 에러 추적
 - [ ] Flower 대시보드
 - [ ] 로깅 구성
@@ -265,21 +280,20 @@ GOOGLE_API_KEY=...
 
 ---
 
-## 다음 단계 (세션 3에서)
+## 다음 단계 (세션 4에서)
 
-### 우선순위 1: Frontend-Backend 연동
-1. Frontend API 클라이언트 구현 (axios/fetch)
-2. Mock 데이터 → 실제 API 호출로 전환
-3. 에러 처리 및 로딩 상태 구현
+### 우선순위 1: Demo Mode UI (PRD 부록 A)
+1. "분석 실행(시연용)" 버튼 구현
+2. "접속/조회는 분석을 실행하지 않습니다" 안내 문구
+3. VITE_DEMO_MODE 환경변수로 제어
 
-### 우선순위 2: 인증 구현
-1. Supabase Auth 설정
-2. 로그인/로그아웃 UI
-3. JWT 토큰 기반 API 인증
-
-### 우선순위 3: 시그널 상태 관리 API
+### 우선순위 2: 시그널 상태 관리 API
 1. PATCH /signals/{id}/status 구현
 2. POST /signals/{id}/dismiss 구현
+
+### 우선순위 3: Worker 기초
+1. Celery + Redis 설정
+2. 분석 작업 트리거 API
 
 ---
 
@@ -296,6 +310,13 @@ GOOGLE_API_KEY=...
 - 기업/시그널 CRUD API
 - pgbouncer 호환 이슈 해결
 
+### 세션 3 (2025-12-31)
+- Railway 배포 완료 (https://rkyc-production.up.railway.app)
+- Frontend API 클라이언트 구현 (src/lib/api.ts, src/hooks/useApi.ts)
+- SignalInbox, CorporationSearch 페이지 API 전환
+- CORS 설정 및 Vercel 환경변수 구성
+- Frontend-Backend 연동 완료
+
 ---
 
-*Last Updated: 2025-12-31 (세션 2 완료)*
+*Last Updated: 2025-12-31 (세션 3 완료 - Railway 배포 및 Frontend 연동)*
