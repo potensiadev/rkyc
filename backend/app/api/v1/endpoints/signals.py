@@ -183,7 +183,7 @@ async def update_signal_status(
     """시그널 상태 변경 (NEW → REVIEWED)"""
 
     now = datetime.utcnow()
-    new_status = SignalStatus(status_update.status.value)
+    status_value = status_update.status.value  # "NEW", "REVIEWED", "DISMISSED"
 
     # rkyc_signal_index 업데이트 (Dashboard용)
     index_query = select(SignalIndex).where(SignalIndex.signal_id == signal_id)
@@ -193,14 +193,21 @@ async def update_signal_status(
     if not signal_index:
         raise HTTPException(status_code=404, detail="Signal not found")
 
-    signal_index.signal_status = new_status
-    if new_status == SignalStatus.REVIEWED:
-        signal_index.reviewed_at = now
-    signal_index.last_updated_at = now
+    # Raw SQL로 업데이트 (Enum 호환성 문제 회피)
+    await db.execute(
+        text("""
+            UPDATE rkyc_signal_index
+            SET signal_status = :status::signal_status_enum,
+                reviewed_at = CASE WHEN :status = 'REVIEWED' THEN :now ELSE reviewed_at END,
+                last_updated_at = :now
+            WHERE signal_id = :signal_id
+        """),
+        {"status": status_value, "now": now, "signal_id": str(signal_id)}
+    )
 
     await db.commit()
 
-    return {"message": "Status updated", "status": status_update.status.value}
+    return {"message": "Status updated", "status": status_value}
 
 
 @router.post("/{signal_id}/dismiss")
@@ -213,7 +220,7 @@ async def dismiss_signal(
 
     now = datetime.utcnow()
 
-    # rkyc_signal_index 업데이트 (Dashboard용)
+    # 시그널 존재 확인
     index_query = select(SignalIndex).where(SignalIndex.signal_id == signal_id)
     index_result = await db.execute(index_query)
     signal_index = index_result.scalar_one_or_none()
@@ -221,10 +228,18 @@ async def dismiss_signal(
     if not signal_index:
         raise HTTPException(status_code=404, detail="Signal not found")
 
-    signal_index.signal_status = SignalStatus.DISMISSED
-    signal_index.dismissed_at = now
-    signal_index.dismiss_reason = dismiss_request.reason
-    signal_index.last_updated_at = now
+    # Raw SQL로 업데이트 (Enum 호환성 문제 회피)
+    await db.execute(
+        text("""
+            UPDATE rkyc_signal_index
+            SET signal_status = 'DISMISSED'::signal_status_enum,
+                dismissed_at = :now,
+                dismiss_reason = :reason,
+                last_updated_at = :now
+            WHERE signal_id = :signal_id
+        """),
+        {"now": now, "reason": dismiss_request.reason, "signal_id": str(signal_id)}
+    )
 
     await db.commit()
 
