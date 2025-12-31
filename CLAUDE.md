@@ -149,9 +149,10 @@ SNAPSHOT → DOC_INGEST → EXTERNAL → CONTEXT → SIGNAL → VALIDATION → I
 - `PATCH /api/v1/signals/{signal_id}/status` - 상태 변경
 - `POST /api/v1/signals/{signal_id}/dismiss` - 시그널 기각
 
-### 분석 작업
-- `POST /api/v1/analysis/trigger` - 분석 트리거
-- `GET /api/v1/analysis/jobs/{job_id}` - 작업 상태
+### 분석 작업 (Demo Mode) ✅ 세션 4 완료
+- `POST /api/v1/jobs/analyze/run` - 분석 트리거 (Demo)
+- `GET /api/v1/jobs/{job_id}` - 작업 상태 조회
+- `GET /api/v1/jobs` - 작업 목록 조회
 
 ## 데이터베이스 스키마 v2 (PRD 14장)
 
@@ -259,10 +260,20 @@ SNAPSHOT → DOC_INGEST → EXTERNAL → CONTEXT → SIGNAL → VALIDATION → I
   - TanStack Query 훅 (`src/hooks/useApi.ts`)
   - SignalInbox, CorporationSearch 페이지 API 전환
 - [x] **Vercel 환경변수 및 CORS 설정 완료**
+- [x] **Demo Mode UI 구현** (PRD 5.4.2 기반)
+  - DemoPanel 컴포넌트 (`src/components/demo/DemoPanel.tsx`)
+  - SignalInbox 페이지에 통합
+  - VITE_DEMO_MODE 환경변수로 제어
+- [x] **Job Trigger API 구현**
+  - Job 모델 (`backend/app/models/job.py`)
+  - POST /api/v1/jobs/analyze/run
+  - GET /api/v1/jobs/{job_id}
+  - useAnalyzeJob, useJobStatus 훅
 
-### 대기 중 (세션 4에서)
-- [ ] Demo Mode UI 구현 (PRD 부록 A)
-- [ ] Worker 구현 시작 (Celery + Redis)
+### 대기 중 (세션 5에서)
+- [ ] Railway 재배포 (Job API 반영)
+- [ ] Vercel VITE_DEMO_MODE=true 설정
+- [ ] Worker 구현 시작 (Celery + Redis + LLM)
 - [ ] 시그널 상태 변경 API (PATCH /signals/{id}/status)
 
 ## 파일 구조
@@ -280,16 +291,24 @@ rkyc/
 │   └── agents/              # 서브에이전트 설정
 ├── src/                     # Frontend (완료)
 │   ├── components/
+│   │   └── demo/
+│   │       └── DemoPanel.tsx  # Demo Mode 패널 ✅
 │   ├── pages/
 │   ├── hooks/
-│   │   └── useApi.ts        # API 훅 (TanStack Query)
+│   │   └── useApi.ts        # API 훅 (TanStack Query) + Job 훅
 │   ├── lib/
-│   │   └── api.ts           # API 클라이언트
+│   │   └── api.ts           # API 클라이언트 + Job API
 │   └── data/                # Mock 데이터 (Demo Mode용)
-└── backend/                 # Backend (구현 예정)
+└── backend/                 # Backend (구현 완료)
     ├── app/
-    │   ├── api/
+    │   ├── api/v1/endpoints/
+    │   │   ├── corporations.py
+    │   │   ├── signals.py
+    │   │   └── jobs.py      # Job API ✅
     │   ├── models/
+    │   │   └── job.py       # Job 모델 ✅
+    │   ├── schemas/
+    │   │   └── job.py       # Job 스키마 ✅
     │   ├── services/
     │   └── worker/
     └── sql/
@@ -420,12 +439,40 @@ rkyc/
 - `VITE_API_URL=https://rkyc-production.up.railway.app`
 - `VITE_DEMO_MODE=false`
 
-## 다음 세션 작업 (세션 4)
+### 세션 4 (2025-12-31) - Demo Mode UI 및 Job API ✅
+**목표**: PRD 5.4 Demo Mode UI 구현 및 Job Trigger API
 
-### Phase 1: Demo Mode UI (PRD 부록 A)
-1. "분석 실행(시연용)" 버튼 구현
-2. "접속/조회는 분석을 실행하지 않습니다" 안내 문구
-3. VITE_DEMO_MODE 환경변수로 제어
+**완료 항목**:
+1. Backend Job API 구현
+   - `app/models/job.py` - Job 모델 (rkyc_job 테이블 매핑)
+   - `app/schemas/job.py` - Pydantic 스키마
+   - `app/api/v1/endpoints/jobs.py` - API 엔드포인트
+   - POST /api/v1/jobs/analyze/run (분석 트리거)
+   - GET /api/v1/jobs/{job_id} (상태 조회)
+   - GET /api/v1/jobs (목록 조회)
+2. Frontend Job 훅 구현
+   - `src/lib/api.ts` - triggerAnalyzeJob, getJobStatus 함수
+   - `src/hooks/useApi.ts` - useAnalyzeJob, useJobStatus 훅
+   - Job 상태 폴링 (QUEUED/RUNNING 시 2초 간격)
+3. DemoPanel 컴포넌트
+   - `src/components/demo/DemoPanel.tsx` - PRD 5.4.2 기반
+   - 기업 선택 드롭다운
+   - "분석 실행 (시연용)" 버튼
+   - 작업 상태 표시 (대기/진행/완료/실패)
+   - "접속/조회는 분석을 실행하지 않습니다" 안내 문구
+4. SignalInbox 통합
+   - DemoPanel을 SignalInbox 페이지 상단에 추가
+   - VITE_DEMO_MODE=true일 때만 표시
+
+**현재 상태**:
+- Worker 미구현으로 Job이 QUEUED 상태 유지
+- LLM API 키 설정 후 실제 분석 가능
+
+## 다음 세션 작업 (세션 5)
+
+### Phase 1: 배포 업데이트
+1. Railway 재배포 (Job API 반영)
+2. Vercel VITE_DEMO_MODE=true 설정
 
 ### Phase 2: 시그널 상태 관리 API
 1. PATCH /signals/{id}/status 구현
@@ -433,8 +480,8 @@ rkyc/
 
 ### Phase 3: Worker 기초
 1. Celery + Redis 설정
-2. 분석 작업 트리거 API
-3. LLM 연동 준비
+2. LLM API 키 설정 (Anthropic, OpenAI 등)
+3. 분석 파이프라인 구현
 
 ### 참고 사항
 - **인증은 PRD 2.3에 따라 대회 범위 제외** - 구현하지 않음
@@ -445,4 +492,4 @@ rkyc/
 - **Backend 로컬 실행**: `cd backend && uvicorn app.main:app --reload`
 
 ---
-*Last Updated: 2025-12-31 (Railway 배포 및 Frontend 연동 완료)*
+*Last Updated: 2025-12-31 (세션 4 완료 - Demo Mode UI 및 Job API)*

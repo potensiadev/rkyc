@@ -3,15 +3,18 @@
  * Backend API와 Mock 데이터를 통합 관리
  */
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getCorporations,
   getSignals,
   getCorporation,
   getSignal,
+  triggerAnalyzeJob,
+  getJobStatus,
   ApiCorporation,
   ApiSignal,
   GetSignalsParams,
+  JobStatusResponse,
 } from '@/lib/api';
 import { Signal, SignalCategory, SignalStatus, SignalImpact, SignalStrength } from '@/types/signal';
 import { Corporation, CORPORATIONS } from '@/data/corporations';
@@ -226,6 +229,36 @@ export function useSignalStats() {
         industry: signals.filter(s => s.signal_type === 'INDUSTRY').length,
         environment: signals.filter(s => s.signal_type === 'ENVIRONMENT').length,
       };
+    },
+  });
+}
+
+// Job 관련 훅
+export function useAnalyzeJob() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (corpId: string) => triggerAnalyzeJob(corpId),
+    onSuccess: () => {
+      // 시그널 목록 새로고침
+      queryClient.invalidateQueries({ queryKey: ['signals'] });
+      queryClient.invalidateQueries({ queryKey: ['signalStats'] });
+    },
+  });
+}
+
+export function useJobStatus(jobId: string, options?: { enabled?: boolean; refetchInterval?: number }) {
+  return useQuery({
+    queryKey: ['job', jobId],
+    queryFn: () => getJobStatus(jobId),
+    enabled: options?.enabled ?? !!jobId,
+    refetchInterval: (query) => {
+      const data = query.state.data as JobStatusResponse | undefined;
+      // QUEUED 또는 RUNNING 상태일 때만 폴링
+      if (data?.status === 'QUEUED' || data?.status === 'RUNNING') {
+        return options?.refetchInterval ?? 2000;
+      }
+      return false;
     },
   });
 }

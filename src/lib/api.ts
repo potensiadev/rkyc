@@ -105,3 +105,48 @@ export async function getSignal(signalId: string): Promise<ApiSignal> {
 export async function healthCheck(): Promise<{ status: string }> {
   return fetchApi<{ status: string }>('/health');
 }
+
+// Job API Types
+export interface JobTriggerResponse {
+  job_id: string;
+  status: string;
+  message: string;
+}
+
+export interface JobProgress {
+  step: string | null;
+  percent: number;
+}
+
+export interface JobError {
+  code: string | null;
+  message: string | null;
+}
+
+export interface JobStatusResponse {
+  job_id: string;
+  job_type: string;
+  corp_id: string | null;
+  status: 'QUEUED' | 'RUNNING' | 'DONE' | 'FAILED';
+  progress: JobProgress;
+  error: JobError | null;
+  queued_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+// Job API Functions
+export async function triggerAnalyzeJob(corpId: string): Promise<JobTriggerResponse> {
+  const demoToken = import.meta.env.VITE_DEMO_TOKEN || 'demo';
+  return fetchApi<JobTriggerResponse>('/api/v1/jobs/analyze/run', {
+    method: 'POST',
+    headers: {
+      'X-DEMO-TOKEN': demoToken,
+    },
+    body: JSON.stringify({ corp_id: corpId }),
+  });
+}
+
+export async function getJobStatus(jobId: string): Promise<JobStatusResponse> {
+  return fetchApi<JobStatusResponse>(`/api/v1/jobs/${jobId}`);
+}

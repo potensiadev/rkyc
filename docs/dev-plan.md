@@ -13,11 +13,12 @@
 - [x] **Database (Supabase PostgreSQL)** ✅ 세션 2 완료
 - [x] **Railway 배포** ✅ 세션 3 완료
 - [x] **Frontend-Backend 연동** ✅ 세션 3 완료
+- [x] **Demo Mode UI (PRD 5.4)** ✅ 세션 4 완료
+- [x] **Job Trigger API** ✅ 세션 4 완료
 
 ### 구현 대기
-- [ ] Worker (Celery + Redis)
-- [ ] LLM Integration (litellm)
-- [ ] Demo Mode UI (PRD 부록 A)
+- [ ] Worker (Celery + Redis + LLM)
+- [ ] 시그널 상태 관리 API (PATCH /signals/{id}/status)
 
 ---
 
@@ -62,12 +63,14 @@ PATCH  /api/v1/signals/{id}/status    # ⏳ 상태 변경 - 미구현
 POST   /api/v1/signals/{id}/dismiss   # ⏳ 기각 (사유 포함) - 미구현
 ```
 
-### 2.3 분석 작업 API (미구현)
+### 2.3 분석 작업 API ✅ 세션 4 완료
 ```
-POST   /api/v1/analysis/trigger       # ⏳ 분석 트리거 - Worker 연동 필요
-GET    /api/v1/analysis/jobs/{id}     # ⏳ 작업 상태 - Worker 연동 필요
-GET    /api/v1/analysis/jobs          # ⏳ 작업 목록 - Worker 연동 필요
+POST   /api/v1/jobs/analyze/run       # ✅ 분석 트리거 (Demo Mode)
+GET    /api/v1/jobs/{job_id}          # ✅ 작업 상태 조회
+GET    /api/v1/jobs                   # ✅ 작업 목록 조회
 ```
+- Worker 미구현 상태에서는 Job이 QUEUED 상태로 유지됨
+- Worker 구현 후 실제 LLM 분석 실행 가능
 
 ---
 
@@ -280,20 +283,20 @@ GOOGLE_API_KEY=...
 
 ---
 
-## 다음 단계 (세션 4에서)
+## 다음 단계 (세션 5에서)
 
-### 우선순위 1: Demo Mode UI (PRD 부록 A)
-1. "분석 실행(시연용)" 버튼 구현
-2. "접속/조회는 분석을 실행하지 않습니다" 안내 문구
-3. VITE_DEMO_MODE 환경변수로 제어
-
-### 우선순위 2: 시그널 상태 관리 API
+### 우선순위 1: 시그널 상태 관리 API
 1. PATCH /signals/{id}/status 구현
 2. POST /signals/{id}/dismiss 구현
 
-### 우선순위 3: Worker 기초
+### 우선순위 2: Worker 기초
 1. Celery + Redis 설정
-2. 분석 작업 트리거 API
+2. LLM API 키 설정 (Anthropic, OpenAI 등)
+3. 분석 파이프라인 구현
+
+### 우선순위 3: Railway 재배포
+1. Backend Job API 배포
+2. Vercel VITE_DEMO_MODE=true 설정
 
 ---
 
@@ -317,6 +320,23 @@ GOOGLE_API_KEY=...
 - CORS 설정 및 Vercel 환경변수 구성
 - Frontend-Backend 연동 완료
 
+### 세션 4 (2025-12-31)
+- **Demo Mode UI 구현** (PRD 5.4.2 기반)
+  - `src/components/demo/DemoPanel.tsx` 생성
+  - SignalInbox 페이지에 DemoPanel 통합
+  - VITE_DEMO_MODE 환경변수로 표시 제어
+- **Job Trigger API 구현**
+  - `backend/app/models/job.py` - Job 모델 (rkyc_job 테이블)
+  - `backend/app/schemas/job.py` - Pydantic 스키마
+  - `backend/app/api/v1/endpoints/jobs.py` - API 엔드포인트
+  - POST /api/v1/jobs/analyze/run (분석 트리거)
+  - GET /api/v1/jobs/{job_id} (상태 조회)
+  - GET /api/v1/jobs (목록 조회)
+- **Frontend Job 훅 추가**
+  - `useAnalyzeJob`, `useJobStatus` 훅 구현
+  - Job 상태 폴링 (QUEUED/RUNNING 시 2초 간격)
+- **현재 상태**: Worker 미구현으로 Job이 QUEUED 상태 유지
+
 ---
 
-*Last Updated: 2025-12-31 (세션 3 완료 - Railway 배포 및 Frontend 연동)*
+*Last Updated: 2025-12-31 (세션 4 완료 - Demo Mode UI 및 Job API)*

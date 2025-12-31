@@ -4,7 +4,7 @@ Aggregates all API endpoints
 """
 
 from fastapi import APIRouter
-from app.api.v1.endpoints import corporations, signals
+from app.api.v1.endpoints import corporations, signals, jobs
 
 # Create main API router
 api_router = APIRouter()
@@ -14,5 +14,4 @@ api_router.include_router(
     corporations.router, prefix="/corporations", tags=["corporations"]
 )
 api_router.include_router(signals.router, prefix="/signals", tags=["signals"])
-
-# Note: analysis endpoint will be implemented later with Worker integration
+api_router.include_router(jobs.router, prefix="/jobs", tags=["jobs"])

@@ -1,16 +1,17 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
+import { DemoPanel } from "@/components/demo/DemoPanel";
 import { SIGNAL_TYPE_CONFIG, SIGNAL_IMPACT_CONFIG, SIGNAL_STRENGTH_CONFIG } from "@/types/signal";
 import { formatRelativeTime } from "@/data/signals";
 import { useSignals, useSignalStats } from "@/hooks/useApi";
-import { 
-  AlertCircle, 
-  TrendingUp, 
-  TrendingDown, 
-  Lightbulb, 
-  Building2, 
-  Factory, 
+import {
+  AlertCircle,
+  TrendingUp,
+  TrendingDown,
+  Lightbulb,
+  Building2,
+  Factory,
   Globe,
   FileText,
   Clock
@@ -144,6 +145,9 @@ export default function SignalInbox() {
   return (
     <MainLayout>
       <div className="max-w-7xl">
+        {/* Demo Panel (Demo Mode에서만 표시) */}
+        <DemoPanel />
+
         <div className="mb-6">
           <h1 className="text-2xl font-semibold text-foreground">AI 감지 최신 RKYC 시그널</h1>
           <p className="text-muted-foreground mt-1">
