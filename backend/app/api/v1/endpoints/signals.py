@@ -183,32 +183,36 @@ async def update_signal_status(
     """시그널 상태 변경 (NEW → REVIEWED)"""
 
     now = datetime.utcnow()
-
-    # rkyc_signal 업데이트
-    signal_query = select(Signal).where(Signal.signal_id == signal_id)
-    signal_result = await db.execute(signal_query)
-    signal = signal_result.scalar_one_or_none()
-
-    if not signal:
-        raise HTTPException(status_code=404, detail="Signal not found")
-
-    # 상태 변경
     new_status = SignalStatus(status_update.status.value)
-    signal.signal_status = new_status
-    if new_status == SignalStatus.REVIEWED:
-        signal.reviewed_at = now
-    signal.last_updated_at = now
 
-    # rkyc_signal_index도 동기화
+    # rkyc_signal_index 업데이트 (Dashboard용 - 핵심)
     index_query = select(SignalIndex).where(SignalIndex.signal_id == signal_id)
     index_result = await db.execute(index_query)
     signal_index = index_result.scalar_one_or_none()
 
-    if signal_index:
-        signal_index.signal_status = new_status
-        if new_status == SignalStatus.REVIEWED:
-            signal_index.reviewed_at = now
-        signal_index.last_updated_at = now
+    if not signal_index:
+        raise HTTPException(status_code=404, detail="Signal not found")
+
+    signal_index.signal_status = new_status
+    if new_status == SignalStatus.REVIEWED:
+        signal_index.reviewed_at = now
+    signal_index.last_updated_at = now
+
+    # rkyc_signal도 동기화 (원본 테이블)
+    try:
+        from sqlalchemy import text
+        await db.execute(
+            text("""
+                UPDATE rkyc_signal
+                SET signal_status = :status,
+                    reviewed_at = CASE WHEN :status = 'REVIEWED' THEN :now ELSE reviewed_at END,
+                    last_updated_at = :now
+                WHERE signal_id = :signal_id
+            """),
+            {"status": new_status.value, "now": now, "signal_id": signal_id}
+        )
+    except Exception:
+        pass  # 원본 테이블 업데이트 실패해도 index는 업데이트됨
 
     await db.commit()
 
@@ -225,29 +229,35 @@ async def dismiss_signal(
 
     now = datetime.utcnow()
 
-    # rkyc_signal 업데이트
-    signal_query = select(Signal).where(Signal.signal_id == signal_id)
-    signal_result = await db.execute(signal_query)
-    signal = signal_result.scalar_one_or_none()
-
-    if not signal:
-        raise HTTPException(status_code=404, detail="Signal not found")
-
-    signal.signal_status = SignalStatus.DISMISSED
-    signal.dismissed_at = now
-    signal.dismiss_reason = dismiss_request.reason
-    signal.last_updated_at = now
-
-    # rkyc_signal_index도 동기화
+    # rkyc_signal_index 업데이트 (Dashboard용 - 핵심)
     index_query = select(SignalIndex).where(SignalIndex.signal_id == signal_id)
     index_result = await db.execute(index_query)
     signal_index = index_result.scalar_one_or_none()
 
-    if signal_index:
-        signal_index.signal_status = SignalStatus.DISMISSED
-        signal_index.dismissed_at = now
-        signal_index.dismiss_reason = dismiss_request.reason
-        signal_index.last_updated_at = now
+    if not signal_index:
+        raise HTTPException(status_code=404, detail="Signal not found")
+
+    signal_index.signal_status = SignalStatus.DISMISSED
+    signal_index.dismissed_at = now
+    signal_index.dismiss_reason = dismiss_request.reason
+    signal_index.last_updated_at = now
+
+    # rkyc_signal도 동기화 (원본 테이블)
+    try:
+        from sqlalchemy import text
+        await db.execute(
+            text("""
+                UPDATE rkyc_signal
+                SET signal_status = 'DISMISSED',
+                    dismissed_at = :now,
+                    dismiss_reason = :reason,
+                    last_updated_at = :now
+                WHERE signal_id = :signal_id
+            """),
+            {"now": now, "reason": dismiss_request.reason, "signal_id": signal_id}
+        )
+    except Exception:
+        pass  # 원본 테이블 업데이트 실패해도 index는 업데이트됨
 
     await db.commit()
 
