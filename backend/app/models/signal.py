@@ -1,18 +1,99 @@
-# Signal Model
-# TODO: Implement in Session 2
-
 """
-class Signal(Base):
-    __tablename__ = "signals"
-
-    id: UUID
-    corporation_id: UUID  # FK -> corporations
-    category: str  # financial, legal, reputational, operational, market
-    severity: int  # 1-5
-    title: str
-    description: str
-    evidence: list[dict]  # JSONB
-    status: str  # new, reviewed, confirmed, dismissed
-    created_at: datetime
-    updated_at: datetime
+rKYC Signal Models
+SQLAlchemy models for signal tables (PRD 14.7)
 """
+
+from datetime import datetime
+from uuid import UUID
+from sqlalchemy import Column, String, Integer, Text, TIMESTAMP, Enum as SQLEnum
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
+import enum
+from app.core.database import Base
+
+
+# Enums (PRD 9장, 10장)
+class SignalType(str, enum.Enum):
+    """시그널 타입 (PRD 14.7)"""
+
+    DIRECT = "DIRECT"  # 직접 리스크
+    INDUSTRY = "INDUSTRY"  # 산업 리스크
+    ENVIRONMENT = "ENVIRONMENT"  # 환경 리스크
+
+
+class EventType(str, enum.Enum):
+    """이벤트 타입 (PRD 9장 - 10종 고정)"""
+
+    KYC_REFRESH = "KYC_REFRESH"
+    INTERNAL_RISK_GRADE_CHANGE = "INTERNAL_RISK_GRADE_CHANGE"
+    OVERDUE_FLAG_ON = "OVERDUE_FLAG_ON"
+    LOAN_EXPOSURE_CHANGE = "LOAN_EXPOSURE_CHANGE"
+    COLLATERAL_CHANGE = "COLLATERAL_CHANGE"
+    OWNERSHIP_CHANGE = "OWNERSHIP_CHANGE"
+    GOVERNANCE_CHANGE = "GOVERNANCE_CHANGE"
+    FINANCIAL_STATEMENT_UPDATE = "FINANCIAL_STATEMENT_UPDATE"
+    INDUSTRY_SHOCK = "INDUSTRY_SHOCK"
+    POLICY_REGULATION_CHANGE = "POLICY_REGULATION_CHANGE"
+
+
+class ImpactDirection(str, enum.Enum):
+    """영향 방향"""
+
+    RISK = "RISK"
+    OPPORTUNITY = "OPPORTUNITY"
+    NEUTRAL = "NEUTRAL"
+
+
+class ImpactStrength(str, enum.Enum):
+    """영향 강도"""
+
+    HIGH = "HIGH"
+    MED = "MED"
+    LOW = "LOW"
+
+
+class ConfidenceLevel(str, enum.Enum):
+    """신뢰도"""
+
+    HIGH = "HIGH"
+    MED = "MED"
+    LOW = "LOW"
+
+
+class SignalIndex(Base):
+    """
+    시그널 인덱스 테이블 (Dashboard 전용, 조인 금지!)
+    PRD 14.7.3 - rkyc_signal_index
+    """
+
+    __tablename__ = "rkyc_signal_index"
+
+    # Primary Key
+    index_id = Column(PGUUID(as_uuid=True), primary_key=True)
+
+    # Denormalized fields (조인 금지!)
+    corp_id = Column(String(20), nullable=False)
+    corp_name = Column(String(200), nullable=False)
+    industry_code = Column(String(10), nullable=False)
+
+    # Signal info
+    signal_type = Column(SQLEnum(SignalType, name="signal_type_enum"), nullable=False)
+    event_type = Column(SQLEnum(EventType, name="event_type_enum"), nullable=False)
+    impact_direction = Column(SQLEnum(ImpactDirection, name="impact_direction_enum"), nullable=False)
+    impact_strength = Column(SQLEnum(ImpactStrength, name="impact_strength_enum"), nullable=False)
+    confidence = Column(SQLEnum(ConfidenceLevel, name="confidence_level"), nullable=False)
+
+    # Content
+    title = Column(String(500), nullable=False, comment="짧은 요약 제목")
+    summary_short = Column(Text, nullable=True, comment="짧은 요약")
+    evidence_count = Column(Integer, nullable=False)
+
+    # Timestamps
+    detected_at = Column(TIMESTAMP(timezone=True), nullable=False, comment="정렬 기준")
+    last_updated_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
+    created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
+
+    # Foreign key reference (for detail lookup only)
+    signal_id = Column(PGUUID(as_uuid=True), nullable=False)
+
+    def __repr__(self):
+        return f"<SignalIndex(corp_name='{self.corp_name}', event_type='{self.event_type}')>"

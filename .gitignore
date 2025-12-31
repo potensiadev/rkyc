@@ -22,3 +22,19 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+
+# Environment files (secrets)
+.env
+backend/.env
+
+# Claude Code local settings
+.claude/settings.local.json

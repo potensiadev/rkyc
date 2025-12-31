@@ -33,12 +33,13 @@
 - Routing: React Router v6
 - Deploy: Vercel (https://rkyc.vercel.app/)
 
-### Backend (구현 예정)
+### Backend (구현 완료 ✅)
 - Framework: FastAPI + Python 3.11+
 - ORM: SQLAlchemy 2.0 + asyncpg
 - Validation: Pydantic v2
-- Auth: Supabase Auth (JWT)
-- Deploy: Railway/Render
+- Auth: Supabase Auth (JWT) - 예정
+- Deploy: Railway/Render - 예정
+- **pgbouncer 호환**: `statement_cache_size=0` 설정 필수
 
 ### Worker (구현 예정)
 - Queue: Celery + Redis
@@ -247,13 +248,16 @@ SNAPSHOT → DOC_INGEST → EXTERNAL → CONTEXT → SIGNAL → VALIDATION → I
 - [x] 데이터베이스 스키마 v1 (schema.sql) - 구버전
 - [x] **스키마 재설계 v2 (schema_v2.sql)** - PRD 14장 기준
 - [x] **시드 데이터 v2 (seed_v2.sql)** - 6개 기업 + 29개 시그널
+- [x] **Supabase 프로젝트 생성 및 스키마/시드 적용** (Tokyo 리전)
+- [x] **Backend API 구현 완료** (FastAPI + SQLAlchemy 2.0)
+  - 기업 CRUD API (`/api/v1/corporations`)
+  - 시그널 조회 API (`/api/v1/signals`)
+  - pgbouncer 호환 설정 적용
 
-### 대기 중 (세션 2에서)
-- [ ] Supabase 프로젝트 생성 (Tokyo 리전)
-- [ ] **schema_v2.sql** 실행 및 검증
-- [ ] **seed_v2.sql** 실행 및 검증
-- [ ] Backend API 구현 시작
-- [ ] 인증 플로우 구현
+### 대기 중 (세션 3에서)
+- [ ] Frontend-Backend 연동 (API 호출 연결)
+- [ ] 인증 플로우 구현 (Supabase Auth)
+- [ ] Worker 구현 시작 (Celery + Redis)
 
 ## 파일 구조
 
@@ -350,25 +354,58 @@ rkyc/
 
 **검증 쿼리**: seed_v2.sql 말미에 COUNT 확인 쿼리 포함
 
-## 다음 세션 작업 (세션 2)
+### 세션 2 (2025-12-31) - Backend API 구현 ✅
+**목표**: FastAPI Backend 구현 및 Supabase 연결
 
-### Phase 1: 인프라 설정
-1. Supabase 프로젝트 생성 (Tokyo ap-northeast-1)
-2. **schema_v2.sql** 실행
-3. **seed_v2.sql** 실행 및 데이터 검증
-4. 쿼리 테스트 (Dashboard 조회 등)
+**완료 항목**:
+1. Supabase 프로젝트 설정 (Tokyo ap-northeast-1)
+   - schema_v2.sql, seed_v2.sql 적용 완료
+   - Transaction pooler (포트 6543) 사용
+2. FastAPI Backend 구현
+   - `app/core/config.py` - Pydantic Settings v2
+   - `app/core/database.py` - SQLAlchemy 2.0 async engine
+   - `app/models/corporation.py` - Corporation 모델
+   - `app/models/signal.py` - SignalIndex 모델 + Enums
+   - `app/schemas/` - Pydantic 스키마
+   - `app/api/v1/endpoints/` - REST API 엔드포인트
+3. 설정 오류 해결
+   - CORS_ORIGINS: `List[str]` → `str` (pydantic-settings v2 호환)
+   - DATABASE_URL: 비밀번호 특수문자 URL 인코딩 (`!` → `%21`)
+   - pgbouncer 호환: `statement_cache_size=0` 설정
+4. API 테스트 완료
+   - `GET /api/v1/corporations` - 6개 기업 조회 성공
+   - `GET /api/v1/signals` - 29개 시그널 조회 성공
 
-### Phase 2: Backend 기초
-1. FastAPI 프로젝트 환경 설정
-2. Supabase 연결 테스트
-3. 기업 CRUD API 구현 (corp 테이블)
-4. 시그널 조회 API 구현 (rkyc_signal_index 활용)
+**기술 이슈 해결**:
+| 문제 | 원인 | 해결 |
+|------|------|------|
+| CORS_ORIGINS 파싱 오류 | pydantic-settings v2는 List 타입에 JSON 기대 | str 타입으로 변경, main.py에서 split |
+| DB 비밀번호 인증 실패 | 특수문자 URL 인코딩 누락 | `!` → `%21` 인코딩 |
+| prepared statement 충돌 | pgbouncer transaction mode 비호환 | `statement_cache_size=0` 설정 |
+
+## 다음 세션 작업 (세션 3)
+
+### Phase 1: Frontend-Backend 연동
+1. Frontend API 클라이언트 구현 (axios/fetch)
+2. Mock 데이터 → 실제 API 호출로 전환
+3. 에러 처리 및 로딩 상태 구현
+
+### Phase 2: 인증 구현
+1. Supabase Auth 설정
+2. 로그인/로그아웃 UI
+3. JWT 토큰 기반 API 인증
+
+### Phase 3: Worker 기초
+1. Celery + Redis 설정
+2. 분석 작업 트리거 API
+3. LLM 연동 준비
 
 ### 참고 사항
 - **schema_v2.sql, seed_v2.sql 사용** (v1은 deprecated)
 - ADR 문서의 결정 사항 준수
 - Guardrails 규칙 (금지 표현, evidence 필수) 적용
 - Dashboard에서는 rkyc_signal_index 사용 (조인 금지)
+- **Backend 실행**: `cd backend && uvicorn app.main:app --reload`
 
 ---
-*Last Updated: 2025-12-31 (UUID 오류 수정 완료)*
+*Last Updated: 2025-12-31 (Backend API 구현 완료)*
