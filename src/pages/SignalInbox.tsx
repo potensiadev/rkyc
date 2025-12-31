@@ -2,7 +2,8 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { SIGNAL_TYPE_CONFIG, SIGNAL_IMPACT_CONFIG, SIGNAL_STRENGTH_CONFIG } from "@/types/signal";
-import { SIGNALS, formatRelativeTime } from "@/data/signals";
+import { formatRelativeTime } from "@/data/signals";
+import { useSignals, useSignalStats } from "@/hooks/useApi";
 import { 
   AlertCircle, 
   TrendingUp, 
@@ -69,23 +70,27 @@ export default function SignalInbox() {
   const navigate = useNavigate();
   const [activeStatus, setActiveStatus] = useState<"all" | "new" | "review" | "resolved">("all");
 
+  // API에서 데이터 로드
+  const { data: signals = [], isLoading, error } = useSignals();
+  const { data: stats } = useSignalStats();
+
   const filteredSignals = useMemo(() => {
-    return SIGNALS.filter((signal) => {
+    return signals.filter((signal) => {
       if (activeStatus !== "all" && signal.status !== activeStatus) return false;
       return true;
     });
-  }, [activeStatus]);
+  }, [activeStatus, signals]);
 
   const counts = useMemo(() => ({
-    all: SIGNALS.length,
-    new: SIGNALS.filter(s => s.status === "new").length,
-    review: SIGNALS.filter(s => s.status === "review").length,
-    resolved: SIGNALS.filter(s => s.status === "resolved").length,
-    todayNew: SIGNALS.filter(s => s.status === "new").length,
-    riskHigh7d: SIGNALS.filter(s => s.impact === "risk").length,
-    opportunity7d: SIGNALS.filter(s => s.impact === "opportunity").length,
+    all: stats?.total || signals.length,
+    new: stats?.new || signals.filter(s => s.status === "new").length,
+    review: stats?.review || signals.filter(s => s.status === "review").length,
+    resolved: stats?.resolved || signals.filter(s => s.status === "resolved").length,
+    todayNew: stats?.new || signals.filter(s => s.status === "new").length,
+    riskHigh7d: stats?.risk || signals.filter(s => s.impact === "risk").length,
+    opportunity7d: stats?.opportunity || signals.filter(s => s.impact === "opportunity").length,
     loanEligible: 6,
-  }), []);
+  }), [signals, stats]);
 
   // Click company name -> go to corporate report
   const handleCompanyClick = (corporationId: string, e: React.MouseEvent) => {
@@ -104,6 +109,37 @@ export default function SignalInbox() {
     { id: "review", label: "검토중", count: counts.review },
     { id: "resolved", label: "완료", count: counts.resolved },
   ];
+
+  // 로딩 상태
+  if (isLoading) {
+    return (
+      <MainLayout>
+        <div className="max-w-7xl">
+          <div className="flex items-center justify-center py-20">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+              <p className="text-muted-foreground">시그널 데이터를 불러오는 중...</p>
+            </div>
+          </div>
+        </div>
+      </MainLayout>
+    );
+  }
+
+  // 에러 상태
+  if (error) {
+    return (
+      <MainLayout>
+        <div className="max-w-7xl">
+          <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-6 text-center">
+            <AlertCircle className="w-8 h-8 text-destructive mx-auto mb-2" />
+            <p className="text-destructive font-medium">데이터 로드 중 오류가 발생했습니다</p>
+            <p className="text-sm text-muted-foreground mt-1">잠시 후 다시 시도해주세요</p>
+          </div>
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout>

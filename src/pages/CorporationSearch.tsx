@@ -1,10 +1,10 @@
+import { useState, useMemo } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
-import { Search, Building2, ChevronRight } from "lucide-react";
+import { Search, Building2, ChevronRight, AlertCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
-import { getAllCorporations } from "@/data/corporations";
-import { getCorporationSignalCounts } from "@/data/signals";
+import { useCorporations, useSignals } from "@/hooks/useApi";
 
 const signalTypeConfig = {
   direct: { label: "직접", className: "bg-primary/10 text-primary" },
@@ -14,12 +14,67 @@ const signalTypeConfig = {
 
 export default function CorporationSearch() {
   const navigate = useNavigate();
-  const corporations = getAllCorporations();
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // API에서 데이터 로드
+  const { data: corporations = [], isLoading, error } = useCorporations();
+  const { data: signals = [] } = useSignals();
+
+  // 기업별 시그널 카운트 계산
+  const getSignalCounts = (corpId: string) => {
+    const corpSignals = signals.filter(s => s.corporationId === corpId);
+    return {
+      total: corpSignals.length,
+      direct: corpSignals.filter(s => s.signalCategory === 'direct').length,
+      industry: corpSignals.filter(s => s.signalCategory === 'industry').length,
+      environment: corpSignals.filter(s => s.signalCategory === 'environment').length,
+    };
+  };
+
+  // 검색 필터링
+  const filteredCorporations = useMemo(() => {
+    if (!searchQuery.trim()) return corporations;
+    const query = searchQuery.toLowerCase();
+    return corporations.filter(
+      c => c.name.toLowerCase().includes(query) ||
+           c.businessNumber.includes(query)
+    );
+  }, [corporations, searchQuery]);
 
   // Click company -> go directly to report
   const handleCorporationClick = (corporateId: string) => {
     navigate(`/corporates/${corporateId}`);
   };
+
+  // 로딩 상태
+  if (isLoading) {
+    return (
+      <MainLayout>
+        <div className="max-w-6xl">
+          <div className="flex items-center justify-center py-20">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+              <p className="text-muted-foreground">기업 데이터를 불러오는 중...</p>
+            </div>
+          </div>
+        </div>
+      </MainLayout>
+    );
+  }
+
+  // 에러 상태
+  if (error) {
+    return (
+      <MainLayout>
+        <div className="max-w-6xl">
+          <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-6 text-center">
+            <AlertCircle className="w-8 h-8 text-destructive mx-auto mb-2" />
+            <p className="text-destructive font-medium">데이터 로드 중 오류가 발생했습니다</p>
+          </div>
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout>
@@ -35,7 +90,13 @@ export default function CorporationSearch() {
           <div className="flex gap-4">
             <div className="relative flex-1">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-              <Input type="text" placeholder="기업명 또는 사업자등록번호를 입력하세요" className="pl-12 h-12 text-base" />
+              <Input
+                type="text"
+                placeholder="기업명 또는 사업자등록번호를 입력하세요"
+                className="pl-12 h-12 text-base"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
             </div>
             <Button className="h-12 px-8">검색</Button>
           </div>
@@ -45,7 +106,7 @@ export default function CorporationSearch() {
           <div className="px-6 py-4 border-b border-border">
             <h2 className="font-medium text-foreground">분석 대상 기업 목록</h2>
             <p className="text-sm text-muted-foreground mt-0.5">
-              시그널이 감지된 기업 {corporations.length}개
+              시그널이 감지된 기업 {filteredCorporations.length}개
             </p>
           </div>
 
@@ -61,8 +122,8 @@ export default function CorporationSearch() {
               </tr>
             </thead>
             <tbody>
-              {corporations.map((corp) => {
-                const signalCounts = getCorporationSignalCounts(corp.id);
+              {filteredCorporations.map((corp) => {
+                const signalCounts = getSignalCounts(corp.id);
                 return (
                   <tr
                     key={corp.id}

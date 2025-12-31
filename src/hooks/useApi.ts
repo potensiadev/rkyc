@@ -1,0 +1,231 @@
+/**
+ * API Hooks with TanStack Query
+ * Backend API와 Mock 데이터를 통합 관리
+ */
+
+import { useQuery } from '@tanstack/react-query';
+import {
+  getCorporations,
+  getSignals,
+  getCorporation,
+  getSignal,
+  ApiCorporation,
+  ApiSignal,
+  GetSignalsParams,
+} from '@/lib/api';
+import { Signal, SignalCategory, SignalStatus, SignalImpact, SignalStrength } from '@/types/signal';
+import { Corporation, CORPORATIONS } from '@/data/corporations';
+import { SIGNALS } from '@/data/signals';
+
+// 환경변수로 Demo 모드 제어
+const isDemoMode = import.meta.env.VITE_DEMO_MODE === 'true';
+
+// API 응답 → Frontend 타입 변환 함수
+function mapApiCorporationToFrontend(api: ApiCorporation): Corporation {
+  // Mock 데이터에서 상세 정보 조회 (API에 없는 필드)
+  const mockCorp = CORPORATIONS.find(
+    c => c.name === api.corp_name || c.businessNumber.replace(/-/g, '').includes(api.biz_no.replace(/-/g, ''))
+  );
+
+  if (mockCorp) {
+    return {
+      ...mockCorp,
+      id: api.corp_id,
+      name: api.corp_name,
+      ceo: api.ceo_name,
+    };
+  }
+
+  // Mock 데이터가 없으면 기본값으로 반환
+  return {
+    id: api.corp_id,
+    name: api.corp_name,
+    businessNumber: api.biz_no,
+    industry: getIndustryName(api.industry_code),
+    industryCode: api.industry_code,
+    mainBusiness: '',
+    ceo: api.ceo_name,
+    executives: [],
+    employeeCount: 0,
+    foundedYear: 0,
+    headquarters: '',
+    bankRelationship: { hasRelationship: false },
+    financialSnapshots: [],
+    shareholders: [],
+    recentSignalTypes: [],
+    lastReviewed: api.updated_at.split('T')[0],
+  };
+}
+
+function mapApiSignalToFrontend(api: ApiSignal): Signal {
+  const signalCategory = api.signal_type.toLowerCase() as SignalCategory;
+  const impact = api.impact_direction.toLowerCase() as SignalImpact;
+  const impactStrength = mapStrength(api.impact_strength);
+
+  return {
+    id: api.signal_id,
+    corporationName: api.corp_name,
+    corporationId: api.corp_id,
+    signalCategory,
+    signalSubType: getSubTypeFromEventType(api.event_type),
+    status: 'new' as SignalStatus,
+    title: api.title,
+    summary: api.summary_short,
+    source: 'rKYC System',
+    detectedAt: api.detected_at,
+    detailCategory: api.event_type.replace(/_/g, ' '),
+    impact,
+    impactStrength,
+    evidenceCount: api.evidence_count,
+    confidenceLevel: mapStrength(api.confidence),
+    sourceType: 'external',
+    eventClassification: 'market_shift',
+  };
+}
+
+function mapStrength(strength: 'HIGH' | 'MED' | 'LOW'): SignalStrength {
+  const map: Record<string, SignalStrength> = {
+    HIGH: 'high',
+    MED: 'medium',
+    LOW: 'low',
+  };
+  return map[strength] || 'medium';
+}
+
+function getSubTypeFromEventType(eventType: string): 'news' | 'financial' | 'regulatory' | 'governance' | 'market' | 'macro' {
+  const mapping: Record<string, 'news' | 'financial' | 'regulatory' | 'governance' | 'market' | 'macro'> = {
+    KYC_REFRESH: 'regulatory',
+    INTERNAL_RISK_GRADE_CHANGE: 'financial',
+    OVERDUE_FLAG_ON: 'financial',
+    LOAN_EXPOSURE_CHANGE: 'financial',
+    COLLATERAL_CHANGE: 'financial',
+    OWNERSHIP_CHANGE: 'governance',
+    GOVERNANCE_CHANGE: 'governance',
+    FINANCIAL_STATEMENT_UPDATE: 'financial',
+    INDUSTRY_SHOCK: 'market',
+    POLICY_REGULATION_CHANGE: 'macro',
+  };
+  return mapping[eventType] || 'news';
+}
+
+function getIndustryName(code: string): string {
+  const industries: Record<string, string> = {
+    C10: '식품제조업',
+    C21: '의약품제조업',
+    C26: '전자부품제조업',
+    C29: '기계장비제조업',
+    D35: '전기업',
+    F41: '건설업',
+  };
+  return industries[code] || '기타';
+}
+
+// TanStack Query Hooks
+export function useCorporations() {
+  return useQuery({
+    queryKey: ['corporations'],
+    queryFn: async () => {
+      if (isDemoMode) {
+        return CORPORATIONS;
+      }
+      const response = await getCorporations();
+      return response.items.map(mapApiCorporationToFrontend);
+    },
+    staleTime: 5 * 60 * 1000, // 5분
+  });
+}
+
+export function useCorporation(corpId: string) {
+  return useQuery({
+    queryKey: ['corporation', corpId],
+    queryFn: async () => {
+      if (isDemoMode) {
+        return CORPORATIONS.find(c => c.id === corpId) || null;
+      }
+      const response = await getCorporation(corpId);
+      return mapApiCorporationToFrontend(response);
+    },
+    enabled: !!corpId,
+  });
+}
+
+export function useSignals(params?: GetSignalsParams) {
+  return useQuery({
+    queryKey: ['signals', params],
+    queryFn: async () => {
+      if (isDemoMode) {
+        let signals = SIGNALS;
+
+        if (params?.corp_id) {
+          signals = signals.filter(s => s.corporationId === params.corp_id);
+        }
+        if (params?.signal_type) {
+          const category = params.signal_type.toLowerCase() as SignalCategory;
+          signals = signals.filter(s => s.signalCategory === category);
+        }
+        if (params?.impact_direction) {
+          const impact = params.impact_direction.toLowerCase() as SignalImpact;
+          signals = signals.filter(s => s.impact === impact);
+        }
+
+        return signals;
+      }
+      const response = await getSignals(params);
+      return response.items.map(mapApiSignalToFrontend);
+    },
+    staleTime: 1 * 60 * 1000, // 1분
+  });
+}
+
+export function useSignal(signalId: string) {
+  return useQuery({
+    queryKey: ['signal', signalId],
+    queryFn: async () => {
+      if (isDemoMode) {
+        return SIGNALS.find(s => s.id === signalId) || null;
+      }
+      const response = await getSignal(signalId);
+      return mapApiSignalToFrontend(response);
+    },
+    enabled: !!signalId,
+  });
+}
+
+// 시그널 통계
+export function useSignalStats() {
+  return useQuery({
+    queryKey: ['signalStats'],
+    queryFn: async () => {
+      if (isDemoMode) {
+        return {
+          total: SIGNALS.length,
+          new: SIGNALS.filter(s => s.status === 'new').length,
+          review: SIGNALS.filter(s => s.status === 'review').length,
+          resolved: SIGNALS.filter(s => s.status === 'resolved').length,
+          risk: SIGNALS.filter(s => s.impact === 'risk').length,
+          opportunity: SIGNALS.filter(s => s.impact === 'opportunity').length,
+          neutral: SIGNALS.filter(s => s.impact === 'neutral').length,
+          direct: SIGNALS.filter(s => s.signalCategory === 'direct').length,
+          industry: SIGNALS.filter(s => s.signalCategory === 'industry').length,
+          environment: SIGNALS.filter(s => s.signalCategory === 'environment').length,
+        };
+      }
+
+      const response = await getSignals({ limit: 1000 });
+      const signals = response.items;
+
+      return {
+        total: signals.length,
+        new: signals.length, // API에서는 status 없음
+        review: 0,
+        resolved: 0,
+        risk: signals.filter(s => s.impact_direction === 'RISK').length,
+        opportunity: signals.filter(s => s.impact_direction === 'OPPORTUNITY').length,
+        neutral: signals.filter(s => s.impact_direction === 'NEUTRAL').length,
+        direct: signals.filter(s => s.signal_type === 'DIRECT').length,
+        industry: signals.filter(s => s.signal_type === 'INDUSTRY').length,
+        environment: signals.filter(s => s.signal_type === 'ENVIRONMENT').length,
+      };
+    },
+  });
+}
