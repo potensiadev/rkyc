@@ -9,61 +9,63 @@
 - [x] Mock 데이터 연동
 - [x] PRD 분석 및 문서화
 - [x] ADR 작성 (5개)
+- [x] **Backend API (FastAPI)** ✅ 세션 2 완료
+- [x] **Database (Supabase PostgreSQL)** ✅ 세션 2 완료
 
 ### 구현 대기
-- [ ] Backend API (FastAPI)
-- [ ] Database (Supabase PostgreSQL)
 - [ ] Worker (Celery + Redis)
 - [ ] LLM Integration (litellm)
 - [ ] 인증/인가 (Supabase Auth)
+- [ ] Frontend-Backend 연동
 
 ---
 
-## Phase 1: 인프라 및 기본 설정
+## Phase 1: 인프라 및 기본 설정 ✅ 완료
 
-### 1.1 Supabase 프로젝트 설정
-- [ ] Supabase 프로젝트 생성 (Tokyo 리전)
-- [ ] pgvector extension 활성화
-- [ ] Connection pooling 설정 (port 6543)
+### 1.1 Supabase 프로젝트 설정 ✅
+- [x] Supabase 프로젝트 생성 (Tokyo 리전)
+- [x] pgvector extension 활성화
+- [x] Connection pooling 설정 (port 6543, Transaction mode)
 - [ ] Row Level Security 정책 초안
 
-### 1.2 Backend 프로젝트 초기화
-- [ ] FastAPI 프로젝트 구조 생성
-- [ ] Poetry/pip 의존성 설정
-- [ ] 환경 변수 설정 (.env.example)
+### 1.2 Backend 프로젝트 초기화 ✅
+- [x] FastAPI 프로젝트 구조 생성
+- [x] pip 의존성 설정 (requirements.txt)
+- [x] 환경 변수 설정 (.env.example)
+- [x] **pgbouncer 호환 설정** (`statement_cache_size=0`)
 - [ ] Docker 개발 환경 구성
 
-### 1.3 Database 스키마 적용
-- [ ] schema.sql 실행
-- [ ] seed.sql 실행 (6개 기업 + 시그널)
+### 1.3 Database 스키마 적용 ✅
+- [x] schema_v2.sql 실행 (PRD 14장 기준)
+- [x] seed_v2.sql 실행 (6개 기업 + 29개 시그널)
 - [ ] 마이그레이션 도구 설정 (Alembic)
 
 ---
 
-## Phase 2: 핵심 CRUD API
+## Phase 2: 핵심 CRUD API ✅ 기본 구현 완료
 
-### 2.1 기업 관리 API
+### 2.1 기업 관리 API ✅
 ```
-GET    /api/v1/corporations           # 목록 (페이지네이션, 필터)
-GET    /api/v1/corporations/{id}      # 상세
-POST   /api/v1/corporations           # 생성
-PATCH  /api/v1/corporations/{id}      # 수정
-DELETE /api/v1/corporations/{id}      # 삭제 (soft delete)
-```
-
-### 2.2 시그널 관리 API
-```
-GET    /api/v1/signals                # 목록 (필터: corp_id, category, severity, status)
-GET    /api/v1/signals/{id}           # 상세
-PATCH  /api/v1/signals/{id}/status    # 상태 변경
-POST   /api/v1/signals/{id}/dismiss   # 기각 (사유 포함)
+GET    /api/v1/corporations           # ✅ 목록 (페이지네이션, 필터)
+GET    /api/v1/corporations/{id}      # ✅ 상세
+POST   /api/v1/corporations           # ✅ 생성
+PATCH  /api/v1/corporations/{id}      # ✅ 수정
+DELETE /api/v1/corporations/{id}      # ⏳ 삭제 (soft delete) - 미구현
 ```
 
-### 2.3 분석 작업 API
+### 2.2 시그널 관리 API (부분 완료)
 ```
-POST   /api/v1/analysis/trigger       # 분석 트리거
-GET    /api/v1/analysis/jobs/{id}     # 작업 상태
-GET    /api/v1/analysis/jobs          # 작업 목록
+GET    /api/v1/signals                # ✅ 목록 (필터: corp_id, signal_type, event_type, impact 등)
+GET    /api/v1/signals/{id}           # ✅ 상세
+PATCH  /api/v1/signals/{id}/status    # ⏳ 상태 변경 - 미구현
+POST   /api/v1/signals/{id}/dismiss   # ⏳ 기각 (사유 포함) - 미구현
+```
+
+### 2.3 분석 작업 API (미구현)
+```
+POST   /api/v1/analysis/trigger       # ⏳ 분석 트리거 - Worker 연동 필요
+GET    /api/v1/analysis/jobs/{id}     # ⏳ 작업 상태 - Worker 연동 필요
+GET    /api/v1/analysis/jobs          # ⏳ 작업 목록 - Worker 연동 필요
 ```
 
 ---
@@ -263,12 +265,37 @@ GOOGLE_API_KEY=...
 
 ---
 
-## 다음 단계 (세션 2에서)
+## 다음 단계 (세션 3에서)
 
-1. Backend 프로젝트 초기화
-2. Supabase 연결 테스트
-3. 기업/시그널 CRUD API 구현 시작
+### 우선순위 1: Frontend-Backend 연동
+1. Frontend API 클라이언트 구현 (axios/fetch)
+2. Mock 데이터 → 실제 API 호출로 전환
+3. 에러 처리 및 로딩 상태 구현
+
+### 우선순위 2: 인증 구현
+1. Supabase Auth 설정
+2. 로그인/로그아웃 UI
+3. JWT 토큰 기반 API 인증
+
+### 우선순위 3: 시그널 상태 관리 API
+1. PATCH /signals/{id}/status 구현
+2. POST /signals/{id}/dismiss 구현
 
 ---
 
-*Last Updated: 2025-01-XX (세션 1)*
+## 세션 로그
+
+### 세션 1 (2025-12-31)
+- PRD 분석 및 문서화
+- ADR 5개 작성
+- schema_v2.sql, seed_v2.sql 작성
+
+### 세션 2 (2025-12-31)
+- Supabase 프로젝트 설정 (Tokyo)
+- FastAPI Backend 구현
+- 기업/시그널 CRUD API
+- pgbouncer 호환 이슈 해결
+
+---
+
+*Last Updated: 2025-12-31 (세션 2 완료)*
