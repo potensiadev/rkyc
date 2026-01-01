@@ -18,10 +18,13 @@
 - [x] **Signal 상태 관리 API** ✅ 세션 5 완료
 - [x] **Frontend Detail 페이지 API 연동** ✅ 세션 5 완료
 - [x] **E2E 테스트 검증 (Playwright)** ✅ 세션 5-2 완료
+- [x] **코드 리뷰 버그 수정 (P0/P1)** ✅ 세션 5-3 완료
+- [x] **Internal Snapshot API** ✅ 세션 5-3 완료
 
 ### 구현 대기
 - [ ] Worker (Celery + Redis + LLM)
 - [ ] 실시간 업데이트 (Supabase Realtime)
+- [ ] CorporateDetailPage Mock 데이터 정리
 
 ---
 
@@ -53,6 +56,7 @@
 ```
 GET    /api/v1/corporations           # ✅ 목록 (페이지네이션, 필터)
 GET    /api/v1/corporations/{id}      # ✅ 상세
+GET    /api/v1/corporations/{id}/snapshot  # ✅ 최신 Snapshot (세션 5-3)
 POST   /api/v1/corporations           # ✅ 생성
 PATCH  /api/v1/corporations/{id}      # ✅ 수정
 DELETE /api/v1/corporations/{id}      # ⏳ 삭제 (soft delete) - 미구현
@@ -378,6 +382,28 @@ GOOGLE_API_KEY=...
   - Signal Detail 페이지 → ✅ Evidence, REVIEWED 상태 표시
   - Demo Mode 패널 → ✅ 표시 정상
 
+### 세션 5-3 (2026-01-01)
+- **코드 리뷰 P0/P1 버그 수정**
+  | 우선순위 | 이슈 | 상태 |
+  |---------|------|------|
+  | 🔴 P0 | Signal 상태 양쪽 테이블 동기화 | ✅ |
+  | 🔴 P0 | Job corp_id 유효성 검증 | ✅ |
+  | 🟠 P1 | Internal Snapshot API 구현 | ✅ |
+  | 🟡 P2 | Dashboard N+1 쿼리 최적화 | ✅ |
+- **Signal 상태 동기화**
+  - `signals.py`: rkyc_signal + rkyc_signal_index 모두 업데이트
+- **Job corp_id 검증**
+  - `jobs.py`: Corporation 존재 여부 확인, 없으면 404
+- **Internal Snapshot API**
+  - `GET /api/v1/corporations/{corp_id}/snapshot`
+  - `models/snapshot.py`, `schemas/snapshot.py` 신규 생성
+- **Dashboard 쿼리 최적화**
+  - 9개 쿼리 → 1개 쿼리 (CASE WHEN 집계)
+- **API 테스트 완료**
+  - Snapshot API → ✅ JSON 정상 반환
+  - Dashboard Summary → ✅ 단일 쿼리 동작
+  - Job 검증 → ✅ 잘못된 corp_id 시 404
+
 ---
 
-*Last Updated: 2026-01-01 (세션 5-2 완료 - API 배포 및 E2E 테스트 검증)*
+*Last Updated: 2026-01-01 (세션 5-3 완료 - 코드 리뷰 P0/P1 버그 수정)*
