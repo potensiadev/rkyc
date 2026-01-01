@@ -29,7 +29,9 @@ class ProgressStep(str, enum.Enum):
     EXTERNAL = "EXTERNAL"
     UNIFIED_CONTEXT = "UNIFIED_CONTEXT"
     SIGNAL = "SIGNAL"
+    VALIDATION = "VALIDATION"
     INDEX = "INDEX"
+    INSIGHT = "INSIGHT"
 
 
 class Job(Base):

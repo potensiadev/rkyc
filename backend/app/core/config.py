@@ -32,10 +32,26 @@ class Settings(BaseSettings):
     SUPABASE_ANON_KEY: str = Field(..., description="Supabase anonymous key")
     SUPABASE_SERVICE_ROLE_KEY: str = Field(..., description="Supabase service role key")
 
-    # Redis
+    # Redis & Celery
     REDIS_URL: str = "redis://localhost:6379/0"
-    CELERY_BROKER_URL: str = "redis://localhost:6379/0"
-    CELERY_RESULT_BACKEND: str = "redis://localhost:6379/1"
+
+    @property
+    def CELERY_BROKER_URL(self) -> str:
+        """Celery broker URL (uses REDIS_URL)"""
+        return self.REDIS_URL
+
+    @property
+    def CELERY_RESULT_BACKEND(self) -> str:
+        """Celery result backend URL (uses REDIS_URL with db 1)"""
+        # Use db 1 for results if using default localhost
+        if self.REDIS_URL.endswith("/0"):
+            return self.REDIS_URL.replace("/0", "/1")
+        return self.REDIS_URL
+
+    # LLM Providers
+    ANTHROPIC_API_KEY: str = Field(default="", description="Anthropic API key for Claude")
+    OPENAI_API_KEY: str = Field(default="", description="OpenAI API key for GPT-4o fallback")
+    PERPLEXITY_API_KEY: str = Field(default="", description="Perplexity API key for external search")
 
     # CORS (comma-separated string, parsed in main.py)
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000,https://rkyc.vercel.app"

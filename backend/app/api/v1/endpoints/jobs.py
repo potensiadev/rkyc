@@ -80,10 +80,15 @@ async def trigger_analyze_job(
     await db.commit()
     await db.refresh(new_job)
 
-    # TODO: Worker 구현 후 Celery 태스크 호출
-    # from app.worker.tasks.analysis import run_analysis_pipeline
-    # task = run_analysis_pipeline.delay(str(new_job.job_id), request.corp_id)
-    # new_job.celery_task_id = task.id
+    # Celery 태스크 호출
+    try:
+        from app.worker.tasks.analysis import run_analysis_pipeline
+        task = run_analysis_pipeline.delay(str(new_job.job_id), request.corp_id)
+        # Task ID는 로깅용 (Celery 결과 추적에 사용)
+        print(f"Celery task dispatched: task_id={task.id}, job_id={new_job.job_id}")
+    except Exception as e:
+        # Redis 연결 실패 등의 경우 Job은 QUEUED 상태로 유지
+        print(f"Celery task dispatch failed (job will stay QUEUED): {e}")
 
     return JobTriggerResponse(
         job_id=str(new_job.job_id),
