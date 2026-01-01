@@ -635,12 +635,44 @@ rkyc/
 postgresql://postgres.[project-ref]:[password]@aws-1-ap-northeast-1.pooler.supabase.com:6543/postgres?sslmode=require
 ```
 
+### 세션 6-2 (2026-01-02) - Worker 로컬 테스트 및 Railway 배포 ✅
+**목표**: Worker 파이프라인 로컬 테스트 및 Railway 배포
+
+**발견 사항**: Worker가 이미 완전히 구현되어 있음!
+- `backend/app/worker/` 디렉토리에 18개 Python 파일
+- 8단계 파이프라인 모두 구현됨
+- LLM Fallback 체인 (Claude → GPT-4o) 구현됨
+
+**로컬 테스트 결과**:
+| 항목 | 상태 | 비고 |
+|------|------|------|
+| Redis | ✅ | Docker로 실행 |
+| Celery Worker | ✅ | 태스크 등록 완료 |
+| Job 트리거 | ✅ | QUEUED → RUNNING → DONE |
+| 8단계 파이프라인 | ✅ | 22.7초 완료 |
+| Fallback 체인 | ✅ | Claude 실패 → GPT-4o 성공 |
+
+**파이프라인 실행 로그**:
+```
+SNAPSHOT → DOC_INGEST → EXTERNAL → CONTEXT →
+SIGNAL → VALIDATION → INDEX → INSIGHT → DONE
+```
+
+**Railway 배포**:
+- Redis 애드온 추가 ✅
+- Worker 서비스 생성 ✅
+- 환경변수 설정 ✅
+- 배포 확인 → 다음 세션에서 검증 예정
+
+**수정된 파일**:
+- `backend/.env.example` - DATABASE_URL Transaction Pooler로 수정, API 키 플레이스홀더
+
 ## 다음 세션 작업 (세션 7)
 
-### Phase 1: Worker 기초
-1. Celery + Redis 설정
-2. LLM API 키 설정 (Anthropic, OpenAI 등)
-3. 분석 파이프라인 구현
+### Worker Production 검증
+1. Railway Worker 로그 확인
+2. Production Job 트리거 테스트
+3. Signal 생성 확인
 
 ### 참고 사항
 - **인증은 PRD 2.3에 따라 대회 범위 제외** - 구현하지 않음
@@ -649,6 +681,7 @@ postgresql://postgres.[project-ref]:[password]@aws-1-ap-northeast-1.pooler.supab
 - Guardrails 규칙 (금지 표현, evidence 필수) 적용
 - Dashboard에서는 rkyc_signal_index 사용 (조인 금지)
 - **Backend 로컬 실행**: `cd backend && uvicorn app.main:app --reload`
+- **Worker 로컬 실행**: `cd backend && celery -A app.worker.celery_app worker --loglevel=info --pool=solo`
 
 ---
-*Last Updated: 2026-01-02 (세션 6 완료 - Railway 배포 오류 수정)*
+*Last Updated: 2026-01-02 (세션 6-2 완료 - Worker 로컬 테스트 성공, Railway 배포)*
