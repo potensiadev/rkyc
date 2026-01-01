@@ -20,6 +20,10 @@
 - [x] **E2E 테스트 검증 (Playwright)** ✅ 세션 5-2 완료
 - [x] **코드 리뷰 버그 수정 (P0/P1)** ✅ 세션 5-3 완료
 - [x] **Internal Snapshot API** ✅ 세션 5-3 완료
+- [x] **Railway 배포 오류 수정** ✅ 세션 6 완료
+  - asyncpg SSL 연결 수정
+  - startup DB 연결 테스트 제거
+  - DATABASE_URL Transaction Pooler로 변경
 
 ### 구현 대기
 - [ ] Worker (Celery + Redis + LLM)

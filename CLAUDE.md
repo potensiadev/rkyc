@@ -587,7 +587,55 @@ rkyc/
 - `POST /jobs/analyze/run` (잘못된 corp_id) → ✅ 404 에러
 - `POST /jobs/analyze/run` (정상 corp_id) → ✅ Job 생성
 
-## 다음 세션 작업 (세션 6)
+### 세션 6 (2026-01-02) - Railway 배포 오류 수정 ✅
+**목표**: Railway 배포 시 발생하는 DB 연결 오류 수정
+
+**발생한 오류들**:
+1. `TypeError: connect() got an unexpected keyword argument 'sslmode'`
+2. `OSError: [Errno 101] Network is unreachable`
+
+**원인 분석**:
+| 오류 | 원인 |
+|------|------|
+| sslmode 에러 | asyncpg 드라이버가 URL의 `?sslmode=require` 파라미터 미지원 |
+| Network unreachable | Direct 연결(`db.xxx.supabase.co`)이 IPv6 사용, Railway는 IPv4만 지원 |
+| 구버전 배포 | Railway 캐시로 인한 구버전 코드 실행 |
+
+**해결 방법**:
+
+1. **asyncpg SSL 연결 수정** (`backend/app/core/database.py`)
+   - DATABASE_URL에서 `sslmode` 파라미터 파싱 후 제거
+   - `ssl.SSLContext` 생성하여 `connect_args["ssl"]`로 전달
+   ```python
+   ssl_context = ssl.create_default_context()
+   ssl_context.check_hostname = False
+   ssl_context.verify_mode = ssl.CERT_NONE
+   connect_args["ssl"] = ssl_context
+   ```
+
+2. **startup DB 연결 테스트 제거** (`init_db()`)
+   - `engine.begin()` 호출 제거
+   - 연결은 첫 API 요청 시 lazy하게 생성
+
+3. **DATABASE_URL 수정** (Railway 환경변수)
+   - 변경 전: `postgresql://postgres:xxx@db.xxx.supabase.co:6543/postgres`
+   - 변경 후: `postgresql://postgres.xxx:xxx@aws-1-ap-northeast-1.pooler.supabase.com:6543/postgres`
+   - **Transaction Pooler** 사용 (IPv4 지원)
+
+**수정된 파일**:
+- `backend/app/core/database.py` - SSL 처리 및 init_db() 수정
+
+**테스트 결과**:
+- `GET /health` → ✅ `{"status":"healthy"}`
+- `GET /api/v1/corporations` → ✅ 6개 기업 반환
+- Frontend (Playwright) → ✅ Signal Inbox 정상 로드, 12개 시그널 표시
+
+**DATABASE_URL 형식 (Railway)**:
+```
+postgresql://postgres.[project-ref]:[password]@aws-1-ap-northeast-1.pooler.supabase.com:6543/postgres?sslmode=require
+```
+
+## 다음 세션 작업 (세션 7)
 
 ### Phase 1: Worker 기초
 1. Celery + Redis 설정
@@ -603,4 +651,4 @@ rkyc/
 - **Backend 로컬 실행**: `cd backend && uvicorn app.main:app --reload`
 
 ---
-*Last Updated: 2026-01-01 (세션 5-3 완료 - 코드 리뷰 P0/P1 버그 수정)*
+*Last Updated: 2026-01-02 (세션 6 완료 - Railway 배포 오류 수정)*
