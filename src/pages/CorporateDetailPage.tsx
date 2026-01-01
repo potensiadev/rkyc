@@ -31,7 +31,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useState } from "react";
 import ReportPreviewModal from "@/components/reports/ReportPreviewModal";
-import { useCorporation, useSignals } from "@/hooks/useApi";
+import { useCorporation, useSignals, useCorporationSnapshot } from "@/hooks/useApi";
 
 export default function CorporateDetailPage() {
   const { corporateId } = useParams();
@@ -41,6 +41,7 @@ export default function CorporateDetailPage() {
   // API 훅 사용
   const { data: apiCorporation, isLoading: isLoadingCorp } = useCorporation(corporateId || "");
   const { data: apiSignals, isLoading: isLoadingSignals } = useSignals({ corp_id: corporateId });
+  const { data: snapshot, isLoading: isLoadingSnapshot } = useCorporationSnapshot(corporateId || "");
 
   // Mock 데이터 fallback (API에 없는 상세 정보용)
   const mockCorporation = getCorporationById(corporateId || "1");
@@ -200,8 +201,8 @@ export default function CorporateDetailPage() {
 
           <Separator />
 
-          {/* Bank Relationship */}
-          {corporation.bankRelationship.hasRelationship && (
+          {/* Bank Relationship - Snapshot API 데이터 사용 */}
+          {(snapshot?.snapshot_json?.credit?.has_loan || corporation.bankRelationship.hasRelationship) && (
             <section>
               <h2 className="text-base font-semibold text-foreground mb-3 pb-2 border-b border-border flex items-center gap-2">
                 <Landmark className="w-4 h-4" />
@@ -214,13 +215,62 @@ export default function CorporateDetailPage() {
                 </div>
                 <div className="bg-muted/50 rounded p-3">
                   <div className="text-muted-foreground text-xs mb-1">여신 잔액</div>
-                  <div className="font-medium">{corporation.bankRelationship.loanBalance || "-"}</div>
+                  <div className="font-medium">
+                    {snapshot?.snapshot_json?.credit?.loan_summary?.total_exposure_krw
+                      ? `${(snapshot.snapshot_json.credit.loan_summary.total_exposure_krw / 100000000).toFixed(0)}억원`
+                      : corporation.bankRelationship.loanBalance || "-"}
+                  </div>
                 </div>
                 <div className="bg-muted/50 rounded p-3">
                   <div className="text-muted-foreground text-xs mb-1">외환 거래</div>
                   <div className="font-medium">{corporation.bankRelationship.fxTransactions || "-"}</div>
                 </div>
               </div>
+              {/* 담보 정보 (Snapshot API) */}
+              {snapshot?.snapshot_json?.collateral?.has_collateral && (
+                <div className="mt-3 p-3 bg-muted/30 rounded">
+                  <div className="text-xs text-muted-foreground mb-2">담보 현황</div>
+                  <div className="flex items-center gap-4 text-sm">
+                    <span className="font-medium">
+                      {snapshot.snapshot_json.collateral.total_collateral_value_krw
+                        ? `${(snapshot.snapshot_json.collateral.total_collateral_value_krw / 100000000).toFixed(0)}억원`
+                        : "-"}
+                    </span>
+                    <div className="flex gap-1">
+                      {snapshot.snapshot_json.collateral.collateral_types?.map((type, i) => (
+                        <span key={i} className="text-xs bg-muted px-2 py-0.5 rounded">{type}</span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+              {/* KYC 상태 (Snapshot API) */}
+              {snapshot?.snapshot_json?.corp?.kyc_status && (
+                <div className="mt-3 p-3 bg-muted/30 rounded">
+                  <div className="text-xs text-muted-foreground mb-2">KYC 상태</div>
+                  <div className="flex items-center gap-4 text-sm">
+                    <span className={`px-2 py-0.5 rounded text-xs ${
+                      snapshot.snapshot_json.corp.kyc_status.is_kyc_completed
+                        ? 'bg-green-100 text-green-700'
+                        : 'bg-yellow-100 text-yellow-700'
+                    }`}>
+                      {snapshot.snapshot_json.corp.kyc_status.is_kyc_completed ? 'KYC 완료' : 'KYC 미완료'}
+                    </span>
+                    <span className={`px-2 py-0.5 rounded text-xs ${
+                      snapshot.snapshot_json.corp.kyc_status.internal_risk_grade === 'HIGH'
+                        ? 'bg-red-100 text-red-700'
+                        : snapshot.snapshot_json.corp.kyc_status.internal_risk_grade === 'MED'
+                        ? 'bg-yellow-100 text-yellow-700'
+                        : 'bg-green-100 text-green-700'
+                    }`}>
+                      내부등급: {snapshot.snapshot_json.corp.kyc_status.internal_risk_grade}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      최종 갱신: {snapshot.snapshot_json.corp.kyc_status.last_kyc_updated}
+                    </span>
+                  </div>
+                </div>
+              )}
               <div className="flex gap-2 mt-3">
                 {corporation.bankRelationship.retirementPension && (
                   <span className="text-xs bg-muted px-2 py-1 rounded">퇴직연금</span>
@@ -230,6 +280,9 @@ export default function CorporateDetailPage() {
                 )}
                 {corporation.bankRelationship.corporateCard && (
                   <span className="text-xs bg-muted px-2 py-1 rounded">법인카드</span>
+                )}
+                {snapshot?.snapshot_json?.credit?.loan_summary?.overdue_flag && (
+                  <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded">연체 발생</span>
                 )}
               </div>
             </section>

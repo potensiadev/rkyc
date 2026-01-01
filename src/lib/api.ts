@@ -224,3 +224,58 @@ export async function dismissSignal(
 export async function getDashboardSummary(): Promise<ApiDashboardSummary> {
   return fetchApi<ApiDashboardSummary>('/api/v1/dashboard/summary');
 }
+
+// ============================================================
+// Session 5-3: Corporation Snapshot API
+// ============================================================
+
+// Snapshot 응답 타입 (PRD 7장 스키마)
+export interface ApiSnapshot {
+  snapshot_id: string;
+  corp_id: string;
+  snapshot_version: number;
+  snapshot_json: SnapshotJson;
+  snapshot_hash: string;
+  created_at: string;
+}
+
+// PRD 7장 Internal Snapshot JSON 스키마
+export interface SnapshotJson {
+  schema_version?: string;
+  corp: {
+    corp_id: string;
+    corp_name: string;
+    corp_reg_no?: string;
+    biz_no?: string;
+    industry_code?: string;
+    ceo_name?: string;
+    kyc_status?: {
+      is_kyc_completed: boolean;
+      last_kyc_updated: string;
+      internal_risk_grade: 'HIGH' | 'MED' | 'LOW';
+    };
+  };
+  credit?: {
+    has_loan: boolean;
+    loan_summary?: {
+      total_exposure_krw: number;
+      overdue_flag: boolean;
+      risk_grade_internal: string;
+    };
+  };
+  collateral?: {
+    has_collateral: boolean;
+    collateral_types?: string[];
+    total_collateral_value_krw?: number;
+  };
+  derived_hints?: {
+    potential_signals?: string[];
+    risk_factors?: string[];
+    opportunity_factors?: string[];
+  };
+}
+
+// Corporation Snapshot 조회
+export async function getCorporationSnapshot(corpId: string): Promise<ApiSnapshot> {
+  return fetchApi<ApiSnapshot>(`/api/v1/corporations/${corpId}/snapshot`);
+}

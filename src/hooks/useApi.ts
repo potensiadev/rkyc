@@ -13,6 +13,7 @@ import {
   updateSignalStatus,
   dismissSignal,
   getDashboardSummary,
+  getCorporationSnapshot,
   triggerAnalyzeJob,
   getJobStatus,
   ApiCorporation,
@@ -20,6 +21,8 @@ import {
   ApiSignalDetail,
   ApiEvidence,
   ApiDashboardSummary,
+  ApiSnapshot,
+  SnapshotJson,
   GetSignalsParams,
   JobStatusResponse,
   SignalStatusType,
@@ -332,5 +335,19 @@ export function useDashboardSummary() {
   });
 }
 
+// ============================================================
+// Session 5-3: Corporation Snapshot Hook
+// ============================================================
+
+// Corporation Snapshot 조회 훅
+export function useCorporationSnapshot(corpId: string) {
+  return useQuery({
+    queryKey: ['corporation', corpId, 'snapshot'],
+    queryFn: () => getCorporationSnapshot(corpId),
+    enabled: !!corpId,
+    staleTime: 5 * 60 * 1000, // 5분
+  });
+}
+
 // API 타입 re-export (페이지에서 직접 사용)
-export type { ApiSignalDetail, ApiEvidence, ApiDashboardSummary, SignalStatusType };
+export type { ApiSignalDetail, ApiEvidence, ApiDashboardSummary, ApiSnapshot, SnapshotJson, SignalStatusType };
