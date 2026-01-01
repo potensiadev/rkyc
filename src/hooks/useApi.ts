@@ -161,7 +161,10 @@ export function useCorporation(corpId: string) {
     queryKey: ['corporation', corpId],
     queryFn: async () => {
       if (isDemoMode) {
-        return CORPORATIONS.find(c => c.id === corpId) || null;
+        // Mock ID ("1", "2") 또는 API corp_id ("8001-3719240") 모두 지원
+        const corp = CORPORATIONS.find(c => c.id === corpId);
+        if (corp) return corp;
+        // corp_id로 매칭 실패시 null 반환하지 않고 API 호출
       }
       const response = await getCorporation(corpId);
       return mapApiCorporationToFrontend(response);
