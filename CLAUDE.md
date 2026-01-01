@@ -140,6 +140,7 @@ SNAPSHOT → DOC_INGEST → EXTERNAL → CONTEXT → SIGNAL → VALIDATION → I
 ### 기업 관리
 - `GET /api/v1/corporations` - 기업 목록
 - `GET /api/v1/corporations/{corp_id}` - 기업 상세
+- `GET /api/v1/corporations/{corp_id}/snapshot` - 최신 Snapshot 조회 ✅
 - `POST /api/v1/corporations` - 기업 등록
 - `PATCH /api/v1/corporations/{corp_id}` - 기업 수정
 
@@ -317,10 +318,12 @@ rkyc/
     │   │   └── dashboard.py # Dashboard 통계 API ✅
     │   ├── models/
     │   │   ├── job.py       # Job 모델 ✅
-    │   │   └── signal.py    # Signal/Evidence 모델 ✅
+    │   │   ├── signal.py    # Signal/Evidence 모델 ✅
+    │   │   └── snapshot.py  # InternalSnapshot 모델 ✅
     │   ├── schemas/
     │   │   ├── job.py       # Job 스키마 ✅
-    │   │   └── signal.py    # Signal 상세/Evidence 스키마 ✅
+    │   │   ├── signal.py    # Signal 상세/Evidence 스키마 ✅
+    │   │   └── snapshot.py  # Snapshot 응답 스키마 ✅
     │   ├── services/
     │   └── worker/
     └── sql/
@@ -549,6 +552,41 @@ rkyc/
 | SQL syntax error near ":" | asyncpg에서 `::` 연산자 파싱 오류 | `CAST()` 함수로 변경 |
 | Railway 구버전 배포 | auto-deploy 미작동 | empty commit으로 재배포 트리거 |
 
+### 세션 5-3 (2026-01-01) - 코드 리뷰 버그 수정 ✅
+**목표**: 코드 리뷰에서 발견된 P0/P1 이슈 수정
+
+**수정된 이슈**:
+
+| 우선순위 | 이슈 | 상태 |
+|---------|------|------|
+| 🔴 P0 | Signal 상태 양쪽 테이블 동기화 (rkyc_signal + rkyc_signal_index) | ✅ 완료 |
+| 🔴 P0 | Job corp_id 유효성 검증 추가 | ✅ 완료 |
+| 🟠 P1 | Internal Snapshot API 구현 | ✅ 완료 |
+| 🟡 P2 | Dashboard N+1 쿼리 최적화 (9개→1개 쿼리) | ✅ 완료 |
+
+**완료 항목**:
+1. Signal 상태 업데이트 시 양쪽 테이블 동기화
+   - `signals.py`: update_signal_status, dismiss_signal 수정
+   - rkyc_signal + rkyc_signal_index 모두 업데이트
+2. Job 생성 시 corp_id 유효성 검증
+   - `jobs.py`: Corporation 존재 여부 확인
+   - 존재하지 않으면 404 에러 반환
+3. Internal Snapshot API 구현
+   - `GET /api/v1/corporations/{corp_id}/snapshot`
+   - `models/snapshot.py`, `schemas/snapshot.py` 신규 생성
+4. Dashboard 쿼리 최적화
+   - 단일 쿼리로 모든 통계 집계 (CASE WHEN 활용)
+
+**신규 파일**:
+- `backend/app/models/snapshot.py` - InternalSnapshot, InternalSnapshotLatest 모델
+- `backend/app/schemas/snapshot.py` - SnapshotResponse 스키마
+
+**API 테스트 결과**:
+- `GET /corporations/{id}/snapshot` → ✅ Snapshot JSON 정상 반환
+- `GET /dashboard/summary` → ✅ 단일 쿼리 (29 시그널 집계)
+- `POST /jobs/analyze/run` (잘못된 corp_id) → ✅ 404 에러
+- `POST /jobs/analyze/run` (정상 corp_id) → ✅ Job 생성
+
 ## 다음 세션 작업 (세션 6)
 
 ### Phase 1: Worker 기초
@@ -565,4 +603,4 @@ rkyc/
 - **Backend 로컬 실행**: `cd backend && uvicorn app.main:app --reload`
 
 ---
-*Last Updated: 2026-01-01 (세션 5-2 완료 - API 배포 및 E2E 테스트 검증)*
+*Last Updated: 2026-01-01 (세션 5-3 완료 - 코드 리뷰 P0/P1 버그 수정)*
