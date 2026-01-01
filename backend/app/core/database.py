@@ -102,12 +102,16 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def init_db():
-    """Initialize database (create tables if needed)"""
-    async with engine.begin() as conn:
-        # Note: For Supabase, we manage schema via SQL files
-        # This is here for future migrations if needed
-        # await conn.run_sync(Base.metadata.create_all)
-        pass
+    """
+    Initialize database.
+
+    Note: For Supabase, we manage schema via SQL files (schema_v2.sql).
+    No startup connection test is performed - connections are created
+    lazily on first request. This avoids startup failures due to
+    transient network issues.
+    """
+    # No-op: Schema managed externally, connections are lazy
+    pass
 
 
 async def close_db():
