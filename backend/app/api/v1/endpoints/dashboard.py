@@ -9,7 +9,7 @@ Endpoints:
 from datetime import datetime
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, case, literal_column
 from app.core.database import get_db
 from app.models.signal import (
     SignalIndex,
@@ -24,71 +24,54 @@ router = APIRouter()
 
 @router.get("/summary", response_model=DashboardSummaryResponse)
 async def get_dashboard_summary(db: AsyncSession = Depends(get_db)):
-    """Dashboard 요약 통계"""
+    """
+    Dashboard 요약 통계
 
-    # 전체 카운트
-    total_query = select(func.count()).select_from(SignalIndex)
-    total = (await db.execute(total_query)).scalar_one()
+    최적화: 단일 쿼리로 모든 통계를 집계 (N+1 문제 해결)
+    """
 
-    # NEW 상태 카운트 (NULL도 NEW로 취급)
-    new_query = select(func.count()).select_from(SignalIndex).where(
-        (SignalIndex.signal_status == SignalStatus.NEW)
-        | (SignalIndex.signal_status.is_(None))
-    )
-    new_count = (await db.execute(new_query)).scalar_one() or 0
+    # 단일 쿼리로 모든 통계 집계
+    stats_query = select(
+        func.count().label("total"),
+        # Impact Direction 카운트
+        func.sum(case((SignalIndex.impact_direction == ImpactDirection.RISK, 1), else_=0)).label("risk"),
+        func.sum(case((SignalIndex.impact_direction == ImpactDirection.OPPORTUNITY, 1), else_=0)).label("opportunity"),
+        func.sum(case((SignalIndex.impact_direction == ImpactDirection.NEUTRAL, 1), else_=0)).label("neutral"),
+        # Signal Type 카운트
+        func.sum(case((SignalIndex.signal_type == SignalType.DIRECT, 1), else_=0)).label("type_direct"),
+        func.sum(case((SignalIndex.signal_type == SignalType.INDUSTRY, 1), else_=0)).label("type_industry"),
+        func.sum(case((SignalIndex.signal_type == SignalType.ENVIRONMENT, 1), else_=0)).label("type_environment"),
+        # Signal Status 카운트 (NULL은 NEW로 집계)
+        func.sum(case(
+            (SignalIndex.signal_status == SignalStatus.NEW, 1),
+            (SignalIndex.signal_status.is_(None), 1),
+            else_=0
+        )).label("status_new"),
+        func.sum(case((SignalIndex.signal_status == SignalStatus.REVIEWED, 1), else_=0)).label("status_reviewed"),
+        func.sum(case((SignalIndex.signal_status == SignalStatus.DISMISSED, 1), else_=0)).label("status_dismissed"),
+    ).select_from(SignalIndex)
 
-    # RISK 카운트
-    risk_query = (
-        select(func.count())
-        .select_from(SignalIndex)
-        .where(SignalIndex.impact_direction == ImpactDirection.RISK)
-    )
-    risk_count = (await db.execute(risk_query)).scalar_one()
+    result = await db.execute(stats_query)
+    row = result.one()
 
-    # OPPORTUNITY 카운트
-    opp_query = (
-        select(func.count())
-        .select_from(SignalIndex)
-        .where(SignalIndex.impact_direction == ImpactDirection.OPPORTUNITY)
-    )
-    opp_count = (await db.execute(opp_query)).scalar_one()
+    # 결과 구성
+    type_counts = {
+        SignalType.DIRECT.value: row.type_direct or 0,
+        SignalType.INDUSTRY.value: row.type_industry or 0,
+        SignalType.ENVIRONMENT.value: row.type_environment or 0,
+    }
 
-    # Signal Type별 카운트
-    type_counts = {}
-    for signal_type in SignalType:
-        type_query = (
-            select(func.count())
-            .select_from(SignalIndex)
-            .where(SignalIndex.signal_type == signal_type)
-        )
-        type_counts[signal_type.value] = (await db.execute(type_query)).scalar_one()
-
-    # Status별 카운트 (NULL은 NEW로 집계)
-    status_counts = {}
-    for status in SignalStatus:
-        if status == SignalStatus.NEW:
-            # NEW와 NULL 모두 집계
-            status_query = (
-                select(func.count())
-                .select_from(SignalIndex)
-                .where(
-                    (SignalIndex.signal_status == status)
-                    | (SignalIndex.signal_status.is_(None))
-                )
-            )
-        else:
-            status_query = (
-                select(func.count())
-                .select_from(SignalIndex)
-                .where(SignalIndex.signal_status == status)
-            )
-        status_counts[status.value] = (await db.execute(status_query)).scalar_one()
+    status_counts = {
+        SignalStatus.NEW.value: row.status_new or 0,
+        SignalStatus.REVIEWED.value: row.status_reviewed or 0,
+        SignalStatus.DISMISSED.value: row.status_dismissed or 0,
+    }
 
     return DashboardSummaryResponse(
-        total_signals=total,
-        new_signals=new_count,
-        risk_signals=risk_count,
-        opportunity_signals=opp_count,
+        total_signals=row.total or 0,
+        new_signals=row.status_new or 0,
+        risk_signals=row.risk or 0,
+        opportunity_signals=row.opportunity or 0,
         by_type=type_counts,
         by_status=status_counts,
         generated_at=datetime.utcnow(),

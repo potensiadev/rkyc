@@ -185,7 +185,7 @@ async def update_signal_status(
     now = datetime.utcnow()
     status_value = status_update.status.value  # "NEW", "REVIEWED", "DISMISSED"
 
-    # rkyc_signal_index 업데이트 (Dashboard용)
+    # 시그널 존재 확인
     index_query = select(SignalIndex).where(SignalIndex.signal_id == signal_id)
     index_result = await db.execute(index_query)
     signal_index = index_result.scalar_one_or_none()
@@ -193,7 +193,21 @@ async def update_signal_status(
     if not signal_index:
         raise HTTPException(status_code=404, detail="Signal not found")
 
-    # Raw SQL로 업데이트 (CAST 함수 사용)
+    params = {"status": status_value, "now": now, "signal_id": str(signal_id)}
+
+    # 1. rkyc_signal 원본 테이블 업데이트
+    await db.execute(
+        text("""
+            UPDATE rkyc_signal
+            SET signal_status = CAST(:status AS signal_status_enum),
+                reviewed_at = CASE WHEN :status = 'REVIEWED' THEN :now ELSE reviewed_at END,
+                updated_at = :now
+            WHERE signal_id = CAST(:signal_id AS uuid)
+        """),
+        params
+    )
+
+    # 2. rkyc_signal_index 인덱스 테이블 업데이트 (Dashboard용)
     await db.execute(
         text("""
             UPDATE rkyc_signal_index
@@ -202,7 +216,7 @@ async def update_signal_status(
                 last_updated_at = :now
             WHERE signal_id = CAST(:signal_id AS uuid)
         """),
-        {"status": status_value, "now": now, "signal_id": str(signal_id)}
+        params
     )
 
     await db.commit()
@@ -228,7 +242,22 @@ async def dismiss_signal(
     if not signal_index:
         raise HTTPException(status_code=404, detail="Signal not found")
 
-    # Raw SQL로 업데이트 (CAST 함수 사용)
+    params = {"now": now, "reason": dismiss_request.reason, "signal_id": str(signal_id)}
+
+    # 1. rkyc_signal 원본 테이블 업데이트
+    await db.execute(
+        text("""
+            UPDATE rkyc_signal
+            SET signal_status = CAST('DISMISSED' AS signal_status_enum),
+                dismissed_at = :now,
+                dismiss_reason = :reason,
+                updated_at = :now
+            WHERE signal_id = CAST(:signal_id AS uuid)
+        """),
+        params
+    )
+
+    # 2. rkyc_signal_index 인덱스 테이블 업데이트 (Dashboard용)
     await db.execute(
         text("""
             UPDATE rkyc_signal_index
@@ -238,7 +267,7 @@ async def dismiss_signal(
                 last_updated_at = :now
             WHERE signal_id = CAST(:signal_id AS uuid)
         """),
-        {"now": now, "reason": dismiss_request.reason, "signal_id": str(signal_id)}
+        params
     )
 
     await db.commit()

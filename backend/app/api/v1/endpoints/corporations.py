@@ -3,10 +3,11 @@ rKYC Corporations API Endpoints
 CRUD operations for corporations (PRD 14.1.1)
 
 Endpoints:
-- GET    /corporations           - 기업 목록 (페이지네이션, 필터)
-- GET    /corporations/{corp_id} - 기업 상세
-- POST   /corporations           - 기업 등록
-- PATCH  /corporations/{corp_id} - 기업 수정
+- GET    /corporations                       - 기업 목록 (페이지네이션, 필터)
+- GET    /corporations/{corp_id}             - 기업 상세
+- GET    /corporations/{corp_id}/snapshot    - 최신 Snapshot 조회
+- POST   /corporations                       - 기업 등록
+- PATCH  /corporations/{corp_id}             - 기업 수정
 """
 
 from typing import Optional
@@ -15,12 +16,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from app.core.database import get_db
 from app.models.corporation import Corporation
+from app.models.snapshot import InternalSnapshot, InternalSnapshotLatest
 from app.schemas.corporation import (
     CorporationCreate,
     CorporationUpdate,
     CorporationResponse,
     CorporationListResponse,
 )
+from app.schemas.snapshot import SnapshotResponse
 
 router = APIRouter()
 
@@ -72,6 +75,42 @@ async def get_corporation(
         raise HTTPException(status_code=404, detail="Corporation not found")
 
     return corporation
+
+
+@router.get("/{corp_id}/snapshot", response_model=SnapshotResponse)
+async def get_corporation_snapshot(
+    corp_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """기업 최신 Snapshot 조회 (PRD 14.2)"""
+
+    # 기업 존재 확인
+    corp_query = select(Corporation).where(Corporation.corp_id == corp_id)
+    corp_result = await db.execute(corp_query)
+    if not corp_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Corporation not found")
+
+    # 최신 Snapshot 포인터 조회
+    latest_query = select(InternalSnapshotLatest).where(
+        InternalSnapshotLatest.corp_id == corp_id
+    )
+    latest_result = await db.execute(latest_query)
+    latest = latest_result.scalar_one_or_none()
+
+    if not latest:
+        raise HTTPException(status_code=404, detail="No snapshot found for this corporation")
+
+    # Snapshot 상세 조회
+    snapshot_query = select(InternalSnapshot).where(
+        InternalSnapshot.snapshot_id == latest.snapshot_id
+    )
+    snapshot_result = await db.execute(snapshot_query)
+    snapshot = snapshot_result.scalar_one_or_none()
+
+    if not snapshot:
+        raise HTTPException(status_code=404, detail="Snapshot data not found")
+
+    return snapshot
 
 
 @router.post("", response_model=CorporationResponse, status_code=201)

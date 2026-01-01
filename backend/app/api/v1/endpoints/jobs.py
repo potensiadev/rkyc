@@ -11,6 +11,7 @@ from typing import Optional
 
 from app.core.database import get_db
 from app.models.job import Job, JobType, JobStatus
+from app.models.corporation import Corporation
 from app.schemas.job import (
     JobTriggerRequest,
     JobTriggerResponse,
@@ -59,8 +60,14 @@ async def trigger_analyze_job(
     # if x_demo_token:
     #     print(f"Demo token received: {x_demo_token[:8]}...")
 
-    # 기업 존재 확인 (선택적)
-    # TODO: corp_id 유효성 검증
+    # 기업 존재 확인
+    corp_query = select(Corporation).where(Corporation.corp_id == request.corp_id)
+    corp_result = await db.execute(corp_query)
+    if not corp_result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=404,
+            detail=f"Corporation not found: {request.corp_id}"
+        )
 
     # Job 생성
     new_job = Job(
