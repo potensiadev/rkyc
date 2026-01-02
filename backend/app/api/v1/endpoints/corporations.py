@@ -15,6 +15,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from app.core.database import get_db
+
+
 from app.models.corporation import Corporation
 from app.models.snapshot import InternalSnapshot, InternalSnapshotLatest
 from app.schemas.corporation import (
@@ -26,6 +28,11 @@ from app.schemas.corporation import (
 from app.schemas.snapshot import SnapshotResponse
 
 router = APIRouter()
+
+
+def _escape_like_pattern(search: str) -> str:
+    """Escape LIKE pattern special characters (%, _) to prevent unintended matching"""
+    return search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 @router.get("", response_model=CorporationListResponse)
@@ -45,7 +52,8 @@ async def list_corporations(
         query = query.where(Corporation.industry_code == industry_code)
 
     if search:
-        query = query.where(Corporation.corp_name.ilike(f"%{search}%"))
+        escaped_search = _escape_like_pattern(search)
+        query = query.where(Corporation.corp_name.ilike(f"%{escaped_search}%", escape="\\"))
 
     # Count total
     count_query = select(func.count()).select_from(query.subquery())

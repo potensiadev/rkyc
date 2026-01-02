@@ -234,8 +234,29 @@ async def get_corporation_facts(
 # Document Upload Endpoints
 # =============================================================================
 
+import re
+
+# Valid corp_id pattern: alphanumeric with hyphens (e.g., "8001-3719240")
+VALID_CORP_ID_PATTERN = re.compile(r'^[\w-]+$')
+
+
+def _validate_corp_id(corp_id: str) -> None:
+    """Validate corp_id to prevent path traversal attacks"""
+    if not VALID_CORP_ID_PATTERN.match(corp_id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid corp_id format. Only alphanumeric characters and hyphens allowed.",
+        )
+    if ".." in corp_id or "/" in corp_id or "\\" in corp_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid corp_id: path traversal characters not allowed.",
+        )
+
+
 def _ensure_storage_directory(corp_id: str) -> Path:
     """Ensure storage directory exists for corporation"""
+    _validate_corp_id(corp_id)
     corp_dir = DOCUMENT_STORAGE_PATH / corp_id
     corp_dir.mkdir(parents=True, exist_ok=True)
     return corp_dir

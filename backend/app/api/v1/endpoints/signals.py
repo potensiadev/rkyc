@@ -201,7 +201,7 @@ async def update_signal_status(
             UPDATE rkyc_signal
             SET signal_status = CAST(:status AS signal_status_enum),
                 reviewed_at = CASE WHEN :status = 'REVIEWED' THEN :now ELSE reviewed_at END,
-                updated_at = :now
+                last_updated_at = :now
             WHERE signal_id = CAST(:signal_id AS uuid)
         """),
         params
@@ -251,7 +251,7 @@ async def dismiss_signal(
             SET signal_status = CAST('DISMISSED' AS signal_status_enum),
                 dismissed_at = :now,
                 dismiss_reason = :reason,
-                updated_at = :now
+                last_updated_at = :now
             WHERE signal_id = CAST(:signal_id AS uuid)
         """),
         params

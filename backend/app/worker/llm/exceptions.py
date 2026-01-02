@@ -51,8 +51,12 @@ class InvalidResponseError(LLMError):
         self.raw_response = raw_response
 
 
-class TimeoutError(LLMError):
+class LLMTimeoutError(LLMError):
     """Raised when LLM request times out"""
 
     def __init__(self, message: str = "Request timed out", provider: str = None):
         super().__init__(message, provider)
+
+
+# Backwards compatibility alias (deprecated)
+TimeoutError = LLMTimeoutError
