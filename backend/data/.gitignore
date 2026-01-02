@@ -1,0 +1,3 @@
+# Ignore uploaded documents (they contain sensitive data)
+documents/*
+!documents/.gitkeep

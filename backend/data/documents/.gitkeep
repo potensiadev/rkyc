@@ -1,0 +1,3 @@
+# Document storage directory
+# Files in this directory are stored locally (FILESYS provider)
+# For production, consider cloud storage (S3, GCS, Supabase Storage)

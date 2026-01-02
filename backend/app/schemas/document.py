@@ -157,3 +157,32 @@ class DocumentStatusResponse(BaseModel):
     facts_count: int = 0
     last_ingested_at: Optional[datetime] = None
     error_message: Optional[str] = None
+
+
+# =============================================================================
+# Document Upload Schemas
+# =============================================================================
+
+class DocumentUploadResponse(BaseModel):
+    """Schema for document upload response"""
+    doc_id: UUID
+    corp_id: str
+    doc_type: DocType
+    file_name: str
+    file_size: int
+    storage_path: str
+    ingest_status: IngestStatus
+    message: str
+
+
+class DocumentUploadWithProcessResponse(BaseModel):
+    """Schema for document upload with immediate processing"""
+    doc_id: UUID
+    corp_id: str
+    doc_type: DocType
+    file_name: str
+    ingest_status: IngestStatus
+    facts_extracted: int = 0
+    facts: list[FactResponse] = []
+    processing_time_ms: int = 0
+    message: str
