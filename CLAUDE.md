@@ -735,17 +735,93 @@ backend/app/worker/tasks/analysis.py
 backend/app/api/v1/router.py
 ```
 
+### 세션 7-2 (2026-01-02) - 보안 아키텍처 설계 및 구현 ✅
+**목표**: External/Internal LLM 분리 보안 아키텍처 구현
+
+**배경**: 금융 규제 준수를 위해 내부 민감 데이터와 외부 공개 데이터를 분리 처리하는 2-Track LLM 아키텍처 도입
+
+**완료 항목**:
+
+#### 1. 보안 아키텍처 설계 분석
+- AS-IS: 모든 데이터가 단일 외부 LLM(Claude/GPT-4o)으로 전송
+- TO-BE: External LLM(공개 데이터) + Internal LLM(내부 데이터) 분리
+
+#### 2. External Intel 테이블 스키마
+- `migration_v6_security_architecture.sql` 생성
+- 5개 신규 테이블:
+  - `rkyc_external_news` - 외부 뉴스/이벤트 원본
+  - `rkyc_external_analysis` - External LLM 분석 결과
+  - `rkyc_industry_intel` - 업종별 인텔리전스 집계
+  - `rkyc_policy_tracker` - 정책/규제 변화 추적
+  - `rkyc_llm_audit_log` - LLM 호출 감사 로그
+
+#### 3. Internal LLM 인터페이스
+- `internal_llm.py` - Abstract Base Class + MVP 구현
+- `InternalLLMBase`: Phase 전환 시 구현체만 교체
+- `MVPInternalLLM`: GPT-3.5-turbo / Claude Haiku (저비용)
+- `AzureInternalLLM`: Phase 2용 스텁 (미구현)
+- `OnPremLlamaLLM`: Phase 3용 스텁 (미구현)
+- `get_internal_llm()`: Factory 함수
+
+#### 4. External LLM 서비스
+- `external_llm.py` - 공개 데이터 전용 LLM 서비스
+- `search_external_news()` - Perplexity 뉴스 검색
+- `analyze_news_article()` - 개별 기사 분석
+- `aggregate_industry_intel()` - 업종별 인텔리전스 집계
+- `analyze_policy()` - 정책/규제 분석
+
+#### 5. SQLAlchemy 모델
+- `models/external_intel.py` - 5개 테이블 모델
+- Enum: SourceType, Sentiment, ImpactLevel, PolicyType, LLMType, DataClassification
+
+#### 6. 환경 변수 설정
+- Internal LLM: `INTERNAL_LLM_PROVIDER`, `INTERNAL_LLM_*_KEY`
+- External LLM: `EXTERNAL_LLM_*_KEY` (기본 키와 분리 가능)
+- Phase 2/3: Azure, On-Premise 설정
+
+#### 7. ADR 문서
+- `ADR-008-security-architecture-llm-separation.md`
+- 2-Track 아키텍처 결정 근거
+- Internal LLM 로드맵 (MVP → Pilot → Production)
+
+**신규 파일**:
+```
+backend/sql/migration_v6_security_architecture.sql
+backend/app/worker/llm/internal_llm.py
+backend/app/worker/llm/external_llm.py
+backend/app/models/external_intel.py
+docs/architecture/ADR-008-security-architecture-llm-separation.md
+```
+
+**수정된 파일**:
+```
+backend/app/worker/llm/__init__.py
+backend/app/models/__init__.py
+backend/app/core/config.py
+```
+
+**Internal LLM 로드맵**:
+| Phase | 기간 | 구현 방식 | 모델 |
+|-------|------|----------|------|
+| Phase 1: MVP | 대회 기간 | 외부 API + 인터페이스 추상화 | GPT-3.5, Claude Haiku |
+| Phase 2: Pilot | 대회 후 3~6개월 | Private Cloud | Azure OpenAI, AWS Bedrock |
+| Phase 3: Production | 1년 이후 | On-Premise | Llama 3, Solar |
+
 ## 다음 세션 작업 (세션 8)
 
 ### DB 마이그레이션
-1. `migration_v5_vector.sql` Supabase에 적용
-2. pgvector extension 활성화 확인
-3. 인덱스 생성 확인
+1. `migration_v5_vector.sql` Supabase에 적용 ✅ (세션 7에서 완료)
+2. `migration_v6_security_architecture.sql` Supabase에 적용
 
 ### Railway 배포
-1. Backend 재배포 (Documents API 반영)
-2. Worker 재배포 (DOC_INGEST, Embedding 반영)
+1. Backend 재배포 (Security Architecture 반영)
+2. Worker 재배포 (Internal/External LLM 반영)
 3. E2E 테스트
+
+### 파이프라인 리팩토링 (선택)
+1. 기존 LLMService → InternalLLM/ExternalLLM 전환
+2. External Intelligence 수집 파이프라인 구현
+3. LLM 감사 로그 적재 로직 추가
 
 ### 참고 사항
 - **인증은 PRD 2.3에 따라 대회 범위 제외** - 구현하지 않음
@@ -756,6 +832,7 @@ backend/app/api/v1/router.py
 - **Backend 로컬 실행**: `cd backend && uvicorn app.main:app --reload`
 - **Worker 로컬 실행**: `cd backend && celery -A app.worker.celery_app worker --loglevel=info --pool=solo`
 - **OPENAI_API_KEY 필요**: Embedding 서비스용
+- **Internal/External LLM 분리**: MVP에서는 논리적 분리만 (실제 분리는 Phase 2)
 
 ---
-*Last Updated: 2026-01-02 (세션 7 완료 - AI 파이프라인 고도화)*
+*Last Updated: 2026-01-02 (세션 7-2 완료 - 보안 아키텍처 설계 및 구현)*

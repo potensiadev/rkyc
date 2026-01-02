@@ -48,10 +48,27 @@ class Settings(BaseSettings):
             return self.REDIS_URL.replace("/0", "/1")
         return self.REDIS_URL
 
-    # LLM Providers
+    # LLM Providers (Legacy - used by both External/Internal in MVP)
     ANTHROPIC_API_KEY: str = Field(default="", description="Anthropic API key for Claude")
     OPENAI_API_KEY: str = Field(default="", description="OpenAI API key for GPT-4o fallback")
     PERPLEXITY_API_KEY: str = Field(default="", description="Perplexity API key for external search")
+
+    # Security Architecture: Internal LLM Configuration
+    # INTERNAL_LLM_PROVIDER: mvp_openai (default) | azure_openai | onprem_llama
+    INTERNAL_LLM_PROVIDER: str = Field(default="mvp_openai", description="Internal LLM provider selection")
+    INTERNAL_LLM_OPENAI_KEY: str = Field(default="", description="OpenAI key for Internal LLM (MVP)")
+    INTERNAL_LLM_ANTHROPIC_KEY: str = Field(default="", description="Anthropic key for Internal LLM (MVP backup)")
+    # Phase 2: Azure OpenAI
+    INTERNAL_LLM_AZURE_ENDPOINT: str = Field(default="", description="Azure OpenAI endpoint (Phase 2)")
+    INTERNAL_LLM_AZURE_DEPLOYMENT: str = Field(default="gpt-4", description="Azure deployment name")
+    INTERNAL_LLM_AZURE_API_VERSION: str = Field(default="2024-02-15-preview", description="Azure API version")
+    # Phase 3: On-Premise
+    INTERNAL_LLM_ONPREM_ENDPOINT: str = Field(default="", description="On-premise LLM endpoint (Phase 3)")
+
+    # Security Architecture: External LLM Configuration (optional separate keys)
+    EXTERNAL_LLM_ANTHROPIC_KEY: str = Field(default="", description="Anthropic key for External LLM (optional)")
+    EXTERNAL_LLM_OPENAI_KEY: str = Field(default="", description="OpenAI key for External LLM (optional)")
+    EXTERNAL_LLM_PERPLEXITY_KEY: str = Field(default="", description="Perplexity key for External LLM (optional)")
 
     # CORS (comma-separated string, parsed in main.py)
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000,https://rkyc.vercel.app"
