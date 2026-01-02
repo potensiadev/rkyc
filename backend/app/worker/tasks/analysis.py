@@ -14,6 +14,7 @@ from app.worker.db import get_sync_db
 from app.models.job import Job, JobStatus, ProgressStep
 from app.worker.pipelines import (
     SnapshotPipeline,
+    DocIngestPipeline,
     ContextPipeline,
     ExternalSearchPipeline,
     SignalExtractionPipeline,
@@ -100,6 +101,7 @@ def run_analysis_pipeline(self, job_id: str, corp_id: str):
 
     # Initialize pipelines
     snapshot_pipeline = SnapshotPipeline()
+    doc_ingest_pipeline = DocIngestPipeline()
     external_pipeline = ExternalSearchPipeline()
     context_pipeline = ContextPipeline()
     signal_pipeline = SignalExtractionPipeline()
@@ -125,9 +127,18 @@ def run_analysis_pipeline(self, job_id: str, corp_id: str):
             return {"status": "failed", "error": str(e)}
         update_job_progress(job_id, JobStatus.RUNNING, ProgressStep.SNAPSHOT, 15)
 
-        # Stage 2: DOC_INGEST (skipped - no document processing yet)
+        # Stage 2: DOC_INGEST (Vision LLM document processing)
         update_job_progress(job_id, JobStatus.RUNNING, ProgressStep.DOC_INGEST, 20)
-        doc_data = {}  # Placeholder for document data
+        try:
+            doc_data = doc_ingest_pipeline.execute(corp_id)
+            logger.info(
+                f"DOC_INGEST completed: docs={doc_data.get('documents_processed', 0)}, "
+                f"facts={doc_data.get('facts_extracted', 0)}"
+            )
+        except Exception as e:
+            # DOC_INGEST failure should not stop the pipeline
+            logger.warning(f"DOC_INGEST stage failed (non-fatal): {e}")
+            doc_data = {"documents_processed": 0, "facts_extracted": 0, "doc_summaries": {}}
         update_job_progress(job_id, JobStatus.RUNNING, ProgressStep.DOC_INGEST, 25)
 
         # Stage 3: EXTERNAL (Perplexity search if API key configured)

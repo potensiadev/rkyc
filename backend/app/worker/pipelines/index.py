@@ -1,6 +1,6 @@
 """
 Index Pipeline Stage
-Stage 7: Save validated signals to database
+Stage 7: Save validated signals to database with embedding vectors
 """
 
 import logging
@@ -8,11 +8,12 @@ from datetime import datetime
 from uuid import uuid4
 from typing import Optional
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.dialects.postgresql import insert
 
 from app.worker.db import get_sync_db
 from app.models.signal import Signal, Evidence, SignalIndex
+from app.worker.llm.embedding import get_embedding_service, EmbeddingError
 
 logger = logging.getLogger(__name__)
 
@@ -24,13 +25,17 @@ class DuplicateSignalError(Exception):
 
 class IndexPipeline:
     """
-    Stage 7: INDEX - Save signals to database
+    Stage 7: INDEX - Save signals to database with embeddings
 
     Creates records in:
     - rkyc_signal: Main signal data
     - rkyc_evidence: Evidence for each signal
     - rkyc_signal_index: Denormalized index for dashboard
+    - rkyc_signal_embedding: Embedding vectors for semantic search
     """
+
+    def __init__(self):
+        self.embedding_service = get_embedding_service()
 
     def execute(self, validated_signals: list[dict], context: dict) -> list[str]:
         """
@@ -54,6 +59,7 @@ class IndexPipeline:
             return []
 
         created_signal_ids = []
+        signals_for_embedding = []
 
         with get_sync_db() as db:
             for signal_data in validated_signals:
@@ -61,6 +67,14 @@ class IndexPipeline:
                     signal_id = self._create_signal(db, signal_data, context)
                     if signal_id:
                         created_signal_ids.append(signal_id)
+                        # Collect for batch embedding
+                        signals_for_embedding.append({
+                            "signal_id": signal_id,
+                            "title": signal_data.get("title", ""),
+                            "summary": signal_data.get("summary", ""),
+                            "signal_type": signal_data.get("signal_type", ""),
+                            "event_type": signal_data.get("event_type", ""),
+                        })
                 except DuplicateSignalError as e:
                     logger.warning(f"Skipping duplicate signal: {e}")
                 except Exception as e:
@@ -69,8 +83,83 @@ class IndexPipeline:
 
             db.commit()
 
+            # Generate and store embeddings (non-blocking)
+            if signals_for_embedding and self.embedding_service.is_available:
+                self._store_embeddings(db, signals_for_embedding)
+                db.commit()
+
         logger.info(f"INDEX stage completed: created {len(created_signal_ids)} signals")
         return created_signal_ids
+
+    def _store_embeddings(self, db, signals: list[dict]) -> int:
+        """
+        Generate and store embeddings for signals.
+
+        Args:
+            db: Database session
+            signals: List of signal dicts with signal_id, title, summary
+
+        Returns:
+            Number of embeddings stored
+        """
+        if not signals:
+            return 0
+
+        logger.info(f"Generating embeddings for {len(signals)} signals")
+
+        try:
+            # Prepare texts for batch embedding
+            texts = []
+            for sig in signals:
+                combined_text = f"""
+Signal Type: {sig.get('signal_type', '')}
+Event Type: {sig.get('event_type', '')}
+Title: {sig.get('title', '')}
+Summary: {sig.get('summary', '')}
+""".strip()
+                texts.append(combined_text)
+
+            # Generate embeddings in batch
+            embeddings = self.embedding_service.embed_batch(texts)
+
+            # Store embeddings
+            stored_count = 0
+            for i, (sig, embedding) in enumerate(zip(signals, embeddings)):
+                if embedding is None:
+                    logger.warning(f"Failed to generate embedding for signal {sig['signal_id']}")
+                    continue
+
+                try:
+                    # Insert into rkyc_signal_embedding
+                    # Using raw SQL for vector type
+                    embedding_str = "[" + ",".join(str(x) for x in embedding) + "]"
+                    stmt = text("""
+                        INSERT INTO rkyc_signal_embedding (embedding_id, signal_id, embedding, model_name)
+                        VALUES (:embedding_id, :signal_id, :embedding::vector, :model_name)
+                        ON CONFLICT (signal_id) DO UPDATE SET
+                            embedding = EXCLUDED.embedding,
+                            model_name = EXCLUDED.model_name
+                    """)
+                    db.execute(stmt, {
+                        "embedding_id": str(uuid4()),
+                        "signal_id": sig["signal_id"],
+                        "embedding": embedding_str,
+                        "model_name": "text-embedding-3-small",
+                    })
+                    stored_count += 1
+                except Exception as e:
+                    logger.error(f"Failed to store embedding for signal {sig['signal_id']}: {e}")
+                    continue
+
+            logger.info(f"Stored {stored_count} embeddings")
+            return stored_count
+
+        except EmbeddingError as e:
+            logger.error(f"Embedding generation failed: {e}")
+            return 0
+        except Exception as e:
+            logger.error(f"Unexpected error storing embeddings: {e}")
+            return 0
 
     def _create_signal(self, db, signal_data: dict, context: dict) -> Optional[str]:
         """

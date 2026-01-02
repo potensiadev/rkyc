@@ -1,5 +1,6 @@
 # Pipeline Steps
 from app.worker.pipelines.snapshot import SnapshotPipeline, NoSnapshotError, NoCorporationError
+from app.worker.pipelines.doc_ingest import DocIngestPipeline, DocumentProcessingError
 from app.worker.pipelines.context import ContextPipeline
 from app.worker.pipelines.external_search import ExternalSearchPipeline
 from app.worker.pipelines.signal_extraction import SignalExtractionPipeline
@@ -12,6 +13,8 @@ __all__ = [
     "SnapshotPipeline",
     "NoSnapshotError",
     "NoCorporationError",
+    "DocIngestPipeline",
+    "DocumentProcessingError",
     "ContextPipeline",
     "ExternalSearchPipeline",
     "SignalExtractionPipeline",

@@ -667,12 +667,85 @@ SIGNAL → VALIDATION → INDEX → INSIGHT → DONE
 **수정된 파일**:
 - `backend/.env.example` - DATABASE_URL Transaction Pooler로 수정, API 키 플레이스홀더
 
-## 다음 세션 작업 (세션 7)
+### 세션 7 (2026-01-02) - AI 파이프라인 고도화 ✅
+**목표**: DOC_INGEST(2단계) 및 INDEX(7단계) 파이프라인에 AI 적극 활용
 
-### Worker Production 검증
-1. Railway Worker 로그 확인
-2. Production Job 트리거 테스트
-3. Signal 생성 확인
+**완료 항목**:
+
+#### Phase 1: DOC_INGEST 파이프라인 구현
+1. **Document 모델/스키마 생성**
+   - `models/document.py` - Document, DocumentPage, Fact 모델
+   - `schemas/document.py` - Pydantic 스키마
+2. **문서 추출 프롬프트 추가** (prompts.py)
+   - 5가지 문서 타입별 Vision LLM 프롬프트
+   - BIZ_REG, REGISTRY, SHAREHOLDERS, AOI, FIN_STATEMENT
+3. **Vision LLM 서비스 확장** (service.py)
+   - `extract_document_facts()` 메서드 추가
+   - `_call_vision_with_fallback()` Vision 전용 fallback 체인
+4. **DocIngestPipeline 클래스 생성**
+   - `pipelines/doc_ingest.py` - 문서 처리 파이프라인
+   - file_hash 기반 변경 감지
+   - rkyc_fact 테이블 저장
+5. **Documents API 엔드포인트**
+   - `GET /documents/corp/{corp_id}/documents` - 문서 목록
+   - `GET /documents/{doc_id}/status` - 처리 상태
+   - `GET /documents/{doc_id}/facts` - 추출된 Facts
+
+#### Phase 2: INDEX 파이프라인 AI 고도화
+1. **EmbeddingService 생성**
+   - `llm/embedding.py` - OpenAI text-embedding-3-small
+   - 단일/배치 임베딩 생성
+   - 1536 차원 벡터
+2. **pgvector 마이그레이션 SQL**
+   - `migration_v5_vector.sql`
+   - rkyc_signal_embedding 테이블
+   - rkyc_case_index에 embedding 컬럼 추가
+   - IVFFlat 인덱스
+3. **IndexPipeline 수정**
+   - Signal 저장 후 Embedding 자동 생성
+   - 배치 처리로 API 호출 최적화
+4. **InsightPipeline 유사 케이스 검색**
+   - `_find_similar_cases()` - pgvector 코사인 유사도 검색
+   - 유사 과거 케이스 참조하여 인사이트 생성
+
+#### Phase 3: 문서 업데이트
+1. **ADR-006**: DOC_INGEST Vision LLM 기반 문서 처리
+2. **ADR-007**: Vector Search - pgvector 기반 유사 케이스 검색
+
+**신규 파일**:
+```
+backend/app/models/document.py
+backend/app/schemas/document.py
+backend/app/worker/pipelines/doc_ingest.py
+backend/app/worker/llm/embedding.py
+backend/app/api/v1/endpoints/documents.py
+backend/sql/migration_v5_vector.sql
+docs/architecture/ADR-006-doc-ingest-vision-llm.md
+docs/architecture/ADR-007-vector-search-pgvector.md
+```
+
+**수정된 파일**:
+```
+backend/app/worker/pipelines/__init__.py
+backend/app/worker/pipelines/index.py
+backend/app/worker/pipelines/insight.py
+backend/app/worker/llm/service.py
+backend/app/worker/llm/prompts.py
+backend/app/worker/tasks/analysis.py
+backend/app/api/v1/router.py
+```
+
+## 다음 세션 작업 (세션 8)
+
+### DB 마이그레이션
+1. `migration_v5_vector.sql` Supabase에 적용
+2. pgvector extension 활성화 확인
+3. 인덱스 생성 확인
+
+### Railway 배포
+1. Backend 재배포 (Documents API 반영)
+2. Worker 재배포 (DOC_INGEST, Embedding 반영)
+3. E2E 테스트
 
 ### 참고 사항
 - **인증은 PRD 2.3에 따라 대회 범위 제외** - 구현하지 않음
@@ -682,6 +755,7 @@ SIGNAL → VALIDATION → INDEX → INSIGHT → DONE
 - Dashboard에서는 rkyc_signal_index 사용 (조인 금지)
 - **Backend 로컬 실행**: `cd backend && uvicorn app.main:app --reload`
 - **Worker 로컬 실행**: `cd backend && celery -A app.worker.celery_app worker --loglevel=info --pool=solo`
+- **OPENAI_API_KEY 필요**: Embedding 서비스용
 
 ---
-*Last Updated: 2026-01-02 (세션 6-2 완료 - Worker 로컬 테스트 성공, Railway 배포)*
+*Last Updated: 2026-01-02 (세션 7 완료 - AI 파이프라인 고도화)*

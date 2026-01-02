@@ -188,6 +188,235 @@ def format_insight_prompt(
     )
 
 
+# =============================================================================
+# Document Extraction Prompts (Vision LLM)
+# =============================================================================
+
+DOC_EXTRACTION_SYSTEM = """당신은 금융기관의 문서 분석 전문가입니다.
+기업이 제출한 문서 이미지에서 구조화된 정보를 추출합니다.
+
+## 필수 규칙
+
+### 1. 근거 필수
+모든 추출 정보는 문서에서 실제로 확인된 내용만 포함합니다.
+추정, 보간, 예측은 절대 금지입니다.
+
+### 2. 신뢰도(confidence) 기준
+- HIGH: 명확하게 읽을 수 있고 확실한 정보
+- MED: 읽을 수 있으나 일부 불확실한 부분 존재
+- LOW: 읽기 어렵거나 추정이 필요한 정보
+
+### 3. 금지 행위
+- 문서에 없는 정보 생성 금지
+- 숫자 추측 금지
+- 날짜 보간 금지
+
+## 출력 형식 (JSON)
+```json
+{
+    "doc_type": "<문서 타입>",
+    "facts": [
+        {
+            "fact_type": "<팩트 타입>",
+            "field_key": "<필드명>",
+            "field_value": "<추출값 (문자열/숫자/객체)>",
+            "confidence": "HIGH|MED|LOW",
+            "evidence_snippet": "<근거 텍스트 스니펫 (최대 100자)>"
+        }
+    ]
+}
+```
+"""
+
+# 사업자등록증 추출 프롬프트
+EXTRACT_BIZ_REG_PROMPT = """## 문서 타입: 사업자등록증 (BIZ_REG)
+
+이 사업자등록증 이미지에서 다음 정보를 추출하세요:
+
+### 추출 대상 필드
+| fact_type | field_key | 설명 |
+|-----------|-----------|------|
+| BIZ_INFO | biz_no | 사업자등록번호 (XXX-XX-XXXXX) |
+| BIZ_INFO | corp_name | 상호(법인명) |
+| BIZ_INFO | ceo_name | 대표자 성명 |
+| BIZ_INFO | corp_reg_no | 법인등록번호 (있는 경우) |
+| BIZ_INFO | biz_address | 사업장 소재지 |
+| BIZ_INFO | head_office_address | 본점 소재지 (있는 경우) |
+| BIZ_INFO | biz_type | 업태 |
+| BIZ_INFO | biz_item | 종목 |
+| BIZ_INFO | open_date | 개업연월일 (YYYY-MM-DD) |
+| BIZ_INFO | issue_date | 발급일자 (YYYY-MM-DD) |
+| BIZ_INFO | tax_office | 관할세무서 |
+
+### 주의사항
+- 사업자등록번호는 반드시 XXX-XX-XXXXX 형식으로 추출
+- 날짜는 YYYY-MM-DD 형식으로 변환
+- 읽을 수 없는 필드는 생략
+
+문서에서 읽을 수 있는 정보만 JSON 형식으로 추출하세요.
+"""
+
+# 법인 등기부등본 추출 프롬프트
+EXTRACT_REGISTRY_PROMPT = """## 문서 타입: 법인 등기부등본 (REGISTRY)
+
+이 법인 등기부등본 이미지에서 다음 정보를 추출하세요:
+
+### 추출 대상 필드
+| fact_type | field_key | 설명 |
+|-----------|-----------|------|
+| CORP_INFO | corp_reg_no | 법인등록번호 |
+| CORP_INFO | corp_name | 상호 |
+| CORP_INFO | head_office | 본점 소재지 |
+| CORP_INFO | establishment_date | 설립연월일 |
+| CORP_INFO | purpose | 목적 (사업목적) |
+| CAPITAL | total_capital | 자본금 총액 (숫자) |
+| CAPITAL | issued_shares | 발행주식 총수 (숫자) |
+| CAPITAL | par_value | 1주의 금액 (숫자) |
+| OFFICER | ceo_name | 대표이사 성명 |
+| OFFICER | ceo_address | 대표이사 주소 |
+| OFFICER | directors | 이사 목록 (JSON 배열) |
+| OFFICER | auditors | 감사 목록 (JSON 배열) |
+
+### 임원 목록 형식
+```json
+{
+    "field_value": [
+        {"name": "홍길동", "position": "이사", "reg_date": "2024-01-15"},
+        {"name": "김철수", "position": "감사", "reg_date": "2024-01-15"}
+    ]
+}
+```
+
+### 주의사항
+- 금액은 숫자만 추출 (단위 제외)
+- 날짜는 YYYY-MM-DD 형식
+- 등기사항 중 말소된 항목은 제외
+
+문서에서 읽을 수 있는 정보만 JSON 형식으로 추출하세요.
+"""
+
+# 주주명부 추출 프롬프트
+EXTRACT_SHAREHOLDERS_PROMPT = """## 문서 타입: 주주명부 (SHAREHOLDERS)
+
+이 주주명부 이미지에서 다음 정보를 추출하세요:
+
+### 추출 대상 필드
+| fact_type | field_key | 설명 |
+|-----------|-----------|------|
+| SUMMARY | total_shares | 발행주식 총수 |
+| SUMMARY | total_shareholders | 주주 수 |
+| SUMMARY | record_date | 기준일 |
+| SHAREHOLDER | shareholders | 주주 목록 (JSON 배열) |
+
+### 주주 목록 형식
+```json
+{
+    "field_value": [
+        {
+            "name": "홍길동",
+            "shares": 50000,
+            "share_ratio": 50.0,
+            "share_type": "보통주"
+        },
+        {
+            "name": "(주)ABC홀딩스",
+            "shares": 30000,
+            "share_ratio": 30.0,
+            "share_type": "보통주"
+        }
+    ]
+}
+```
+
+### 주의사항
+- 지분율은 소수점 1자리까지
+- 주식 수는 정수
+- 법인주주는 법인명 그대로 추출
+
+문서에서 읽을 수 있는 정보만 JSON 형식으로 추출하세요.
+"""
+
+# 정관 추출 프롬프트
+EXTRACT_AOI_PROMPT = """## 문서 타입: 정관 (AOI - Articles of Incorporation)
+
+이 정관 이미지에서 다음 정보를 추출하세요:
+
+### 추출 대상 필드
+| fact_type | field_key | 설명 |
+|-----------|-----------|------|
+| GENERAL | corp_name | 상호 |
+| GENERAL | purpose | 목적/사업목적 |
+| GENERAL | head_office | 본점 소재지 |
+| CAPITAL | authorized_shares | 발행할 주식 총수 |
+| CAPITAL | par_value | 1주의 금액 |
+| GOVERNANCE | board_size | 이사 정수 |
+| GOVERNANCE | auditor_required | 감사 설치 여부 |
+| GOVERNANCE | fiscal_year_end | 사업연도 종료일 |
+| SPECIAL | special_clauses | 특별 조항 (JSON 배열) |
+
+### 특별 조항 예시
+- 주식양도제한
+- 의결권 제한
+- 신주인수권 관련 조항
+
+### 주의사항
+- 정관 전문을 읽을 필요 없음
+- 핵심 조항만 추출
+- 개정 이력이 있으면 최신 내용 기준
+
+문서에서 읽을 수 있는 정보만 JSON 형식으로 추출하세요.
+"""
+
+# 재무제표 추출 프롬프트
+EXTRACT_FIN_STATEMENT_PROMPT = """## 문서 타입: 재무제표 요약 (FIN_STATEMENT)
+
+이 재무제표 이미지에서 다음 정보를 추출하세요:
+
+### 추출 대상 필드 (금액 단위: 원)
+| fact_type | field_key | 설명 |
+|-----------|-----------|------|
+| PERIOD | fiscal_year | 사업연도 (예: 2024) |
+| PERIOD | period_start | 기초일 (YYYY-MM-DD) |
+| PERIOD | period_end | 기말일 (YYYY-MM-DD) |
+| BS | total_assets | 자산총계 |
+| BS | total_liabilities | 부채총계 |
+| BS | total_equity | 자본총계 |
+| BS | current_assets | 유동자산 |
+| BS | non_current_assets | 비유동자산 |
+| BS | current_liabilities | 유동부채 |
+| BS | non_current_liabilities | 비유동부채 |
+| IS | revenue | 매출액 |
+| IS | operating_income | 영업이익 |
+| IS | net_income | 당기순이익 |
+| IS | ebitda | EBITDA (있는 경우) |
+| RATIO | debt_ratio | 부채비율 (%) |
+| RATIO | current_ratio | 유동비율 (%) |
+| RATIO | roe | ROE (%) |
+
+### 주의사항
+- 금액은 원 단위 숫자만 (천원, 백만원 단위면 환산)
+- 음수는 마이너스 기호 포함
+- 전기/당기 구분되어 있으면 당기 기준
+- 비율은 소수점 2자리까지
+
+문서에서 읽을 수 있는 정보만 JSON 형식으로 추출하세요.
+"""
+
+# 문서 타입별 프롬프트 매핑
+DOC_EXTRACTION_PROMPTS = {
+    "BIZ_REG": EXTRACT_BIZ_REG_PROMPT,
+    "REGISTRY": EXTRACT_REGISTRY_PROMPT,
+    "SHAREHOLDERS": EXTRACT_SHAREHOLDERS_PROMPT,
+    "AOI": EXTRACT_AOI_PROMPT,
+    "FIN_STATEMENT": EXTRACT_FIN_STATEMENT_PROMPT,
+}
+
+
+def get_doc_extraction_prompt(doc_type: str) -> str:
+    """Get document extraction prompt by document type"""
+    return DOC_EXTRACTION_PROMPTS.get(doc_type, EXTRACT_BIZ_REG_PROMPT)
+
+
 # Industry code to name mapping
 INDUSTRY_CODE_MAP = {
     "C10": "식품제조업",

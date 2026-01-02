@@ -274,3 +274,150 @@ class LLMService:
             temperature=0.3,  # Slightly higher for more natural text
             max_tokens=2048,
         )
+
+    def extract_document_facts(
+        self,
+        image_base64: str,
+        doc_type: str,
+        system_prompt: str,
+        user_prompt: str,
+    ) -> dict:
+        """
+        Extract structured facts from document image using Vision LLM.
+
+        Args:
+            image_base64: Base64 encoded image data
+            doc_type: Document type (BIZ_REG, REGISTRY, etc.)
+            system_prompt: System prompt for extraction
+            user_prompt: Document-type specific extraction prompt
+
+        Returns:
+            dict: Extracted facts in structured format
+        """
+        # Build vision message with image
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{image_base64}",
+                            "detail": "high",  # Use high detail for document OCR
+                        },
+                    },
+                    {
+                        "type": "text",
+                        "text": user_prompt,
+                    },
+                ],
+            },
+        ]
+
+        result = self._call_vision_with_fallback(messages)
+
+        try:
+            return json.loads(result)
+        except json.JSONDecodeError as e:
+            raise InvalidResponseError(
+                message=f"Failed to parse document extraction JSON: {e}",
+                raw_response=result[:500],
+            )
+
+    def _call_vision_with_fallback(
+        self,
+        messages: list[dict],
+        temperature: float = 0.1,
+        max_tokens: int = 4096,
+    ) -> str:
+        """
+        Call Vision LLM with automatic fallback chain.
+
+        Vision-capable models:
+        - Claude Sonnet 4 (primary)
+        - GPT-4o (fallback)
+
+        Args:
+            messages: List of message dicts with vision content
+            temperature: Sampling temperature
+            max_tokens: Maximum tokens in response
+
+        Returns:
+            str: LLM response content
+        """
+        errors = []
+
+        # Vision-capable models only
+        vision_models = [
+            {
+                "model": "claude-sonnet-4-20250514",
+                "provider": "anthropic",
+                "max_tokens": 4096,
+            },
+            {
+                "model": "gpt-4o",
+                "provider": "openai",
+                "max_tokens": 4096,
+            },
+        ]
+
+        for model_config in vision_models:
+            model = model_config["model"]
+            provider = model_config["provider"]
+
+            # Check if API key is available
+            api_key = self._get_api_key(provider)
+            if not api_key:
+                logger.warning(f"Skipping {provider}: No API key configured")
+                continue
+
+            # Try this model with retries
+            for attempt in range(self.MAX_RETRIES):
+                try:
+                    logger.info(
+                        f"Calling Vision {model} (attempt {attempt + 1}/{self.MAX_RETRIES})"
+                    )
+
+                    # Build request kwargs
+                    kwargs = {
+                        "model": model,
+                        "messages": messages,
+                        "temperature": temperature,
+                        "max_tokens": max_tokens,
+                    }
+
+                    # Make the call
+                    response = completion(**kwargs)
+
+                    content = response.choices[0].message.content
+                    logger.info(f"Successfully got vision response from {model}")
+
+                    return content
+
+                except Exception as e:
+                    errors.append({"model": model, "error": str(e)})
+                    logger.warning(f"Vision {model} failed (attempt {attempt + 1}): {e}")
+
+                    # Check if retryable
+                    if not self._is_retryable_error(e):
+                        logger.error(f"Non-retryable error from {model}: {e}")
+                        break
+
+                    # If this is the last retry, move to next model
+                    if attempt >= self.MAX_RETRIES - 1:
+                        break
+
+                    # Calculate backoff delay
+                    delay = min(
+                        self.INITIAL_DELAY * (self.BACKOFF_MULTIPLIER ** attempt),
+                        self.MAX_DELAY,
+                    )
+                    logger.info(f"Retrying in {delay:.1f}s...")
+                    time.sleep(delay)
+
+        # All models exhausted
+        raise AllProvidersFailedError(
+            message=f"All Vision LLM providers failed after {len(errors)} attempts",
+            errors=errors,
+        )
