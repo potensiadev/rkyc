@@ -12,10 +12,26 @@ from sqlalchemy import select, text
 from sqlalchemy.dialects.postgresql import insert
 
 from app.worker.db import get_sync_db
-from app.models.signal import Signal, Evidence, SignalIndex
+from app.models.signal import (
+    Signal, Evidence, SignalIndex,
+    SignalType, EventType, ImpactDirection, ImpactStrength, ConfidenceLevel,
+)
 from app.worker.llm.embedding import get_embedding_service, EmbeddingError
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_enum_convert(enum_class, value, default=None):
+    """Safely convert string to Enum, returning default if conversion fails"""
+    if value is None:
+        return default
+    if isinstance(value, enum_class):
+        return value
+    try:
+        return enum_class(value)
+    except (ValueError, KeyError):
+        logger.warning(f"Invalid enum value '{value}' for {enum_class.__name__}, using default: {default}")
+        return default
 
 
 class DuplicateSignalError(Exception):
@@ -91,6 +107,20 @@ class IndexPipeline:
         logger.info(f"INDEX stage completed: created {len(created_signal_ids)} signals")
         return created_signal_ids
 
+    def _check_embedding_table_exists(self, db) -> bool:
+        """Check if rkyc_signal_embedding table exists (pgvector installed)"""
+        try:
+            result = db.execute(text("""
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables
+                    WHERE table_name = 'rkyc_signal_embedding'
+                )
+            """))
+            return result.scalar() or False
+        except Exception as e:
+            logger.warning(f"Failed to check embedding table: {e}")
+            return False
+
     def _store_embeddings(self, db, signals: list[dict]) -> int:
         """
         Generate and store embeddings for signals.
@@ -103,6 +133,11 @@ class IndexPipeline:
             Number of embeddings stored
         """
         if not signals:
+            return 0
+
+        # Check if embedding table exists (pgvector must be installed)
+        if not self._check_embedding_table_exists(db):
+            logger.info("Skipping embeddings: rkyc_signal_embedding table not found (pgvector not installed)")
             return 0
 
         logger.info(f"Generating embeddings for {len(signals)} signals")
@@ -181,18 +216,18 @@ Summary: {sig.get('summary', '')}
         if existing:
             raise DuplicateSignalError(f"Signal with signature {event_signature[:16]}... already exists")
 
-        # Create Signal
+        # Create Signal with explicit enum conversion
         signal_id = uuid4()
         signal = Signal(
             signal_id=signal_id,
             corp_id=corp_id,
-            signal_type=signal_data["signal_type"],
-            event_type=signal_data["event_type"],
+            signal_type=_safe_enum_convert(SignalType, signal_data["signal_type"], SignalType.DIRECT),
+            event_type=_safe_enum_convert(EventType, signal_data["event_type"], EventType.KYC_REFRESH),
             event_signature=event_signature,
             snapshot_version=signal_data.get("snapshot_version", 0),
-            impact_direction=signal_data["impact_direction"],
-            impact_strength=signal_data["impact_strength"],
-            confidence=signal_data["confidence"],
+            impact_direction=_safe_enum_convert(ImpactDirection, signal_data["impact_direction"], ImpactDirection.NEUTRAL),
+            impact_strength=_safe_enum_convert(ImpactStrength, signal_data["impact_strength"], ImpactStrength.MED),
+            confidence=_safe_enum_convert(ConfidenceLevel, signal_data["confidence"], ConfidenceLevel.MED),
             summary=signal_data["summary"],
         )
         db.add(signal)
@@ -213,17 +248,17 @@ Summary: {sig.get('summary', '')}
             db.add(evidence)
             evidence_count += 1
 
-        # Create SignalIndex (denormalized for dashboard)
+        # Create SignalIndex (denormalized for dashboard) with explicit enum conversion
         index = SignalIndex(
             index_id=uuid4(),
             corp_id=corp_id,
             corp_name=context.get("corp_name", ""),
             industry_code=context.get("industry_code", ""),
-            signal_type=signal_data["signal_type"],
-            event_type=signal_data["event_type"],
-            impact_direction=signal_data["impact_direction"],
-            impact_strength=signal_data["impact_strength"],
-            confidence=signal_data["confidence"],
+            signal_type=_safe_enum_convert(SignalType, signal_data["signal_type"], SignalType.DIRECT),
+            event_type=_safe_enum_convert(EventType, signal_data["event_type"], EventType.KYC_REFRESH),
+            impact_direction=_safe_enum_convert(ImpactDirection, signal_data["impact_direction"], ImpactDirection.NEUTRAL),
+            impact_strength=_safe_enum_convert(ImpactStrength, signal_data["impact_strength"], ImpactStrength.MED),
+            confidence=_safe_enum_convert(ConfidenceLevel, signal_data["confidence"], ConfidenceLevel.MED),
             title=signal_data.get("title", signal_data["summary"][:50]),
             summary_short=signal_data["summary"][:200],
             evidence_count=evidence_count,
