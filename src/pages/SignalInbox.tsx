@@ -19,7 +19,6 @@ import {
 
 import { GravityGrid } from "@/components/dashboard/GravityGrid";
 import { LevitatingCard } from "@/components/dashboard/LevitatingCard";
-import { SpotlightSearch } from "@/components/dashboard/SpotlightSearch";
 
 interface KPICardProps {
   icon: React.ElementType;
@@ -143,11 +142,6 @@ export default function SignalInbox() {
       <div className="max-w-[1600px] mx-auto p-6">
         {/* Demo Panel (Demo Mode에서만 표시) */}
         <DemoPanel />
-
-        {/* 1. Spotlight Search */}
-        <div className="mb-12">
-          <SpotlightSearch onSearch={(q, m) => console.log(q, m)} />
-        </div>
 
         {/* KPI Cards - Kept as "Satellites" */}
         <div className="grid grid-cols-4 gap-4 mb-10">
