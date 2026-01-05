@@ -29,11 +29,11 @@ class EmbeddingService:
     - Similar case search support
 
     Model: text-embedding-3-large
-    Dimension: 3072
+    Dimension: 2000 (pgvector 최대 지원 차원, API에서 축소)
     """
 
     MODEL = "text-embedding-3-large"
-    DIMENSION = 3072
+    DIMENSION = 2000  # pgvector max limit, reduced from 3072
     MAX_BATCH_SIZE = 100  # OpenAI batch limit
     MAX_RETRIES = 3
     RETRY_DELAY = 1.0
@@ -85,6 +85,7 @@ class EmbeddingService:
                 response = self.client.embeddings.create(
                     model=self.MODEL,
                     input=text,
+                    dimensions=self.DIMENSION,  # Reduce from 3072 to 2000 for pgvector
                 )
 
                 embedding = response.data[0].embedding
@@ -173,6 +174,7 @@ class EmbeddingService:
                 response = self.client.embeddings.create(
                     model=self.MODEL,
                     input=valid_texts,
+                    dimensions=self.DIMENSION,  # Reduce from 3072 to 2000 for pgvector
                 )
 
                 elapsed_ms = int((time.time() - start_time) * 1000)
