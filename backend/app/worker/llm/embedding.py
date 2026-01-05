@@ -21,19 +21,19 @@ class EmbeddingError(Exception):
 
 class EmbeddingService:
     """
-    OpenAI text-embedding-3-small based vector generation service.
+    OpenAI text-embedding-3-large based vector generation service.
 
     Uses:
     - Signal summary text vectorization
     - Insight memory vectorization
     - Similar case search support
 
-    Model: text-embedding-3-small
-    Dimension: 1536
+    Model: text-embedding-3-large
+    Dimension: 3072
     """
 
-    MODEL = "text-embedding-3-small"
-    DIMENSION = 1536
+    MODEL = "text-embedding-3-large"
+    DIMENSION = 3072
     MAX_BATCH_SIZE = 100  # OpenAI batch limit
     MAX_RETRIES = 3
     RETRY_DELAY = 1.0

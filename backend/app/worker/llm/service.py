@@ -30,8 +30,9 @@ class LLMService:
     """
     LLM Service with automatic fallback chain.
 
-    Primary: Claude Sonnet 4 (claude-sonnet-4-20250514)
-    Fallback 1: GPT-4o
+    Primary: Claude Opus 4.5 (claude-opus-4-5-20251101)
+    Fallback 1: GPT-5
+    Fallback 2: Gemini 3 Pro Preview
 
     Features:
     - Automatic fallback on failure
@@ -43,17 +44,17 @@ class LLMService:
     # Model configuration - 3-stage fallback chain
     MODELS = [
         {
-            "model": "claude-sonnet-4-20250514",
+            "model": "claude-opus-4-5-20251101",
             "provider": "anthropic",
             "max_tokens": 4096,
         },
         {
-            "model": "gpt-4o",
+            "model": "gpt-5",
             "provider": "openai",
             "max_tokens": 4096,
         },
         {
-            "model": "gemini/gemini-1.5-pro",
+            "model": "gemini/gemini-3-pro-preview",
             "provider": "google",
             "max_tokens": 4096,
         },
@@ -362,17 +363,17 @@ class LLMService:
         # Vision-capable models only (3-stage fallback)
         vision_models = [
             {
-                "model": "claude-sonnet-4-20250514",
+                "model": "claude-opus-4-5-20251101",
                 "provider": "anthropic",
                 "max_tokens": 4096,
             },
             {
-                "model": "gpt-4o",
+                "model": "gpt-5",
                 "provider": "openai",
                 "max_tokens": 4096,
             },
             {
-                "model": "gemini/gemini-1.5-pro",
+                "model": "gemini/gemini-3-pro-preview",
                 "provider": "google",
                 "max_tokens": 4096,
             },
