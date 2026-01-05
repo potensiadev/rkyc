@@ -807,23 +807,85 @@ backend/app/core/config.py
 | Phase 2: Pilot | 대회 후 3~6개월 | Private Cloud | Azure OpenAI, AWS Bedrock |
 | Phase 3: Production | 1년 이후 | On-Premise | Llama 3, Solar |
 
-## 다음 세션 작업 (세션 8)
+### 세션 8 (2026-01-05) - DOC_INGEST 리팩토링 및 LLM Fallback 확장 ✅
+**목표**: implementation_plan.md 기반 코드베이스 불일치 사항 해결
 
-### DB 마이그레이션
-1. `migration_v5_vector.sql` Supabase에 적용 ✅ (세션 7에서 완료)
-2. `migration_v6_security_architecture.sql` Supabase에 적용
+**완료 항목**:
 
-### Railway 배포
-1. Backend 재배포 (Security Architecture 반영)
-2. Worker 재배포 (Internal/External LLM 반영)
-3. E2E 테스트
+#### Task 1: DOC_INGEST 파이프라인 재구현 (P0)
+Vision LLM 기반 → PDF 텍스트 파싱 + 정규식 + LLM 보완 방식으로 변경
 
-### 파이프라인 리팩토링 (선택)
-1. 기존 LLMService → InternalLLM/ExternalLLM 전환
-2. External Intelligence 수집 파이프라인 구현
-3. LLM 감사 로그 적재 로직 추가
+1. **requirements.txt 수정**
+   - pdfplumber>=0.10.0 추가
+   - google-generativeai>=0.8.0 추가 (Gemini fallback)
 
-### 참고 사항
+2. **doc_parsers 패키지 생성** (`app/worker/pipelines/doc_parsers/`)
+   - `base.py` - BaseDocParser 추상 클래스
+     - PDF 텍스트 추출 (pdfplumber)
+     - 정규식 패턴 매칭
+     - LLM fallback 로직
+   - `biz_reg_parser.py` - 사업자등록증 파서
+   - `registry_parser.py` - 법인 등기부등본 파서
+   - `shareholders_parser.py` - 주주명부 파서
+   - `aoi_parser.py` - 정관 파서
+   - `fin_statement_parser.py` - 재무제표 파서 (비율 계산 포함)
+
+3. **doc_ingest.py 수정**
+   - Vision LLM 대신 PDF 파서 사용
+   - process_text() 메서드 추가 (테스트용)
+   - extraction_method 필드 추가
+
+**비용/속도 개선**:
+- Vision LLM 대비 1/10 비용
+- 정규식은 밀리초 단위 처리
+- 정형화된 KYC 문서에 더 일관된 결과
+
+#### Task 2: LLM Fallback 3단계 확장 (P1)
+2단계 (Claude → GPT-4o) → 3단계 (+ Gemini 1.5 Pro)
+
+1. **config.py 수정**
+   - GOOGLE_API_KEY 추가
+
+2. **service.py 수정**
+   - MODELS 리스트에 Gemini 1.5 Pro 추가
+   - _configure_api_keys에 GEMINI_API_KEY 환경변수 설정
+   - _get_api_key에 google provider 추가
+   - vision_models에도 Gemini 추가
+
+#### Task 3: Embedding/pgvector 확인 (P2)
+이미 완성되어 있음:
+- `embedding.py` - EmbeddingService 완전 구현
+- `insight.py` - 유사 케이스 검색 연동
+- `index.py` - 시그널 임베딩 저장 구현
+- `migration_v5_vector.sql` - pgvector 스키마 완비
+
+#### Task 4: Worker 배포 설정 확인 (P2)
+1. **railway-worker.toml 생성**
+   - Worker 별도 배포용 설정
+   - Celery 시작 명령어
+   - 환경변수 안내
+
+**신규 파일**:
+```
+backend/app/worker/pipelines/doc_parsers/__init__.py
+backend/app/worker/pipelines/doc_parsers/base.py
+backend/app/worker/pipelines/doc_parsers/biz_reg_parser.py
+backend/app/worker/pipelines/doc_parsers/registry_parser.py
+backend/app/worker/pipelines/doc_parsers/shareholders_parser.py
+backend/app/worker/pipelines/doc_parsers/aoi_parser.py
+backend/app/worker/pipelines/doc_parsers/fin_statement_parser.py
+backend/railway-worker.toml
+```
+
+**수정된 파일**:
+```
+backend/requirements.txt
+backend/app/core/config.py
+backend/app/worker/llm/service.py
+backend/app/worker/pipelines/doc_ingest.py
+```
+
+## 참고 사항
 - **인증은 PRD 2.3에 따라 대회 범위 제외** - 구현하지 않음
 - **schema_v2.sql, seed_v2.sql 사용** (v1은 deprecated)
 - ADR 문서의 결정 사항 준수
@@ -833,6 +895,8 @@ backend/app/core/config.py
 - **Worker 로컬 실행**: `cd backend && celery -A app.worker.celery_app worker --loglevel=info --pool=solo`
 - **OPENAI_API_KEY 필요**: Embedding 서비스용
 - **Internal/External LLM 분리**: MVP에서는 논리적 분리만 (실제 분리는 Phase 2)
+- **DOC_INGEST**: PDF 텍스트 파싱 + 정규식 + LLM fallback 방식
+- **LLM Fallback**: Claude → GPT-4o → Gemini 1.5 Pro (3단계)
 
 ---
-*Last Updated: 2026-01-02 (세션 7-2 완료 - 보안 아키텍처 설계 및 구현)*
+*Last Updated: 2026-01-05 (세션 8 완료 - DOC_INGEST 리팩토링 및 LLM Fallback 확장)*

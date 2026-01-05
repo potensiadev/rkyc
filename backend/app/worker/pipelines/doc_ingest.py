@@ -1,9 +1,13 @@
 """
 Document Ingest Pipeline Stage
-Stage 2: DOC_INGEST - Vision LLM based document processing
+Stage 2: DOC_INGEST - PDF text parsing + regex + LLM fallback
+
+Processing approach:
+1. PDF text extraction using pdfplumber (fast, cheap)
+2. Regex patterns for structured field extraction
+3. LLM fallback only for fields that regex fails to extract
 """
 
-import base64
 import hashlib
 import logging
 import time
@@ -16,11 +20,17 @@ from sqlalchemy import select, update
 
 from app.worker.db import get_sync_db
 from app.worker.llm.service import LLMService
-from app.worker.llm.prompts import DOC_EXTRACTION_SYSTEM, get_doc_extraction_prompt
 from app.worker.llm.exceptions import AllProvidersFailedError
 from app.models.document import (
     Document, DocumentPage, Fact,
     DocType, IngestStatus, ConfidenceLevel
+)
+from app.worker.pipelines.doc_parsers import (
+    BizRegParser,
+    RegistryParser,
+    ShareholdersParser,
+    AoiParser,
+    FinStatementParser,
 )
 
 logger = logging.getLogger(__name__)
@@ -38,7 +48,7 @@ class DocumentProcessingError(Exception):
 
 class DocIngestPipeline:
     """
-    Stage 2: DOC_INGEST - Vision LLM based document processing
+    Stage 2: DOC_INGEST - PDF text parsing + regex + LLM fallback
 
     Supported document types (PRD 6.2):
     - BIZ_REG: 사업자등록증
@@ -47,19 +57,33 @@ class DocIngestPipeline:
     - AOI: 정관
     - FIN_STATEMENT: 재무제표 요약
 
-    Processing flow:
+    Processing flow (optimized for cost and speed):
     1. Query rkyc_document for corp_id's documents
     2. For each document with PENDING/FAILED status:
-       a. Load document image (from storage_path or base64)
-       b. Send to Vision LLM with doc-type specific prompt
-       c. Parse extracted facts
+       a. Extract text from PDF using pdfplumber
+       b. Apply regex patterns for structured extraction
+       c. LLM fallback only for failed fields
        d. Save to rkyc_fact table
        e. Update ingest_status to DONE
     3. Return aggregated document data for context
+
+    Benefits over Vision LLM:
+    - 10x cost reduction
+    - Faster processing (regex is milliseconds)
+    - More consistent for standardized KYC documents
     """
 
     def __init__(self):
         self.llm = LLMService()
+
+        # Document type to parser mapping
+        self.parsers = {
+            DocType.BIZ_REG: BizRegParser(self.llm),
+            DocType.REGISTRY: RegistryParser(self.llm),
+            DocType.SHAREHOLDERS: ShareholdersParser(self.llm),
+            DocType.AOI: AoiParser(self.llm),
+            DocType.FIN_STATEMENT: FinStatementParser(self.llm),
+        }
 
     def execute(self, corp_id: str) -> dict:
         """
@@ -187,7 +211,7 @@ class DocIngestPipeline:
 
     def _process_document(self, db, doc: Document, corp_id: str) -> Optional[dict]:
         """
-        Process a single document using Vision LLM.
+        Process a single document using PDF text parsing + regex + LLM fallback.
 
         Returns:
             dict with extracted facts, or None if processing failed
@@ -197,28 +221,27 @@ class DocIngestPipeline:
         # Update status to RUNNING
         self._update_document_status(db, doc.doc_id, IngestStatus.RUNNING)
 
-        # Load document image
-        image_base64 = self._load_document_image(doc)
-        if not image_base64:
-            raise DocumentProcessingError(f"Failed to load image for document {doc.doc_id}")
+        # Get the appropriate parser
+        parser = self.parsers.get(doc.doc_type)
+        if not parser:
+            raise DocumentProcessingError(f"No parser available for doc_type: {doc.doc_type.value}")
 
-        # Get extraction prompt for this document type
-        system_prompt = DOC_EXTRACTION_SYSTEM
-        user_prompt = get_doc_extraction_prompt(doc.doc_type.value)
+        # Verify storage path exists
+        if not doc.storage_path:
+            raise DocumentProcessingError(f"No storage_path for document {doc.doc_id}")
+
+        pdf_path = Path(doc.storage_path)
+        if not pdf_path.exists():
+            raise DocumentProcessingError(f"PDF file not found: {doc.storage_path}")
 
         start_time = time.time()
 
         try:
-            # Call Vision LLM for extraction
-            extraction_result = self.llm.extract_document_facts(
-                image_base64=image_base64,
-                doc_type=doc.doc_type.value,
-                system_prompt=system_prompt,
-                user_prompt=user_prompt,
-            )
+            # Parse PDF using text extraction + regex + LLM fallback
+            extraction_result = parser.parse(str(pdf_path))
 
             extraction_time_ms = int((time.time() - start_time) * 1000)
-            logger.info(f"Vision LLM extraction completed in {extraction_time_ms}ms")
+            logger.info(f"PDF parsing completed in {extraction_time_ms}ms")
 
             # Parse and save facts
             facts = extraction_result.get("facts", [])
@@ -238,34 +261,37 @@ class DocIngestPipeline:
                 "doc_type": doc.doc_type.value,
                 "facts": saved_facts,
                 "extraction_time_ms": extraction_time_ms,
+                "extraction_method": "pdf_parser",
             }
 
+        except FileNotFoundError as e:
+            logger.error(f"PDF file not found for document {doc.doc_id}: {e}")
+            raise DocumentProcessingError(f"PDF file not found: {e}")
+
         except AllProvidersFailedError as e:
-            logger.error(f"Vision LLM failed for document {doc.doc_id}: {e}")
-            raise DocumentProcessingError(f"Vision LLM extraction failed: {e}")
+            # LLM fallback failed
+            logger.error(f"LLM fallback failed for document {doc.doc_id}: {e}")
+            raise DocumentProcessingError(f"LLM fallback extraction failed: {e}")
 
-    def _load_document_image(self, doc: Document) -> Optional[str]:
+        except Exception as e:
+            logger.error(f"PDF parsing failed for document {doc.doc_id}: {e}")
+            raise DocumentProcessingError(f"PDF parsing failed: {e}")
+
+    def _get_parser_for_doc_type(self, doc_type: str):
         """
-        Load document image and return base64 encoded string.
+        Get the appropriate parser for a document type string.
 
-        Supports:
-        - Local file path (storage_path)
-        - First page of multi-page document
+        Args:
+            doc_type: Document type string (BIZ_REG, REGISTRY, etc.)
+
+        Returns:
+            Parser instance or None
         """
-        if doc.storage_path:
-            try:
-                path = Path(doc.storage_path)
-                if path.exists():
-                    with open(path, "rb") as f:
-                        return base64.b64encode(f.read()).decode("utf-8")
-            except Exception as e:
-                logger.error(f"Failed to read document file: {e}")
-
-        # If no storage_path, check document pages
-        # (For demo/test, pages might have image_path)
-        # This is a placeholder for actual implementation
-
-        return None
+        try:
+            doc_type_enum = DocType(doc_type)
+            return self.parsers.get(doc_type_enum)
+        except ValueError:
+            return None
 
     def _save_facts(
         self,
@@ -396,20 +422,18 @@ class DocIngestPipeline:
         self,
         corp_id: str,
         doc_type: str,
-        image_base64: str,
-        page_no: int = 1,
+        pdf_path: str,
     ) -> dict:
         """
-        Process a single document image directly (for API endpoint).
+        Process a single PDF document directly (for API endpoint).
 
         This method bypasses the document storage and processes
-        the image directly. Useful for testing and manual uploads.
+        the PDF directly. Useful for testing and manual uploads.
 
         Args:
             corp_id: Corporation ID
             doc_type: Document type (BIZ_REG, REGISTRY, etc.)
-            image_base64: Base64 encoded image
-            page_no: Page number (default 1)
+            pdf_path: Path to PDF file
 
         Returns:
             dict with extracted facts
@@ -422,18 +446,20 @@ class DocIngestPipeline:
         except ValueError:
             raise ValueError(f"Invalid document type: {doc_type}")
 
-        system_prompt = DOC_EXTRACTION_SYSTEM
-        user_prompt = get_doc_extraction_prompt(doc_type)
+        # Get appropriate parser
+        parser = self._get_parser_for_doc_type(doc_type)
+        if not parser:
+            raise ValueError(f"No parser available for doc_type: {doc_type}")
+
+        # Verify file exists
+        path = Path(pdf_path)
+        if not path.exists():
+            raise FileNotFoundError(f"PDF file not found: {pdf_path}")
 
         start_time = time.time()
 
         try:
-            extraction_result = self.llm.extract_document_facts(
-                image_base64=image_base64,
-                doc_type=doc_type,
-                system_prompt=system_prompt,
-                user_prompt=user_prompt,
-            )
+            extraction_result = parser.parse(str(path))
 
             extraction_time_ms = int((time.time() - start_time) * 1000)
 
@@ -441,8 +467,57 @@ class DocIngestPipeline:
                 "doc_type": doc_type,
                 "facts": extraction_result.get("facts", []),
                 "extraction_time_ms": extraction_time_ms,
-                "model_used": "vision-llm",
+                "extraction_method": "pdf_parser",
             }
 
-        except AllProvidersFailedError as e:
-            raise DocumentProcessingError(f"Vision LLM extraction failed: {e}")
+        except Exception as e:
+            logger.error(f"PDF parsing failed: {e}")
+            raise DocumentProcessingError(f"PDF parsing failed: {e}")
+
+    def process_text(
+        self,
+        corp_id: str,
+        doc_type: str,
+        text: str,
+    ) -> dict:
+        """
+        Process document text directly (for testing without PDF files).
+
+        Args:
+            corp_id: Corporation ID
+            doc_type: Document type (BIZ_REG, REGISTRY, etc.)
+            text: Document text content
+
+        Returns:
+            dict with extracted facts
+        """
+        logger.info(f"Processing text: corp_id={corp_id}, type={doc_type}")
+
+        # Validate doc_type
+        try:
+            DocType(doc_type)
+        except ValueError:
+            raise ValueError(f"Invalid document type: {doc_type}")
+
+        # Get appropriate parser
+        parser = self._get_parser_for_doc_type(doc_type)
+        if not parser:
+            raise ValueError(f"No parser available for doc_type: {doc_type}")
+
+        start_time = time.time()
+
+        try:
+            extraction_result = parser.parse_text(text)
+
+            extraction_time_ms = int((time.time() - start_time) * 1000)
+
+            return {
+                "doc_type": doc_type,
+                "facts": extraction_result.get("facts", []),
+                "extraction_time_ms": extraction_time_ms,
+                "extraction_method": "text_parser",
+            }
+
+        except Exception as e:
+            logger.error(f"Text parsing failed: {e}")
+            raise DocumentProcessingError(f"Text parsing failed: {e}")

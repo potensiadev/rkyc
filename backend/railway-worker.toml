@@ -1,0 +1,29 @@
+# ============================================
+# rKYC Celery Worker - Railway Configuration
+# Deploy as a separate service in Railway
+# ============================================
+#
+# To deploy worker:
+# 1. Create a new service in Railway project
+# 2. Link to same GitHub repo with root /backend
+# 3. Set start command to: celery -A app.worker.celery_app:celery_app worker --loglevel=info --concurrency=2
+# 4. Add required environment variables (same as API + LLM keys)
+# 5. No healthcheck needed for worker
+
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "celery -A app.worker.celery_app:celery_app worker --loglevel=info --concurrency=2"
+# Worker does not need healthcheck endpoint
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 5
+
+# Notes:
+# - Ensure REDIS_URL is set (Railway Redis add-on)
+# - Ensure LLM API keys are configured:
+#   - ANTHROPIC_API_KEY
+#   - OPENAI_API_KEY
+#   - GOOGLE_API_KEY (optional, for Gemini fallback)
+#   - PERPLEXITY_API_KEY (optional, for external search)
+# - DATABASE_URL should point to Supabase Transaction Pooler

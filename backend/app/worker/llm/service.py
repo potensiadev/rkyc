@@ -40,7 +40,7 @@ class LLMService:
     - Error classification
     """
 
-    # Model configuration
+    # Model configuration - 3-stage fallback chain
     MODELS = [
         {
             "model": "claude-sonnet-4-20250514",
@@ -50,6 +50,11 @@ class LLMService:
         {
             "model": "gpt-4o",
             "provider": "openai",
+            "max_tokens": 4096,
+        },
+        {
+            "model": "gemini/gemini-1.5-pro",
+            "provider": "google",
             "max_tokens": 4096,
         },
     ]
@@ -77,6 +82,10 @@ class LLMService:
             litellm.anthropic_key = settings.ANTHROPIC_API_KEY
         if settings.OPENAI_API_KEY:
             litellm.openai_key = settings.OPENAI_API_KEY
+        if settings.GOOGLE_API_KEY:
+            # For Gemini via litellm
+            import os
+            os.environ["GEMINI_API_KEY"] = settings.GOOGLE_API_KEY
 
     def _get_api_key(self, provider: str) -> str:
         """Get API key for specific provider"""
@@ -84,6 +93,8 @@ class LLMService:
             return settings.ANTHROPIC_API_KEY
         elif provider == "openai":
             return settings.OPENAI_API_KEY
+        elif provider == "google":
+            return settings.GOOGLE_API_KEY
         return ""
 
     def _is_retryable_error(self, error: Exception) -> bool:
@@ -348,7 +359,7 @@ class LLMService:
         """
         errors = []
 
-        # Vision-capable models only
+        # Vision-capable models only (3-stage fallback)
         vision_models = [
             {
                 "model": "claude-sonnet-4-20250514",
@@ -358,6 +369,11 @@ class LLMService:
             {
                 "model": "gpt-4o",
                 "provider": "openai",
+                "max_tokens": 4096,
+            },
+            {
+                "model": "gemini/gemini-1.5-pro",
+                "provider": "google",
                 "max_tokens": 4096,
             },
         ]

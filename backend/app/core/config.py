@@ -51,6 +51,7 @@ class Settings(BaseSettings):
     # LLM Providers (Legacy - used by both External/Internal in MVP)
     ANTHROPIC_API_KEY: str = Field(default="", description="Anthropic API key for Claude")
     OPENAI_API_KEY: str = Field(default="", description="OpenAI API key for GPT-4o fallback")
+    GOOGLE_API_KEY: str = Field(default="", description="Google API key for Gemini fallback")
     PERPLEXITY_API_KEY: str = Field(default="", description="Perplexity API key for external search")
 
     # Security Architecture: Internal LLM Configuration
