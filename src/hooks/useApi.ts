@@ -36,10 +36,8 @@ const isDemoMode = import.meta.env.VITE_DEMO_MODE === 'true';
 
 // API 응답 → Frontend 타입 변환 함수
 function mapApiCorporationToFrontend(api: ApiCorporation): Corporation {
-  // Mock 데이터에서 상세 정보 조회 (API에 없는 필드)
-  const mockCorp = CORPORATIONS.find(
-    c => c.name === api.corp_name || c.businessNumber.replace(/-/g, '').includes(api.biz_no.replace(/-/g, ''))
-  );
+  // Mock 데이터에서 상세 정보 조회 (corp_id로 직접 매칭)
+  const mockCorp = CORPORATIONS.find(c => c.id === api.corp_id);
 
   if (mockCorp) {
     return {
@@ -55,6 +53,7 @@ function mapApiCorporationToFrontend(api: ApiCorporation): Corporation {
     id: api.corp_id,
     name: api.corp_name,
     businessNumber: api.biz_no,
+    corpRegNo: api.corp_reg_no,
     industry: getIndustryName(api.industry_code),
     industryCode: api.industry_code,
     mainBusiness: '',
