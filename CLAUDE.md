@@ -885,6 +885,47 @@ backend/app/worker/llm/service.py
 backend/app/worker/pipelines/doc_ingest.py
 ```
 
+### 세션 9 (2026-01-06) - LLM 모델 업그레이드 및 Embedding 확장 ✅
+**목표**: Multi-Provider LLM 전략의 모델들을 최신 버전으로 업그레이드
+
+**완료 항목**:
+
+#### 1. LLM 모델 업그레이드
+| 역할 | 변경 전 | 변경 후 |
+|------|---------|---------|
+| **Primary** | `claude-sonnet-4-20250514` | `claude-opus-4-5-20251101` |
+| **Fallback 1** | `gpt-4o` | `gpt-5` |
+| **Fallback 2** | `gemini/gemini-1.5-pro` | `gemini/gemini-3-pro-preview` |
+
+#### 2. Embedding 모델 업그레이드
+| 항목 | 변경 전 | 변경 후 |
+|------|---------|---------|
+| **Model** | `text-embedding-3-small` | `text-embedding-3-large` |
+| **Dimension** | 1536 | 2000 (pgvector 최대 지원) |
+
+#### 3. pgvector 차원 제한 이슈 해결
+- **문제**: pgvector는 IVFFlat/HNSW 모두 최대 2000 차원 제한
+- **시도 1**: 3072 차원 → IVFFlat 에러
+- **시도 2**: HNSW 인덱스 → 동일 에러
+- **해결**: `text-embedding-3-large`에 `dimensions=2000` 파라미터 사용
+
+#### 4. Vector Index 변경
+- IVFFlat → HNSW 인덱스로 변경
+- HNSW 파라미터: `m=16, ef_construction=64`
+- 검색 성능 향상
+
+**수정된 파일**:
+```
+backend/app/worker/llm/service.py
+backend/app/worker/llm/embedding.py
+backend/sql/migration_embedding_dimension.sql
+```
+
+**DB 마이그레이션 적용 완료**:
+- `rkyc_signal_embedding.embedding` → vector(2000)
+- `rkyc_case_index.embedding` → vector(2000)
+- HNSW 인덱스 생성 완료
+
 ## 참고 사항
 - **인증은 PRD 2.3에 따라 대회 범위 제외** - 구현하지 않음
 - **schema_v2.sql, seed_v2.sql 사용** (v1은 deprecated)
@@ -896,7 +937,9 @@ backend/app/worker/pipelines/doc_ingest.py
 - **OPENAI_API_KEY 필요**: Embedding 서비스용
 - **Internal/External LLM 분리**: MVP에서는 논리적 분리만 (실제 분리는 Phase 2)
 - **DOC_INGEST**: PDF 텍스트 파싱 + 정규식 + LLM fallback 방식
-- **LLM Fallback**: Claude → GPT-4o → Gemini 1.5 Pro (3단계)
+- **LLM Fallback**: Claude Opus 4.5 → GPT-5 → Gemini 3 Pro (3단계)
+- **Embedding**: text-embedding-3-large (2000d, pgvector 최대)
+- **Vector Index**: HNSW (m=16, ef_construction=64)
 
 ---
-*Last Updated: 2026-01-05 (세션 8 완료 - DOC_INGEST 리팩토링 및 LLM Fallback 확장)*
+*Last Updated: 2026-01-06 (세션 9 완료 - LLM 모델 업그레이드 및 Embedding 확장)*
