@@ -80,18 +80,7 @@ const navigationItems: NavigationItem[] = [
 ];
 
 const bottomItems: NavigationItem[] = [
-  {
-    id: "notifications",
-    label: "알림 설정",
-    icon: Bell,
-    path: "/notifications",
-  },
-  {
-    id: "settings",
-    label: "설정",
-    icon: Settings,
-    path: "/settings",
-  },
+  // 알림 설정, 설정 페이지는 미노출 처리
 ];
 
 export function Sidebar() {
@@ -122,7 +111,7 @@ export function Sidebar() {
     >
       <div className="flex flex-col h-full">
         {/* Logo */}
-        <div className="flex items-center h-16 px-4 border-b border-sidebar-border">
+        <Link to="/" className="flex items-center h-16 px-4 border-b border-sidebar-border hover:bg-sidebar-accent/50 transition-colors">
           {!collapsed && (
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-lg bg-sidebar-primary flex items-center justify-center">
@@ -139,7 +128,7 @@ export function Sidebar() {
               <span className="text-sidebar-primary-foreground font-bold text-sm">R</span>
             </div>
           )}
-        </div>
+        </Link>
 
         {/* Main navigation */}
         <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto">

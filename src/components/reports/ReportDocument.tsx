@@ -1,19 +1,22 @@
 import { Separator } from "@/components/ui/separator";
 import { getCorporationById, getCorporationByName, Corporation } from "@/data/corporations";
-import { 
-  getSignalsByCorporationId, 
-  getAllEvidencesForCorporation, 
+import {
+  getSignalsByCorporationId,
+  getAllEvidencesForCorporation,
   getCorporationSignalCounts,
   formatDate,
 } from "@/data/signals";
 import { getInsightMemoryByCorporationId } from "@/data/insightMemory";
+import { getValueChainByCorpId } from "@/data/valueChain";
 import { Signal, SIGNAL_TYPE_CONFIG, SIGNAL_IMPACT_CONFIG, Evidence } from "@/types/signal";
+import ValueChainSection from "./ValueChainSection";
 
 interface ReportDocumentProps {
   corporationId: string;
   sectionsToShow?: {
     summary: boolean;
     companyOverview: boolean;
+    valueChain: boolean;
     signalTypeSummary: boolean;
     signalTimeline: boolean;
     evidenceSummary: boolean;
@@ -23,11 +26,12 @@ interface ReportDocumentProps {
   };
 }
 
-const ReportDocument = ({ 
+const ReportDocument = ({
   corporationId,
   sectionsToShow = {
     summary: true,
     companyOverview: true,
+    valueChain: true,
     signalTypeSummary: true,
     signalTimeline: true,
     evidenceSummary: true,
@@ -52,6 +56,7 @@ const ReportDocument = ({
   const signalCounts = getCorporationSignalCounts(corporationId);
   const evidences = getAllEvidencesForCorporation(corporationId);
   const insightMemory = getInsightMemoryByCorporationId(corporationId);
+  const valueChain = getValueChainByCorpId(corporationId);
 
   // 시그널 타임라인 (최신순)
   const timelineSignals = [...signals].sort((a, b) => 
@@ -172,13 +177,18 @@ const ReportDocument = ({
         </section>
       )}
 
+      {/* Value Chain */}
+      {sectionsToShow.valueChain && valueChain && (
+        <ValueChainSection valueChain={valueChain} />
+      )}
+
       {/* Signal Summary by Type */}
       {sectionsToShow.signalTypeSummary && (
         <section className="mb-8">
           <h2 className="text-lg font-semibold text-foreground mb-4 pb-2 border-b border-border">
             시그널 유형별 요약
           </h2>
-          
+
           <div className="space-y-6">
             {/* Direct Signals */}
             <div className="pl-4 border-l-2 border-primary/30">

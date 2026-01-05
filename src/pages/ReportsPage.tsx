@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ const ReportsPage = () => {
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [showPDFModal, setShowPDFModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
+  const reportRef = useRef<HTMLDivElement>(null);
 
   const selectedCorporation = getCorporationById(selectedCorporationId);
   const companyName = selectedCorporation?.name ?? "기업";
@@ -87,7 +88,9 @@ const ReportsPage = () => {
             </Button>
           </div>
           <div className="h-[600px] overflow-auto bg-white p-8">
-            <ReportDocument corporationId={selectedCorporationId} />
+            <div ref={reportRef}>
+              <ReportDocument corporationId={selectedCorporationId} />
+            </div>
           </div>
         </div>
 
@@ -104,6 +107,7 @@ const ReportsPage = () => {
         open={showPDFModal}
         onClose={() => setShowPDFModal(false)}
         fileName={defaultFileName}
+        contentRef={reportRef}
       />
 
       <ShareLinkModal

@@ -28,9 +28,8 @@ const navItems = [
     { id: "analytics", label: "분석", icon: BarChart3, path: "/analytics" },
 ];
 
-const bottomItems = [
-    { id: "notifications", label: "알림", icon: Bell, path: "/notifications" },
-    { id: "settings", label: "설정", icon: Settings, path: "/settings" },
+const bottomItems: typeof navItems = [
+    // 알림, 설정 페이지는 미노출 처리
 ];
 
 export function GlassShell({ children }: GlassShellProps) {
@@ -74,7 +73,7 @@ export function GlassShell({ children }: GlassShellProps) {
                 )}
             >
                 {/* Logo Area */}
-                <div className="flex items-center justify-center h-12 mb-8 relative">
+                <Link to="/" className="flex items-center justify-center h-12 mb-8 relative hover:opacity-80 transition-opacity">
                     <AnimatePresence>
                         {!isHovered && (
                             <motion.div
@@ -101,7 +100,7 @@ export function GlassShell({ children }: GlassShellProps) {
                             </motion.div>
                         )}
                     </AnimatePresence>
-                </div>
+                </Link>
 
                 {/* Navigation Items */}
                 <nav className="flex-1 flex flex-col gap-2 px-3">

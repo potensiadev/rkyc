@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { 
-  X, 
-  Building2, 
-  Factory, 
-  Globe, 
-  Clock, 
+import { useNavigate } from "react-router-dom";
+import {
+  X,
+  Building2,
+  Factory,
+  Globe,
+  Clock,
   ExternalLink,
   FileText,
   TrendingDown,
@@ -54,6 +55,7 @@ const subTypeIcons = {
 
 export function SignalDetailPanel({ signal, open, onClose }: SignalDetailPanelProps) {
   const [memo, setMemo] = useState("");
+  const navigate = useNavigate();
 
   if (!signal) return null;
 
@@ -95,7 +97,15 @@ export function SignalDetailPanel({ signal, open, onClose }: SignalDetailPanelPr
               <p className="font-medium text-foreground">{signal.corporationName}</p>
               <p className="text-sm text-muted-foreground">{signal.corporationId}</p>
             </div>
-            <Button variant="outline" size="sm" className="ml-auto">
+            <Button
+              variant="outline"
+              size="sm"
+              className="ml-auto"
+              onClick={() => {
+                onClose();
+                navigate(`/corporates/${signal.corporationId}`);
+              }}
+            >
               기업 상세
             </Button>
           </div>

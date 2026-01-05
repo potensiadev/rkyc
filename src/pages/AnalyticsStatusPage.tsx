@@ -119,7 +119,7 @@ const recentSignals = [
   },
   {
     id: "00000005-0001-0001-0001-000000000005",
-    corporateName: "익산바이오텍",
+    corporateName: "삼성전자",
     signalType: "direct",
     impact: "risk",
     detectedAt: "3시간 전",
@@ -127,7 +127,7 @@ const recentSignals = [
   },
   {
     id: "00000022-0001-0001-0001-000000000022",
-    corporateName: "익산바이오텍",
+    corporateName: "삼성전자",
     signalType: "industry",
     impact: "opportunity",
     detectedAt: "5시간 전",
@@ -135,7 +135,7 @@ const recentSignals = [
   },
   {
     id: "00000028-0001-0001-0001-000000000028",
-    corporateName: "나주태양에너지",
+    corporateName: "휴림로봇",
     signalType: "environment",
     impact: "opportunity",
     detectedAt: "어제",

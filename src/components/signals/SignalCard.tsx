@@ -1,18 +1,15 @@
-import { 
-  Building2, 
-  Factory, 
-  Globe, 
-  FileText, 
-  TrendingDown, 
-  Scale, 
-  Users, 
+import {
+  Building2,
+  Factory,
+  Globe,
+  FileText,
+  TrendingDown,
+  Scale,
+  Users,
   BarChart3,
-  ExternalLink, 
-  Clock, 
+  Clock,
   Info,
-  ChevronRight
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { 
   Signal, 
   SignalCategory, 
@@ -54,11 +51,13 @@ export function SignalCard({ signal, onViewDetail }: SignalCardProps) {
   const subTypeConfig = SIGNAL_SUBTYPE_CONFIG[signal.signalSubType];
 
   return (
-    <article 
+    <article
       className={`
-        signal-card group animate-fade-in relative
+        signal-card group animate-fade-in relative cursor-pointer
         border-l-4 ${typeConfig.borderClass}
+        hover:shadow-md transition-shadow
       `}
+      onClick={() => onViewDetail?.(signal)}
     >
       {/* Signal category indicator */}
       <div className="flex items-start justify-between gap-4">
@@ -144,25 +143,6 @@ export function SignalCard({ signal, onViewDetail }: SignalCardProps) {
           </div>
         </div>
 
-        {/* Actions */}
-        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={() => onViewDetail?.(signal)}
-            className="gap-1"
-          >
-            상세 보기
-            <ChevronRight className="w-3 h-3" />
-          </Button>
-          {signal.sourceUrl && (
-            <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
-              <a href={signal.sourceUrl} target="_blank" rel="noopener noreferrer">
-                <ExternalLink className="w-4 h-4" />
-              </a>
-            </Button>
-          )}
-        </div>
       </div>
     </article>
   );

@@ -1,5 +1,5 @@
 // 중앙화된 기업 마스터 데이터
-// Supabase corp 테이블 기준 (seed_v2.sql)
+// Supabase corp 테이블 기준
 // 모든 화면에서 동일한 기업 정보를 사용합니다.
 
 export interface Executive {
@@ -59,14 +59,14 @@ export const CORPORATIONS: Corporation[] = [
   {
     id: "8001-3719240",
     name: "엠케이전자",
-    businessNumber: "123-45-67890",
+    businessNumber: "135-81-06406",
     corpRegNo: "134511-0004412",
     industry: "전자부품 제조업",
     industryCode: "C26",
     mainBusiness: "반도체 부품 및 전자부품 제조",
-    ceo: "김명규",
+    ceo: "현기진",
     executives: [
-      { name: "김명규", position: "대표이사", isKeyMan: true },
+      { name: "현기진", position: "대표이사", isKeyMan: true },
       { name: "이기술", position: "기술연구소장", isKeyMan: true },
       { name: "박영업", position: "영업본부장" },
     ],
@@ -88,8 +88,8 @@ export const CORPORATIONS: Corporation[] = [
       { year: 2021, revenue: "275억원", operatingProfit: "19억원", netProfit: "12억원", totalAssets: "205억원", totalLiabilities: "105억원", equity: "100억원" },
     ],
     shareholders: [
-      { name: "김명규", ownership: "45%", type: "개인" },
-      { name: "김명규(배우자)", ownership: "20%", type: "개인" },
+      { name: "현기진", ownership: "45%", type: "개인" },
+      { name: "현기진(배우자)", ownership: "20%", type: "개인" },
       { name: "벤처캐피탈", ownership: "20%", type: "기관" },
       { name: "기타", ownership: "15%", type: "개인" },
     ],
@@ -99,14 +99,14 @@ export const CORPORATIONS: Corporation[] = [
   {
     id: "8000-7647330",
     name: "동부건설",
-    businessNumber: "234-56-78901",
+    businessNumber: "824-87-03495",
     corpRegNo: "110111-0012345",
     industry: "종합건설업",
     industryCode: "F41",
     mainBusiness: "주택 및 상업시설 건설",
-    ceo: "박동호",
+    ceo: "윤진오",
     executives: [
-      { name: "박동호", position: "대표이사", isKeyMan: true },
+      { name: "윤진오", position: "대표이사", isKeyMan: true },
       { name: "김건설", position: "현장총괄이사", isKeyMan: true },
       { name: "이재무", position: "CFO" },
     ],
@@ -128,7 +128,7 @@ export const CORPORATIONS: Corporation[] = [
       { year: 2021, revenue: "1,050억원", operatingProfit: "48억원", netProfit: "32억원", totalAssets: "798억원", totalLiabilities: "510억원", equity: "288억원" },
     ],
     shareholders: [
-      { name: "박동호", ownership: "52%", type: "개인" },
+      { name: "윤진오", ownership: "52%", type: "개인" },
       { name: "(주)동부홀딩스", ownership: "28%", type: "법인" },
       { name: "기타", ownership: "20%", type: "개인" },
     ],
@@ -138,14 +138,14 @@ export const CORPORATIONS: Corporation[] = [
   {
     id: "4028-1234567",
     name: "전북식품",
-    businessNumber: "345-67-89012",
+    businessNumber: "418-01-55362",
     corpRegNo: "180111-0123456",
     industry: "식품 제조업",
     industryCode: "C10",
     mainBusiness: "김치, 젓갈 등 전통 발효식품 제조 및 수출",
-    ceo: "이정민",
+    ceo: "강동구",
     executives: [
-      { name: "이정민", position: "대표이사", isKeyMan: true },
+      { name: "강동구", position: "대표이사", isKeyMan: true },
       { name: "박민수", position: "생산총괄이사", isKeyMan: true },
       { name: "김영희", position: "재무이사" },
     ],
@@ -167,8 +167,8 @@ export const CORPORATIONS: Corporation[] = [
       { year: 2021, revenue: "378억원", operatingProfit: "21억원", netProfit: "15억원", totalAssets: "265억원", totalLiabilities: "160억원", equity: "105억원" },
     ],
     shareholders: [
-      { name: "이정민", ownership: "45%", type: "개인" },
-      { name: "이정민(차남)", ownership: "25%", type: "개인" },
+      { name: "강동구", ownership: "45%", type: "개인" },
+      { name: "강동구(차남)", ownership: "25%", type: "개인" },
       { name: "전북창업투자", ownership: "15%", type: "기관" },
       { name: "기타", ownership: "15%", type: "개인" },
     ],
@@ -178,14 +178,14 @@ export const CORPORATIONS: Corporation[] = [
   {
     id: "6201-2345678",
     name: "광주정밀기계",
-    businessNumber: "456-78-90123",
+    businessNumber: "415-02-96323",
     corpRegNo: "200111-0234567",
     industry: "기계장비 제조업",
     industryCode: "C29",
     mainBusiness: "자동차 부품용 정밀 금형 및 자동화 설비 제조",
-    ceo: "최광수",
+    ceo: "강성우",
     executives: [
-      { name: "최광수", position: "대표이사", isKeyMan: true },
+      { name: "강성우", position: "대표이사", isKeyMan: true },
       { name: "김기술", position: "기술연구소장", isKeyMan: true },
       { name: "정운영", position: "운영이사" },
     ],
@@ -207,7 +207,7 @@ export const CORPORATIONS: Corporation[] = [
       { year: 2021, revenue: "445억원", operatingProfit: "27억원", netProfit: "19억원", totalAssets: "356억원", totalLiabilities: "238억원", equity: "118억원" },
     ],
     shareholders: [
-      { name: "최광수", ownership: "52%", type: "개인" },
+      { name: "강성우", ownership: "52%", type: "개인" },
       { name: "(주)광주기계홀딩스", ownership: "28%", type: "법인" },
       { name: "우리사주조합", ownership: "12%", type: "기관" },
       { name: "기타", ownership: "8%", type: "개인" },
@@ -217,15 +217,15 @@ export const CORPORATIONS: Corporation[] = [
   },
   {
     id: "4301-3456789",
-    name: "익산바이오텍",
-    businessNumber: "567-89-01234",
+    name: "삼성전자",
+    businessNumber: "124-81-00998",
     corpRegNo: "180211-0345678",
     industry: "의약품 제조업",
     industryCode: "C21",
     mainBusiness: "동물용 의약품 및 사료첨가제 연구개발/제조",
-    ceo: "박바이오",
+    ceo: "전영현",
     executives: [
-      { name: "박바이오", position: "대표이사", isKeyMan: true },
+      { name: "전영현", position: "대표이사", isKeyMan: true },
       { name: "김연구", position: "R&D센터장", isKeyMan: true },
       { name: "한영업", position: "영업본부장" },
       { name: "조재무", position: "CFO" },
@@ -248,7 +248,7 @@ export const CORPORATIONS: Corporation[] = [
       { year: 2021, revenue: "698억원", operatingProfit: "54억원", netProfit: "38억원", totalAssets: "512억원", totalLiabilities: "318억원", equity: "194억원" },
     ],
     shareholders: [
-      { name: "박바이오", ownership: "38%", type: "개인" },
+      { name: "전영현", ownership: "38%", type: "개인" },
       { name: "전북벤처투자", ownership: "22%", type: "기관" },
       { name: "농협경제지주", ownership: "18%", type: "법인" },
       { name: "임직원", ownership: "12%", type: "개인" },
@@ -259,15 +259,15 @@ export const CORPORATIONS: Corporation[] = [
   },
   {
     id: "6701-4567890",
-    name: "나주태양에너지",
-    businessNumber: "678-90-12345",
+    name: "휴림로봇",
+    businessNumber: "109-81-60401",
     corpRegNo: "200311-0456789",
     industry: "전기/가스 공급업",
     industryCode: "D35",
     mainBusiness: "태양광 발전 모듈 및 ESS 시스템 제조/설치",
-    ceo: "송태양",
+    ceo: "김봉관",
     executives: [
-      { name: "송태양", position: "대표이사", isKeyMan: true },
+      { name: "김봉관", position: "대표이사", isKeyMan: true },
       { name: "김설치", position: "시공본부장" },
       { name: "이에너지", position: "사업개발이사", isKeyMan: true },
     ],
@@ -288,7 +288,7 @@ export const CORPORATIONS: Corporation[] = [
       { year: 2021, revenue: "298억원", operatingProfit: "15억원", netProfit: "9억원", totalAssets: "234억원", totalLiabilities: "165억원", equity: "69억원" },
     ],
     shareholders: [
-      { name: "송태양", ownership: "55%", type: "개인" },
+      { name: "김봉관", ownership: "55%", type: "개인" },
       { name: "에너지파트너스(주)", ownership: "25%", type: "법인" },
       { name: "기타", ownership: "20%", type: "개인" },
     ],

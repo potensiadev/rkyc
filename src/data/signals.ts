@@ -46,7 +46,7 @@ export const BANK_TRANSACTIONS: BankTransaction[] = [
   {
     id: "bt4",
     corporationId: "4301-3456789",
-    corporationName: "익산바이오텍",
+    corporationName: "삼성전자",
     date: "2024-12-01",
     type: "pension",
     title: "퇴직연금 가입 (DC형)",
@@ -668,10 +668,10 @@ export const SIGNALS: Signal[] = [
     ],
   },
 
-  // =========== 익산바이오텍 (5개 Signal) ===========
+  // =========== 삼성전자 (5개 Signal) ===========
   {
     id: "00000021-0001-0001-0001-000000000001",
-    corporationName: "익산바이오텍",
+    corporationName: "삼성전자",
     corporationId: "4301-3456789",
     signalCategory: "direct",
     signalSubType: "financial",
@@ -700,7 +700,7 @@ export const SIGNALS: Signal[] = [
   },
   {
     id: "00000022-0001-0001-0001-000000000001",
-    corporationName: "익산바이오텍",
+    corporationName: "삼성전자",
     corporationId: "4301-3456789",
     signalCategory: "direct",
     signalSubType: "regulatory",
@@ -729,7 +729,7 @@ export const SIGNALS: Signal[] = [
   },
   {
     id: "00000023-0001-0001-0001-000000000001",
-    corporationName: "익산바이오텍",
+    corporationName: "삼성전자",
     corporationId: "4301-3456789",
     signalCategory: "direct",
     signalSubType: "financial",
@@ -758,7 +758,7 @@ export const SIGNALS: Signal[] = [
   },
   {
     id: "00000024-0001-0001-0001-000000000001",
-    corporationName: "익산바이오텍",
+    corporationName: "삼성전자",
     corporationId: "4301-3456789",
     signalCategory: "industry",
     signalSubType: "market",
@@ -768,7 +768,7 @@ export const SIGNALS: Signal[] = [
     source: "바이오산업협회",
     detectedAt: "2024-12-18T10:00:00",
     detailCategory: "산업 동향",
-    relevanceNote: "익산바이오텍은 의약품 제조업체입니다.",
+    relevanceNote: "삼성전자는 의약품 제조업체입니다.",
     impact: "risk",
     impactStrength: "medium",
     evidenceCount: 1,
@@ -788,7 +788,7 @@ export const SIGNALS: Signal[] = [
   },
   {
     id: "00000025-0001-0001-0001-000000000001",
-    corporationName: "익산바이오텍",
+    corporationName: "삼성전자",
     corporationId: "4301-3456789",
     signalCategory: "environment",
     signalSubType: "regulatory",
@@ -817,10 +817,10 @@ export const SIGNALS: Signal[] = [
     ],
   },
 
-  // =========== 나주태양에너지 (4개 Signal) ===========
+  // =========== 휴림로봇 (4개 Signal) ===========
   {
     id: "00000026-0001-0001-0001-000000000001",
-    corporationName: "나주태양에너지",
+    corporationName: "휴림로봇",
     corporationId: "6701-4567890",
     signalCategory: "direct",
     signalSubType: "financial",
@@ -849,7 +849,7 @@ export const SIGNALS: Signal[] = [
   },
   {
     id: "00000027-0001-0001-0001-000000000001",
-    corporationName: "나주태양에너지",
+    corporationName: "휴림로봇",
     corporationId: "6701-4567890",
     signalCategory: "direct",
     signalSubType: "regulatory",
@@ -878,7 +878,7 @@ export const SIGNALS: Signal[] = [
   },
   {
     id: "00000028-0001-0001-0001-000000000001",
-    corporationName: "나주태양에너지",
+    corporationName: "휴림로봇",
     corporationId: "6701-4567890",
     signalCategory: "industry",
     signalSubType: "market",
@@ -888,7 +888,7 @@ export const SIGNALS: Signal[] = [
     source: "에너지경제연구원",
     detectedAt: "2024-12-12T10:00:00",
     detailCategory: "산업 동향",
-    relevanceNote: "나주태양에너지는 태양광 발전 사업자입니다.",
+    relevanceNote: "휴림로봇은 태양광 발전 사업자입니다.",
     impact: "neutral",
     impactStrength: "low",
     evidenceCount: 1,
@@ -908,7 +908,7 @@ export const SIGNALS: Signal[] = [
   },
   {
     id: "00000029-0001-0001-0001-000000000001",
-    corporationName: "나주태양에너지",
+    corporationName: "휴림로봇",
     corporationId: "6701-4567890",
     signalCategory: "environment",
     signalSubType: "regulatory",

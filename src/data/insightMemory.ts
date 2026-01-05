@@ -41,14 +41,14 @@ export const INSIGHT_MEMORY: InsightMemoryEntry[] = [
   },
   {
     corporationId: "4301-3456789",
-    corporationName: "익산바이오텍",
+    corporationName: "삼성전자",
     similarCaseCount: 6,
     impactClassification: "장기",
     description: "바이오 규제 강화 시그널은 장기적 R&D 일정에 영향을 미친 사례가 있습니다.",
   },
   {
     corporationId: "6701-4567890",
-    corporationName: "나주태양에너지",
+    corporationName: "휴림로봇",
     similarCaseCount: 3,
     impactClassification: "중기",
     description: "신재생에너지 정책 변화 시그널은 중기적 수익성에 영향을 미친 사례가 있습니다.",
