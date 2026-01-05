@@ -35,6 +35,16 @@ app = FastAPI(
 
 # CORS Middleware
 cors_origins = [origin.strip() for origin in settings.CORS_ORIGINS.split(",") if origin.strip()]
+# Add localhost origins for development
+dev_origins = [
+    "http://localhost:8080",
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:8080",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:3000",
+]
+cors_origins.extend([o for o in dev_origins if o not in cors_origins])
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
