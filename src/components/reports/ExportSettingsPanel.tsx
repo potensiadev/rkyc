@@ -10,6 +10,7 @@ interface ExportSettingsPanelProps {
   sections: {
     summary: boolean;
     companyOverview: boolean;
+    valueChain: boolean;
     signalTypeSummary: boolean;
     signalTimeline: boolean;
     evidenceSummary: boolean;
@@ -34,6 +35,7 @@ const ExportSettingsPanel = ({
   const sectionLabels: { key: keyof typeof sections; label: string; conditional?: boolean }[] = [
     { key: 'summary', label: '요약' },
     { key: 'companyOverview', label: '기업 개요' },
+    { key: 'valueChain', label: '가치사슬망' },
     { key: 'signalTypeSummary', label: '시그널 유형별 요약' },
     { key: 'signalTimeline', label: '시그널 타임라인' },
     { key: 'evidenceSummary', label: '주요 근거 요약' },

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -25,13 +25,15 @@ const ReportPreviewModal = ({
 }: ReportPreviewModalProps) => {
   const corporation = getCorporationById(corporationId);
   const companyName = corporation?.name ?? "기업";
-  
+  const reportRef = useRef<HTMLDivElement>(null);
+
   const defaultFileName = `RKYC_기업시그널보고서_${companyName}_${new Date().toISOString().split('T')[0]}`;
-  
+
   const [fileName, setFileName] = useState(defaultFileName);
   const [sections, setSections] = useState({
     summary: true,
     companyOverview: true,
+    valueChain: true,
     signalTypeSummary: true,
     signalTimeline: true,
     evidenceSummary: true,
@@ -91,7 +93,7 @@ const ReportPreviewModal = ({
             {/* Left: PDF Preview */}
             <div className="flex-1 bg-muted/50 p-8 overflow-auto">
               <div className="max-w-[210mm] mx-auto bg-white shadow-lg rounded-sm">
-                <div className="p-12">
+                <div className="p-12" ref={reportRef}>
                   <ScrollArea className="h-full">
                     <ReportDocument
                       corporationId={corporationId}
@@ -120,6 +122,7 @@ const ReportPreviewModal = ({
         open={showPDFModal}
         onClose={() => setShowPDFModal(false)}
         fileName={fileName}
+        contentRef={reportRef}
       />
 
       <ShareLinkModal
