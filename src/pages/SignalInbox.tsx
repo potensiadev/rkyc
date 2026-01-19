@@ -85,7 +85,7 @@ export default function SignalInbox() {
     todayNew: stats?.new || signals.filter(s => s.status === "new").length,
     riskHigh7d: stats?.risk || signals.filter(s => s.impact === "risk").length,
     opportunity7d: stats?.opportunity || signals.filter(s => s.impact === "opportunity").length,
-    loanEligible: 6,
+    loanEligible: 0,
   }), [signals, stats]);
 
   // Click company name -> go to corporate report

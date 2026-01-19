@@ -9,10 +9,17 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://rkyc-production.up
 export interface ApiCorporation {
   corp_id: string;
   corp_name: string;
-  corp_reg_no: string;
-  biz_no: string;
+  corp_reg_no: string | null;
+  biz_no: string | null;
   industry_code: string;
   ceo_name: string;
+  // 사업자등록증 추가 정보 (migration_v9)
+  address: string | null;
+  hq_address: string | null;
+  founded_date: string | null;  // YYYY-MM-DD
+  biz_type: string | null;      // 업태
+  biz_item: string | null;      // 종목 (상세 업종)
+  is_corporation: boolean | null;
   created_at: string;
   updated_at: string;
 }

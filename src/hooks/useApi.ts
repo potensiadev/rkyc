@@ -32,19 +32,27 @@ import { Corporation, getIndustryName } from '@/data/corporations';
 
 // API 응답 → Frontend 타입 변환 함수
 function mapApiCorporationToFrontend(api: ApiCorporation): Corporation {
+  // founded_date에서 연도 추출
+  const foundedYear = api.founded_date ? parseInt(api.founded_date.split('-')[0]) : 0;
+
   return {
     id: api.corp_id,
     name: api.corp_name,
     businessNumber: api.biz_no,
     corpRegNo: api.corp_reg_no,
-    industry: getIndustryName(api.industry_code),
+    // biz_item(종목)이 있으면 더 정확한 정보, 없으면 industry_master에서 조회
+    industry: api.biz_item || getIndustryName(api.industry_code),
     industryCode: api.industry_code,
-    mainBusiness: '',
+    mainBusiness: api.biz_item || '',
     ceo: api.ceo_name,
     executives: [],
     employeeCount: 0,
-    foundedYear: 0,
-    headquarters: '',
+    foundedYear,
+    // hq_address가 있으면 사용, 없으면 address
+    headquarters: api.hq_address || api.address || '',
+    address: api.address || '',
+    bizType: api.biz_type || '',
+    isCorporation: api.is_corporation ?? true,
     bankRelationship: { hasRelationship: false },
     financialSnapshots: [],
     shareholders: [],

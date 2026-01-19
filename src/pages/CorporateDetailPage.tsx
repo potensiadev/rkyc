@@ -149,14 +149,17 @@ export default function CorporateDetailPage() {
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div className="space-y-2">
                 <div className="flex"><span className="w-28 text-muted-foreground">기업명</span><span>{corporation.name}</span></div>
-                <div className="flex"><span className="w-28 text-muted-foreground">사업자등록번호</span><span>{corporation.businessNumber}</span></div>
+                <div className="flex"><span className="w-28 text-muted-foreground">사업자등록번호</span><span>{corporation.businessNumber || '-'}</span></div>
                 <div className="flex"><span className="w-28 text-muted-foreground">업종</span><span>{corporation.industry}</span></div>
                 <div className="flex"><span className="w-28 text-muted-foreground">업종코드</span><span>{corporation.industryCode}</span></div>
+                {corporation.bizType && <div className="flex"><span className="w-28 text-muted-foreground">업태</span><span>{corporation.bizType}</span></div>}
               </div>
               <div className="space-y-2">
                 <div className="flex"><span className="w-28 text-muted-foreground">대표이사</span><span>{corporation.ceo}</span></div>
-                {/* Mock data fields removed unless populated by API */}
+                {corporation.corpRegNo && <div className="flex"><span className="w-28 text-muted-foreground">법인등록번호</span><span>{corporation.corpRegNo}</span></div>}
+                {corporation.foundedYear > 0 && <div className="flex"><span className="w-28 text-muted-foreground">설립년도</span><span>{corporation.foundedYear}년</span></div>}
                 {corporation.headquarters && <div className="flex"><span className="w-28 text-muted-foreground">본사 소재지</span><span>{corporation.headquarters}</span></div>}
+                <div className="flex"><span className="w-28 text-muted-foreground">사업자 유형</span><span>{corporation.isCorporation ? '법인사업자' : '개인사업자'}</span></div>
               </div>
             </div>
           </section>

@@ -37,16 +37,19 @@ export interface Shareholder {
 export interface Corporation {
   id: string;  // corp_id from Supabase
   name: string;
-  businessNumber: string;  // biz_no
-  corpRegNo?: string;  // corp_reg_no (optional)
-  industry: string;
-  industryCode: string;  // C26, F41 형식
-  mainBusiness: string;
+  businessNumber: string | null;  // biz_no
+  corpRegNo?: string | null;  // corp_reg_no (optional, 개인사업자는 null)
+  industry: string;           // industry_master.industry_name
+  industryCode: string;       // C26, F41 형식
+  mainBusiness: string;       // biz_item (종목)
   ceo: string;
   executives: Executive[];
   employeeCount: number;
   foundedYear: number;
-  headquarters: string;
+  headquarters: string;       // hq_address or address
+  address: string;            // 사업장 소재지
+  bizType: string;            // 업태
+  isCorporation: boolean;     // 법인/개인 구분
   bankRelationship: BankRelationship;
   financialSnapshots: FinancialSnapshot[];
   shareholders: Shareholder[];
@@ -54,7 +57,7 @@ export interface Corporation {
   lastReviewed: string;
 }
 
-// 업종 코드 → 업종명 변환
+// 업종 코드 → 업종명 변환 (industry_master 테이블과 동기화)
 export const getIndustryName = (code: string): string => {
   const industries: Record<string, string> = {
     C10: '식품 제조업',
@@ -63,6 +66,7 @@ export const getIndustryName = (code: string): string => {
     C29: '기계장비 제조업',
     D35: '전기/가스 공급업',
     F41: '종합건설업',
+    G47: '소매업',
   };
   return industries[code] || '기타';
 };
