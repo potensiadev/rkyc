@@ -1,0 +1,1830 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>rKYC - AI 기반 기업 리스크 시그널 탐지 시스템</title>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&family=Orbitron:wght@400;500;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            /* Cyberpunk Finance Color Palette */
+            --bg-deep: #0a0b0f;
+            --bg-surface: #12141a;
+            --bg-elevated: #1a1d26;
+            --bg-card: #1e2130;
+
+            --neon-cyan: #00f0ff;
+            --neon-magenta: #ff00aa;
+            --neon-green: #00ff88;
+            --neon-orange: #ff6b00;
+            --neon-purple: #8b5cf6;
+
+            --text-primary: #f0f4f8;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+
+            --gradient-main: linear-gradient(135deg, var(--neon-cyan), var(--neon-magenta));
+            --gradient-risk: linear-gradient(135deg, #ff4444, #ff6b00);
+            --gradient-opportunity: linear-gradient(135deg, #00ff88, #00f0ff);
+
+            --glow-cyan: 0 0 30px rgba(0, 240, 255, 0.4);
+            --glow-magenta: 0 0 30px rgba(255, 0, 170, 0.4);
+            --glow-green: 0 0 30px rgba(0, 255, 136, 0.4);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+            scroll-snap-type: y mandatory;
+        }
+
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            background: var(--bg-deep);
+            color: var(--text-primary);
+            overflow-x: hidden;
+            line-height: 1.6;
+        }
+
+        /* Animated Background */
+        .bg-grid {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image:
+                linear-gradient(rgba(0, 240, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 240, 255, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .bg-gradient-orbs {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 0;
+            overflow: hidden;
+        }
+
+        .orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.3;
+            animation: float 20s infinite ease-in-out;
+        }
+
+        .orb-1 {
+            width: 600px;
+            height: 600px;
+            background: var(--neon-cyan);
+            top: -200px;
+            right: -200px;
+            animation-delay: 0s;
+        }
+
+        .orb-2 {
+            width: 400px;
+            height: 400px;
+            background: var(--neon-magenta);
+            bottom: -100px;
+            left: -100px;
+            animation-delay: -7s;
+        }
+
+        .orb-3 {
+            width: 300px;
+            height: 300px;
+            background: var(--neon-purple);
+            top: 50%;
+            left: 50%;
+            animation-delay: -14s;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            25% { transform: translate(50px, -50px) scale(1.1); }
+            50% { transform: translate(-30px, 30px) scale(0.9); }
+            75% { transform: translate(-50px, -30px) scale(1.05); }
+        }
+
+        /* Sections */
+        section {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 60px 80px;
+            position: relative;
+            z-index: 1;
+            scroll-snap-align: start;
+        }
+
+        /* Navigation */
+        nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 70px;
+            background: rgba(10, 11, 15, 0.8);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(0, 240, 255, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 60px;
+            z-index: 1000;
+        }
+
+        .logo {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.8rem;
+            font-weight: 900;
+            background: var(--gradient-main);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: 3px;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 40px;
+        }
+
+        .nav-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .nav-links a::after {
+            content: '';
+            position: absolute;
+            bottom: -5px;
+            left: 0;
+            width: 0;
+            height: 2px;
+            background: var(--gradient-main);
+            transition: width 0.3s ease;
+        }
+
+        .nav-links a:hover {
+            color: var(--neon-cyan);
+        }
+
+        .nav-links a:hover::after {
+            width: 100%;
+        }
+
+        /* Hero Section */
+        .hero {
+            text-align: center;
+            padding-top: 100px;
+        }
+
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(0, 240, 255, 0.1);
+            border: 1px solid rgba(0, 240, 255, 0.3);
+            padding: 8px 20px;
+            border-radius: 100px;
+            font-size: 0.85rem;
+            color: var(--neon-cyan);
+            margin-bottom: 30px;
+            animation: pulse-glow 2s infinite;
+        }
+
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 20px rgba(0, 240, 255, 0.2); }
+            50% { box-shadow: 0 0 40px rgba(0, 240, 255, 0.4); }
+        }
+
+        .hero-badge .dot {
+            width: 8px;
+            height: 8px;
+            background: var(--neon-green);
+            border-radius: 50%;
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        .hero h1 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 5rem;
+            font-weight: 900;
+            line-height: 1.1;
+            margin-bottom: 30px;
+            letter-spacing: -2px;
+        }
+
+        .hero h1 .gradient-text {
+            background: var(--gradient-main);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero-subtitle {
+            font-size: 1.5rem;
+            color: var(--text-secondary);
+            max-width: 700px;
+            margin: 0 auto 50px;
+            font-weight: 300;
+        }
+
+        .hero-stats {
+            display: flex;
+            gap: 60px;
+            justify-content: center;
+            margin-top: 60px;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 3.5rem;
+            font-weight: 700;
+            background: var(--gradient-main);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            margin-top: 8px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        /* Problem Section */
+        .problem-section {
+            background: linear-gradient(180deg, var(--bg-deep) 0%, var(--bg-surface) 100%);
+        }
+
+        .section-header {
+            text-align: center;
+            margin-bottom: 60px;
+        }
+
+        .section-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            color: var(--neon-cyan);
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            margin-bottom: 20px;
+        }
+
+        .section-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 3rem;
+            font-weight: 700;
+            margin-bottom: 20px;
+        }
+
+        .section-desc {
+            font-size: 1.1rem;
+            color: var(--text-secondary);
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .problem-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 30px;
+            max-width: 1000px;
+        }
+
+        .problem-card {
+            background: var(--bg-card);
+            border: 1px solid rgba(255, 68, 68, 0.2);
+            border-radius: 20px;
+            padding: 40px;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.4s ease;
+        }
+
+        .problem-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: var(--gradient-risk);
+        }
+
+        .problem-card:hover {
+            transform: translateY(-10px);
+            border-color: rgba(255, 68, 68, 0.5);
+            box-shadow: 0 20px 60px rgba(255, 68, 68, 0.15);
+        }
+
+        .problem-icon {
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+        }
+
+        .problem-card h3 {
+            font-size: 1.3rem;
+            margin-bottom: 15px;
+            color: var(--text-primary);
+        }
+
+        .problem-card p {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            line-height: 1.7;
+        }
+
+        /* Solution Section */
+        .solution-section {
+            background: var(--bg-surface);
+        }
+
+        .solution-container {
+            display: flex;
+            gap: 80px;
+            align-items: center;
+            max-width: 1400px;
+        }
+
+        .solution-content {
+            flex: 1;
+        }
+
+        .solution-visual {
+            flex: 1;
+            position: relative;
+        }
+
+        .signal-flow {
+            background: var(--bg-card);
+            border-radius: 24px;
+            padding: 40px;
+            border: 1px solid rgba(0, 240, 255, 0.2);
+            position: relative;
+        }
+
+        .signal-flow::before {
+            content: '';
+            position: absolute;
+            inset: -1px;
+            border-radius: 24px;
+            padding: 1px;
+            background: var(--gradient-main);
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            opacity: 0.5;
+        }
+
+        .flow-step {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            padding: 20px;
+            background: var(--bg-elevated);
+            border-radius: 12px;
+            margin-bottom: 15px;
+            transition: all 0.3s ease;
+            border: 1px solid transparent;
+        }
+
+        .flow-step:hover {
+            border-color: var(--neon-cyan);
+            transform: translateX(10px);
+        }
+
+        .flow-step:last-child {
+            margin-bottom: 0;
+        }
+
+        .flow-number {
+            width: 40px;
+            height: 40px;
+            background: var(--gradient-main);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 700;
+            font-size: 1.1rem;
+        }
+
+        .flow-text {
+            flex: 1;
+        }
+
+        .flow-text h4 {
+            font-size: 1rem;
+            margin-bottom: 4px;
+        }
+
+        .flow-text p {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .feature-list {
+            margin-top: 40px;
+        }
+
+        .feature-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        .feature-icon {
+            width: 50px;
+            height: 50px;
+            background: rgba(0, 240, 255, 0.1);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            flex-shrink: 0;
+        }
+
+        .feature-text h4 {
+            font-size: 1.1rem;
+            margin-bottom: 5px;
+        }
+
+        .feature-text p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        /* Architecture Section */
+        .architecture-section {
+            background: linear-gradient(180deg, var(--bg-surface) 0%, var(--bg-deep) 100%);
+        }
+
+        .arch-diagram {
+            max-width: 1200px;
+            width: 100%;
+        }
+
+        .arch-layers {
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
+        }
+
+        .arch-layer {
+            display: flex;
+            align-items: center;
+            gap: 30px;
+        }
+
+        .layer-label {
+            width: 150px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-align: right;
+        }
+
+        .layer-content {
+            flex: 1;
+            display: flex;
+            gap: 20px;
+        }
+
+        .arch-box {
+            flex: 1;
+            background: var(--bg-card);
+            border: 1px solid rgba(0, 240, 255, 0.2);
+            border-radius: 16px;
+            padding: 25px;
+            text-align: center;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .arch-box:hover {
+            transform: translateY(-5px);
+            box-shadow: var(--glow-cyan);
+            border-color: var(--neon-cyan);
+        }
+
+        .arch-box.frontend { border-color: rgba(139, 92, 246, 0.3); }
+        .arch-box.frontend:hover { box-shadow: 0 0 30px rgba(139, 92, 246, 0.4); border-color: var(--neon-purple); }
+
+        .arch-box.backend { border-color: rgba(0, 255, 136, 0.3); }
+        .arch-box.backend:hover { box-shadow: var(--glow-green); border-color: var(--neon-green); }
+
+        .arch-box.worker { border-color: rgba(255, 0, 170, 0.3); }
+        .arch-box.worker:hover { box-shadow: var(--glow-magenta); border-color: var(--neon-magenta); }
+
+        .arch-box h4 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1rem;
+            margin-bottom: 10px;
+        }
+
+        .arch-box p {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .arch-box .tech-stack {
+            margin-top: 15px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: center;
+        }
+
+        .tech-tag {
+            background: rgba(0, 240, 255, 0.1);
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--neon-cyan);
+        }
+
+        .arch-connector {
+            width: 100%;
+            height: 40px;
+            display: flex;
+            justify-content: center;
+            position: relative;
+        }
+
+        .arch-connector::before {
+            content: '';
+            position: absolute;
+            width: 2px;
+            height: 100%;
+            background: linear-gradient(to bottom, var(--neon-cyan), var(--neon-magenta));
+        }
+
+        .arch-connector::after {
+            content: '▼';
+            position: absolute;
+            bottom: -5px;
+            color: var(--neon-magenta);
+            font-size: 0.8rem;
+        }
+
+        /* Signal Types Section */
+        .signals-section {
+            background: var(--bg-deep);
+        }
+
+        .signal-cards {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 30px;
+            max-width: 1200px;
+        }
+
+        .signal-card {
+            background: var(--bg-card);
+            border-radius: 24px;
+            padding: 40px;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.4s ease;
+        }
+
+        .signal-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 5px;
+        }
+
+        .signal-card.direct::before { background: var(--neon-cyan); }
+        .signal-card.industry::before { background: var(--neon-purple); }
+        .signal-card.environment::before { background: var(--neon-magenta); }
+
+        .signal-card:hover {
+            transform: translateY(-10px) scale(1.02);
+        }
+
+        .signal-card.direct:hover { box-shadow: var(--glow-cyan); }
+        .signal-card.industry:hover { box-shadow: 0 0 40px rgba(139, 92, 246, 0.4); }
+        .signal-card.environment:hover { box-shadow: var(--glow-magenta); }
+
+        .signal-type-icon {
+            width: 70px;
+            height: 70px;
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            margin-bottom: 25px;
+        }
+
+        .signal-card.direct .signal-type-icon { background: rgba(0, 240, 255, 0.15); }
+        .signal-card.industry .signal-type-icon { background: rgba(139, 92, 246, 0.15); }
+        .signal-card.environment .signal-type-icon { background: rgba(255, 0, 170, 0.15); }
+
+        .signal-card h3 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.4rem;
+            margin-bottom: 15px;
+        }
+
+        .signal-card.direct h3 { color: var(--neon-cyan); }
+        .signal-card.industry h3 { color: var(--neon-purple); }
+        .signal-card.environment h3 { color: var(--neon-magenta); }
+
+        .signal-card > p {
+            color: var(--text-secondary);
+            margin-bottom: 25px;
+            font-size: 0.95rem;
+        }
+
+        .signal-events {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .signal-event {
+            background: var(--bg-elevated);
+            padding: 12px 16px;
+            border-radius: 10px;
+            font-size: 0.85rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .signal-event::before {
+            content: '→';
+            opacity: 0.5;
+        }
+
+        /* Pipeline Section */
+        .pipeline-section {
+            background: linear-gradient(180deg, var(--bg-deep) 0%, var(--bg-surface) 100%);
+        }
+
+        .pipeline-container {
+            max-width: 1200px;
+            width: 100%;
+        }
+
+        .pipeline-stages {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: center;
+        }
+
+        .pipeline-stage {
+            background: var(--bg-card);
+            border: 1px solid rgba(0, 240, 255, 0.2);
+            border-radius: 16px;
+            padding: 25px;
+            width: 200px;
+            text-align: center;
+            position: relative;
+            transition: all 0.3s ease;
+        }
+
+        .pipeline-stage:hover {
+            transform: scale(1.05);
+            border-color: var(--neon-cyan);
+            box-shadow: var(--glow-cyan);
+        }
+
+        .stage-number {
+            position: absolute;
+            top: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--gradient-main);
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.9rem;
+            font-weight: 700;
+        }
+
+        .pipeline-stage h4 {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            color: var(--neon-cyan);
+            margin-bottom: 10px;
+            margin-top: 10px;
+        }
+
+        .pipeline-stage p {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .pipeline-arrow {
+            display: flex;
+            align-items: center;
+            color: var(--neon-cyan);
+            font-size: 1.5rem;
+            opacity: 0.5;
+        }
+
+        /* Anti-Hallucination Section */
+        .anti-hallucination-section {
+            background: var(--bg-surface);
+        }
+
+        .defense-layers {
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
+            max-width: 900px;
+            width: 100%;
+        }
+
+        .defense-layer {
+            display: flex;
+            align-items: center;
+            gap: 30px;
+            background: var(--bg-card);
+            border-radius: 20px;
+            padding: 30px 40px;
+            border: 1px solid rgba(0, 255, 136, 0.2);
+            transition: all 0.3s ease;
+        }
+
+        .defense-layer:hover {
+            transform: translateX(20px);
+            border-color: var(--neon-green);
+            box-shadow: var(--glow-green);
+        }
+
+        .layer-number {
+            width: 60px;
+            height: 60px;
+            background: rgba(0, 255, 136, 0.15);
+            border-radius: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--neon-green);
+            flex-shrink: 0;
+        }
+
+        .layer-info h4 {
+            font-size: 1.2rem;
+            margin-bottom: 8px;
+        }
+
+        .layer-info p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        /* Tech Stack Section */
+        .tech-section {
+            background: linear-gradient(180deg, var(--bg-surface) 0%, var(--bg-deep) 100%);
+        }
+
+        .tech-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 30px;
+            max-width: 1200px;
+        }
+
+        .tech-card {
+            background: var(--bg-card);
+            border: 1px solid rgba(0, 240, 255, 0.15);
+            border-radius: 20px;
+            padding: 35px;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .tech-card:hover {
+            transform: translateY(-10px);
+            border-color: var(--neon-cyan);
+            box-shadow: var(--glow-cyan);
+        }
+
+        .tech-card-icon {
+            font-size: 3rem;
+            margin-bottom: 20px;
+        }
+
+        .tech-card h4 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1rem;
+            color: var(--neon-cyan);
+            margin-bottom: 10px;
+        }
+
+        .tech-card p {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            margin-bottom: 20px;
+        }
+
+        .tech-items {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: center;
+        }
+
+        .tech-item {
+            background: var(--bg-elevated);
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        /* Demo Section */
+        .demo-section {
+            background: var(--bg-deep);
+        }
+
+        .demo-container {
+            display: flex;
+            gap: 60px;
+            align-items: center;
+            max-width: 1400px;
+        }
+
+        .demo-info {
+            flex: 1;
+        }
+
+        .demo-preview {
+            flex: 1.2;
+            position: relative;
+        }
+
+        .demo-frame {
+            background: var(--bg-card);
+            border-radius: 20px;
+            overflow: hidden;
+            border: 1px solid rgba(0, 240, 255, 0.2);
+            box-shadow: 0 40px 100px rgba(0, 0, 0, 0.5);
+        }
+
+        .demo-header {
+            background: var(--bg-elevated);
+            padding: 15px 20px;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .demo-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .demo-dot.red { background: #ff5f57; }
+        .demo-dot.yellow { background: #febc2e; }
+        .demo-dot.green { background: #28c840; }
+
+        .demo-url {
+            flex: 1;
+            text-align: center;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .demo-content {
+            padding: 30px;
+            min-height: 400px;
+        }
+
+        .demo-signal-list {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .demo-signal {
+            background: var(--bg-elevated);
+            border-radius: 12px;
+            padding: 20px;
+            border-left: 4px solid;
+            transition: all 0.3s ease;
+        }
+
+        .demo-signal:hover {
+            transform: translateX(10px);
+        }
+
+        .demo-signal.risk { border-color: #ff4444; }
+        .demo-signal.opportunity { border-color: var(--neon-green); }
+        .demo-signal.neutral { border-color: var(--neon-purple); }
+
+        .demo-signal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .demo-signal-type {
+            font-size: 0.75rem;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-weight: 500;
+        }
+
+        .demo-signal.risk .demo-signal-type { background: rgba(255, 68, 68, 0.2); color: #ff4444; }
+        .demo-signal.opportunity .demo-signal-type { background: rgba(0, 255, 136, 0.2); color: var(--neon-green); }
+        .demo-signal.neutral .demo-signal-type { background: rgba(139, 92, 246, 0.2); color: var(--neon-purple); }
+
+        .demo-signal-company {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .demo-signal h5 {
+            font-size: 1rem;
+            margin-bottom: 8px;
+        }
+
+        .demo-signal p {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .demo-links {
+            margin-top: 40px;
+            display: flex;
+            gap: 20px;
+        }
+
+        .demo-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 15px 30px;
+            border-radius: 12px;
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .demo-link.primary {
+            background: var(--gradient-main);
+            color: var(--bg-deep);
+        }
+
+        .demo-link.primary:hover {
+            transform: translateY(-3px);
+            box-shadow: var(--glow-cyan);
+        }
+
+        .demo-link.secondary {
+            background: var(--bg-card);
+            border: 1px solid var(--neon-cyan);
+            color: var(--neon-cyan);
+        }
+
+        .demo-link.secondary:hover {
+            background: rgba(0, 240, 255, 0.1);
+        }
+
+        /* Closing Section */
+        .closing-section {
+            background: linear-gradient(180deg, var(--bg-deep) 0%, #050508 100%);
+            text-align: center;
+        }
+
+        .closing-section h2 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 3.5rem;
+            margin-bottom: 30px;
+        }
+
+        .closing-section h2 .gradient-text {
+            background: var(--gradient-main);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .closing-section p {
+            font-size: 1.3rem;
+            color: var(--text-secondary);
+            max-width: 700px;
+            margin: 0 auto 50px;
+        }
+
+        .team-info {
+            display: flex;
+            gap: 60px;
+            justify-content: center;
+            margin-top: 60px;
+        }
+
+        .team-member {
+            text-align: center;
+        }
+
+        .team-avatar {
+            width: 100px;
+            height: 100px;
+            background: var(--gradient-main);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.5rem;
+            margin: 0 auto 15px;
+        }
+
+        .team-member h4 {
+            font-size: 1.1rem;
+            margin-bottom: 5px;
+        }
+
+        .team-member p {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            margin: 0;
+        }
+
+        /* Animations */
+        .fade-in {
+            opacity: 0;
+            transform: translateY(30px);
+            animation: fadeInUp 0.8s ease forwards;
+        }
+
+        .fade-in-delay-1 { animation-delay: 0.2s; }
+        .fade-in-delay-2 { animation-delay: 0.4s; }
+        .fade-in-delay-3 { animation-delay: 0.6s; }
+        .fade-in-delay-4 { animation-delay: 0.8s; }
+
+        @keyframes fadeInUp {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Scan line effect */
+        .scan-line {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--neon-cyan), transparent);
+            animation: scan 3s linear infinite;
+            pointer-events: none;
+            z-index: 9999;
+            opacity: 0.5;
+        }
+
+        @keyframes scan {
+            0% { top: 0; }
+            100% { top: 100%; }
+        }
+
+        /* Responsive */
+        @media (max-width: 1200px) {
+            .solution-container,
+            .demo-container {
+                flex-direction: column;
+            }
+
+            .tech-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .signal-cards {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 768px) {
+            section {
+                padding: 40px 20px;
+            }
+
+            .hero h1 {
+                font-size: 2.5rem;
+            }
+
+            .hero-stats {
+                flex-direction: column;
+                gap: 30px;
+            }
+
+            .problem-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .tech-grid {
+                grid-template-columns: 1fr;
+            }
+
+            nav {
+                padding: 0 20px;
+            }
+
+            .nav-links {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Background Effects -->
+    <div class="bg-grid"></div>
+    <div class="bg-gradient-orbs">
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+        <div class="orb orb-3"></div>
+    </div>
+    <div class="scan-line"></div>
+
+    <!-- Navigation -->
+    <nav>
+        <div class="logo">rKYC</div>
+        <div class="nav-links">
+            <a href="#problem">문제</a>
+            <a href="#solution">솔루션</a>
+            <a href="#architecture">아키텍처</a>
+            <a href="#signals">시그널</a>
+            <a href="#pipeline">파이프라인</a>
+            <a href="#demo">데모</a>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-badge fade-in">
+            <span class="dot"></span>
+            AI 기반 실시간 리스크 모니터링
+        </div>
+        <h1 class="fade-in fade-in-delay-1">
+            <span class="gradient-text">rKYC</span><br>
+            Really Know Your Customer
+        </h1>
+        <p class="hero-subtitle fade-in fade-in-delay-2">
+            금융기관 기업심사 담당자를 위한 AI 기반<br>
+            리스크 시그널 탐지 및 분석 시스템
+        </p>
+        <div class="hero-stats fade-in fade-in-delay-3">
+            <div class="stat-item">
+                <div class="stat-value">9</div>
+                <div class="stat-label">AI 파이프라인 단계</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value">3</div>
+                <div class="stat-label">시그널 유형</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value">4</div>
+                <div class="stat-label">Anti-Hallucination 레이어</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value">30+</div>
+                <div class="stat-label">API 엔드포인트</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Problem Section -->
+    <section class="problem-section" id="problem">
+        <div class="section-header">
+            <div class="section-label">Problem Statement</div>
+            <h2 class="section-title">현재 KYC 프로세스의 문제점</h2>
+            <p class="section-desc">기업심사 담당자들이 직면한 핵심 과제</p>
+        </div>
+        <div class="problem-grid">
+            <div class="problem-card">
+                <div class="problem-icon">⏰</div>
+                <h3>늦은 리스크 감지</h3>
+                <p>분기/연간 수동 KYC 검토 주기로 인해 리스크 시그널이 너무 늦게 감지됩니다.</p>
+            </div>
+            <div class="problem-card">
+                <div class="problem-icon">🔀</div>
+                <h3>정보 사일로</h3>
+                <p>뉴스, DART 공시, 내부 데이터가 분리되어 있어 통합된 리스크 뷰를 얻기 어렵습니다.</p>
+            </div>
+            <div class="problem-card">
+                <div class="problem-icon">🧠</div>
+                <h3>인지 과부하</h3>
+                <p>방대한 데이터 볼륨으로 인해 분석가들이 중요한 시그널을 놓칠 수 있습니다.</p>
+            </div>
+            <div class="problem-card">
+                <div class="problem-icon">❓</div>
+                <h3>근거 부재</h3>
+                <p>AI 추천에 대한 증거 기반 설명이 부족하여 신뢰도가 낮습니다.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Solution Section -->
+    <section class="solution-section" id="solution">
+        <div class="solution-container">
+            <div class="solution-content">
+                <div class="section-label">Our Solution</div>
+                <h2 class="section-title">AI 기반<br>실시간 리스크 탐지</h2>
+                <p class="section-desc" style="margin-top: 20px;">
+                    rKYC는 실시간 외부 데이터 모니터링과 내부 금융 정보를 통합하여
+                    조기 단계의 기업 리스크 시그널을 탐지합니다.
+                </p>
+
+                <div class="feature-list">
+                    <div class="feature-item">
+                        <div class="feature-icon">🎯</div>
+                        <div class="feature-text">
+                            <h4>3가지 시그널 유형</h4>
+                            <p>직접(DIRECT), 산업(INDUSTRY), 환경(ENVIRONMENT) 리스크 분류</p>
+                        </div>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon">📋</div>
+                        <div class="feature-text">
+                            <h4>증거 기반 분석</h4>
+                            <p>모든 시그널에 필수 출처 및 근거 명시</p>
+                        </div>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon">🛡️</div>
+                        <div class="feature-text">
+                            <h4>Anti-Hallucination 프레임워크</h4>
+                            <p>4단계 방어 모델로 신뢰할 수 있는 AI 출력 보장</p>
+                        </div>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon">⚡</div>
+                        <div class="feature-text">
+                            <h4>실시간 처리</h4>
+                            <p>9단계 AI 파이프라인으로 5분 이내 시그널 탐지</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="solution-visual">
+                <div class="signal-flow">
+                    <div class="flow-step">
+                        <div class="flow-number">1</div>
+                        <div class="flow-text">
+                            <h4>데이터 수집</h4>
+                            <p>내부 스냅샷 + 외부 뉴스 + 문서</p>
+                        </div>
+                    </div>
+                    <div class="flow-step">
+                        <div class="flow-number">2</div>
+                        <div class="flow-text">
+                            <h4>AI 분석</h4>
+                            <p>Claude Opus 4.5 + Fallback Chain</p>
+                        </div>
+                    </div>
+                    <div class="flow-step">
+                        <div class="flow-number">3</div>
+                        <div class="flow-text">
+                            <h4>시그널 추출</h4>
+                            <p>리스크/기회 시그널 + 증거</p>
+                        </div>
+                    </div>
+                    <div class="flow-step">
+                        <div class="flow-number">4</div>
+                        <div class="flow-text">
+                            <h4>검증 & 인사이트</h4>
+                            <p>Guardrails + 유사 케이스 검색</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Architecture Section -->
+    <section class="architecture-section" id="architecture">
+        <div class="section-header">
+            <div class="section-label">System Architecture</div>
+            <h2 class="section-title">3-Tier 아키텍처</h2>
+            <p class="section-desc">보안과 확장성을 위한 물리적 분리</p>
+        </div>
+
+        <div class="arch-diagram">
+            <div class="arch-layers">
+                <div class="arch-layer">
+                    <div class="layer-label">User Layer</div>
+                    <div class="layer-content">
+                        <div class="arch-box frontend">
+                            <h4>🖥️ Frontend</h4>
+                            <p>React 18 + TypeScript</p>
+                            <p style="color: var(--neon-purple); font-size: 0.75rem; margin-top: 10px;">❌ LLM 키 없음 | ❌ DB 접근 없음</p>
+                            <div class="tech-stack">
+                                <span class="tech-tag">Vite</span>
+                                <span class="tech-tag">TanStack Query</span>
+                                <span class="tech-tag">shadcn/ui</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="arch-connector"></div>
+
+                <div class="arch-layer">
+                    <div class="layer-label">API Layer</div>
+                    <div class="layer-content">
+                        <div class="arch-box backend">
+                            <h4>⚙️ Backend API</h4>
+                            <p>FastAPI + SQLAlchemy 2.0</p>
+                            <p style="color: var(--neon-green); font-size: 0.75rem; margin-top: 10px;">❌ LLM 키 없음 | ✅ DB 접근</p>
+                            <div class="tech-stack">
+                                <span class="tech-tag">Python 3.11</span>
+                                <span class="tech-tag">asyncpg</span>
+                                <span class="tech-tag">Pydantic</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="arch-connector"></div>
+
+                <div class="arch-layer">
+                    <div class="layer-label">Worker Layer</div>
+                    <div class="layer-content">
+                        <div class="arch-box worker">
+                            <h4>🤖 AI Worker</h4>
+                            <p>Celery + LLM Orchestrator</p>
+                            <p style="color: var(--neon-magenta); font-size: 0.75rem; margin-top: 10px;">✅ LLM 키 보유 | ✅ DB 접근</p>
+                            <div class="tech-stack">
+                                <span class="tech-tag">Claude Opus 4.5</span>
+                                <span class="tech-tag">GPT-5</span>
+                                <span class="tech-tag">Gemini 3</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="arch-connector"></div>
+
+                <div class="arch-layer">
+                    <div class="layer-label">Data Layer</div>
+                    <div class="layer-content">
+                        <div class="arch-box">
+                            <h4>🗄️ PostgreSQL</h4>
+                            <p>Supabase (Tokyo)</p>
+                            <div class="tech-stack">
+                                <span class="tech-tag">pgvector</span>
+                            </div>
+                        </div>
+                        <div class="arch-box">
+                            <h4>📮 Redis</h4>
+                            <p>Message Queue</p>
+                            <div class="tech-stack">
+                                <span class="tech-tag">Celery Broker</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Signal Types Section -->
+    <section class="signals-section" id="signals">
+        <div class="section-header">
+            <div class="section-label">Signal Categories</div>
+            <h2 class="section-title">3가지 시그널 유형</h2>
+            <p class="section-desc">다차원 리스크 분석을 위한 시그널 분류 체계</p>
+        </div>
+
+        <div class="signal-cards">
+            <div class="signal-card direct">
+                <div class="signal-type-icon">🏢</div>
+                <h3>DIRECT 시그널</h3>
+                <p>특정 기업에 직접 영향을 미치는 리스크</p>
+                <div class="signal-events">
+                    <div class="signal-event">내부 신용등급 변경</div>
+                    <div class="signal-event">연체 플래그 활성화</div>
+                    <div class="signal-event">담보 가치 변동</div>
+                    <div class="signal-event">소유구조 변경</div>
+                </div>
+            </div>
+
+            <div class="signal-card industry">
+                <div class="signal-type-icon">🏭</div>
+                <h3>INDUSTRY 시그널</h3>
+                <p>업종 전반에 영향을 미치는 리스크</p>
+                <div class="signal-events">
+                    <div class="signal-event">산업 규제 변화</div>
+                    <div class="signal-event">시장 충격</div>
+                    <div class="signal-event">공급망 이슈</div>
+                    <div class="signal-event">경쟁 환경 변화</div>
+                </div>
+            </div>
+
+            <div class="signal-card environment">
+                <div class="signal-type-icon">🌍</div>
+                <h3>ENVIRONMENT 시그널</h3>
+                <p>거시적/외부 환경 요인 리스크</p>
+                <div class="signal-events">
+                    <div class="signal-event">환율 리스크</div>
+                    <div class="signal-event">정책/규제 변화</div>
+                    <div class="signal-event">지정학적 리스크</div>
+                    <div class="signal-event">공급망 교란</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pipeline Section -->
+    <section class="pipeline-section" id="pipeline">
+        <div class="section-header">
+            <div class="section-label">AI Pipeline</div>
+            <h2 class="section-title">9단계 분석 파이프라인</h2>
+            <p class="section-desc">데이터 수집부터 인사이트 생성까지</p>
+        </div>
+
+        <div class="pipeline-container">
+            <div class="pipeline-stages">
+                <div class="pipeline-stage">
+                    <div class="stage-number">1</div>
+                    <h4>SNAPSHOT</h4>
+                    <p>내부 데이터 수집</p>
+                </div>
+                <span class="pipeline-arrow">→</span>
+                <div class="pipeline-stage">
+                    <div class="stage-number">2</div>
+                    <h4>DOC_INGEST</h4>
+                    <p>문서 파싱/추출</p>
+                </div>
+                <span class="pipeline-arrow">→</span>
+                <div class="pipeline-stage">
+                    <div class="stage-number">3</div>
+                    <h4>PROFILING</h4>
+                    <p>기업 프로파일링</p>
+                </div>
+                <span class="pipeline-arrow">→</span>
+                <div class="pipeline-stage">
+                    <div class="stage-number">4</div>
+                    <h4>EXTERNAL</h4>
+                    <p>외부 정보 검색</p>
+                </div>
+                <span class="pipeline-arrow">→</span>
+                <div class="pipeline-stage">
+                    <div class="stage-number">5</div>
+                    <h4>CONTEXT</h4>
+                    <p>컨텍스트 통합</p>
+                </div>
+                <span class="pipeline-arrow">→</span>
+                <div class="pipeline-stage">
+                    <div class="stage-number">6</div>
+                    <h4>SIGNAL</h4>
+                    <p>시그널 추출</p>
+                </div>
+                <span class="pipeline-arrow">→</span>
+                <div class="pipeline-stage">
+                    <div class="stage-number">7</div>
+                    <h4>VALIDATION</h4>
+                    <p>검증 & 중복제거</p>
+                </div>
+                <span class="pipeline-arrow">→</span>
+                <div class="pipeline-stage">
+                    <div class="stage-number">8</div>
+                    <h4>INDEX</h4>
+                    <p>벡터 인덱싱</p>
+                </div>
+                <span class="pipeline-arrow">→</span>
+                <div class="pipeline-stage">
+                    <div class="stage-number">9</div>
+                    <h4>INSIGHT</h4>
+                    <p>인사이트 생성</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Anti-Hallucination Section -->
+    <section class="anti-hallucination-section">
+        <div class="section-header">
+            <div class="section-label">Trust & Safety</div>
+            <h2 class="section-title">Anti-Hallucination 프레임워크</h2>
+            <p class="section-desc">신뢰할 수 있는 AI 출력을 위한 4단계 방어 모델</p>
+        </div>
+
+        <div class="defense-layers">
+            <div class="defense-layer">
+                <div class="layer-number">1</div>
+                <div class="layer-info">
+                    <h4>출처 검증 (Source Verification)</h4>
+                    <p>Perplexity 검색 결과의 도메인 신뢰도 분류 - 공식 출처(DART, IR)는 HIGH, 뉴스는 MED, 추론은 LOW</p>
+                </div>
+            </div>
+            <div class="defense-layer">
+                <div class="layer-number">2</div>
+                <div class="layer-info">
+                    <h4>추출 가드레일 (Extraction Guardrails)</h4>
+                    <p>LLM 프롬프트에 "모르면 null 반환" 규칙 적용 - 추측보다 누락이 안전</p>
+                </div>
+            </div>
+            <div class="defense-layer">
+                <div class="layer-number">3</div>
+                <div class="layer-info">
+                    <h4>검증 레이어 (Validation Layer)</h4>
+                    <p>범위/일관성 검증 - 비율 합계(export + domestic = 100%), 숫자 범위 검사</p>
+                </div>
+            </div>
+            <div class="defense-layer">
+                <div class="layer-number">4</div>
+                <div class="layer-info">
+                    <h4>감사 추적 (Audit Trail)</h4>
+                    <p>모든 필드에 출처 URL, 발췌문, 신뢰도, 추출일자 추적 - 완전한 추적성 보장</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Tech Stack Section -->
+    <section class="tech-section">
+        <div class="section-header">
+            <div class="section-label">Technology</div>
+            <h2 class="section-title">기술 스택</h2>
+            <p class="section-desc">최신 기술로 구축된 프로덕션 레디 시스템</p>
+        </div>
+
+        <div class="tech-grid">
+            <div class="tech-card">
+                <div class="tech-card-icon">🖥️</div>
+                <h4>Frontend</h4>
+                <p>모던 React 기반 UI</p>
+                <div class="tech-items">
+                    <span class="tech-item">React 18</span>
+                    <span class="tech-item">TypeScript</span>
+                    <span class="tech-item">Vite</span>
+                    <span class="tech-item">TanStack Query</span>
+                    <span class="tech-item">shadcn/ui</span>
+                </div>
+            </div>
+
+            <div class="tech-card">
+                <div class="tech-card-icon">⚙️</div>
+                <h4>Backend</h4>
+                <p>비동기 Python API</p>
+                <div class="tech-items">
+                    <span class="tech-item">FastAPI</span>
+                    <span class="tech-item">SQLAlchemy 2.0</span>
+                    <span class="tech-item">Pydantic v2</span>
+                    <span class="tech-item">asyncpg</span>
+                </div>
+            </div>
+
+            <div class="tech-card">
+                <div class="tech-card-icon">🤖</div>
+                <h4>AI/LLM</h4>
+                <p>멀티 프로바이더 전략</p>
+                <div class="tech-items">
+                    <span class="tech-item">Claude Opus 4.5</span>
+                    <span class="tech-item">GPT-5</span>
+                    <span class="tech-item">Gemini 3</span>
+                    <span class="tech-item">Perplexity</span>
+                </div>
+            </div>
+
+            <div class="tech-card">
+                <div class="tech-card-icon">🗄️</div>
+                <h4>Infrastructure</h4>
+                <p>클라우드 네이티브 배포</p>
+                <div class="tech-items">
+                    <span class="tech-item">Vercel</span>
+                    <span class="tech-item">Railway</span>
+                    <span class="tech-item">Supabase</span>
+                    <span class="tech-item">pgvector</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Demo Section -->
+    <section class="demo-section" id="demo">
+        <div class="demo-container">
+            <div class="demo-info">
+                <div class="section-label">Live Demo</div>
+                <h2 class="section-title">실시간 데모</h2>
+                <p class="section-desc" style="margin-top: 20px;">
+                    6개 기업, 29개 시그널이 포함된<br>
+                    완전히 동작하는 MVP를 직접 체험해보세요.
+                </p>
+
+                <div style="margin-top: 30px;">
+                    <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 15px;">
+                        <span style="color: var(--neon-green);">✓</span>
+                        <span>Frontend: Vercel 배포</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 15px;">
+                        <span style="color: var(--neon-green);">✓</span>
+                        <span>Backend API: Railway 배포</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 15px;">
+                        <span style="color: var(--neon-green);">✓</span>
+                        <span>Database: Supabase (Tokyo)</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        <span style="color: var(--neon-green);">✓</span>
+                        <span>Worker: Celery + Redis</span>
+                    </div>
+                </div>
+
+                <div class="demo-links">
+                    <a href="https://rkyc-wine.vercel.app" target="_blank" class="demo-link primary">
+                        🚀 라이브 데모 보기
+                    </a>
+                    <a href="https://rkyc-production.up.railway.app/docs" target="_blank" class="demo-link secondary">
+                        📚 API 문서
+                    </a>
+                </div>
+            </div>
+
+            <div class="demo-preview">
+                <div class="demo-frame">
+                    <div class="demo-header">
+                        <div class="demo-dot red"></div>
+                        <div class="demo-dot yellow"></div>
+                        <div class="demo-dot green"></div>
+                        <div class="demo-url">rkyc-wine.vercel.app</div>
+                    </div>
+                    <div class="demo-content">
+                        <div class="demo-signal-list">
+                            <div class="demo-signal risk">
+                                <div class="demo-signal-header">
+                                    <span class="demo-signal-type">RISK · HIGH</span>
+                                    <span class="demo-signal-company">엠케이전자</span>
+                                </div>
+                                <h5>내부 신용등급 하락 감지</h5>
+                                <p>내부 신용등급이 A에서 B+로 하향 조정됨. 최근 분기 실적 악화 영향 추정.</p>
+                            </div>
+
+                            <div class="demo-signal opportunity">
+                                <div class="demo-signal-header">
+                                    <span class="demo-signal-type">OPPORTUNITY · MED</span>
+                                    <span class="demo-signal-company">삼성전자</span>
+                                </div>
+                                <h5>신규 정부 지원 정책 발표</h5>
+                                <p>반도체 산업 육성을 위한 대규모 세제 지원 정책 발표. 관련 기업 수혜 예상.</p>
+                            </div>
+
+                            <div class="demo-signal neutral">
+                                <div class="demo-signal-header">
+                                    <span class="demo-signal-type">INDUSTRY · MED</span>
+                                    <span class="demo-signal-company">동부건설</span>
+                                </div>
+                                <h5>건설업 규제 환경 변화</h5>
+                                <p>건설업 안전 규제 강화 예고. 준비 기간 충분하나 모니터링 필요.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Closing Section -->
+    <section class="closing-section">
+        <h2>
+            <span class="gradient-text">Really</span> Know Your Customer
+        </h2>
+        <p>
+            AI 기반 실시간 리스크 모니터링으로<br>
+            기업심사의 새로운 패러다임을 제시합니다.
+        </p>
+
+        <div style="margin-top: 60px;">
+            <div class="section-label">Key Achievements</div>
+            <div style="display: flex; gap: 40px; justify-content: center; margin-top: 30px; flex-wrap: wrap;">
+                <div style="text-align: center;">
+                    <div style="font-family: 'Orbitron', sans-serif; font-size: 2.5rem; color: var(--neon-cyan);">100%</div>
+                    <div style="color: var(--text-muted); font-size: 0.9rem;">증거 커버리지</div>
+                </div>
+                <div style="text-align: center;">
+                    <div style="font-family: 'Orbitron', sans-serif; font-size: 2.5rem; color: var(--neon-green);">< 3분</div>
+                    <div style="color: var(--text-muted); font-size: 0.9rem;">분석 완료 시간</div>
+                </div>
+                <div style="text-align: center;">
+                    <div style="font-family: 'Orbitron', sans-serif; font-size: 2.5rem; color: var(--neon-magenta);">30+</div>
+                    <div style="color: var(--text-muted); font-size: 0.9rem;">API 엔드포인트</div>
+                </div>
+                <div style="text-align: center;">
+                    <div style="font-family: 'Orbitron', sans-serif; font-size: 2.5rem; color: var(--neon-purple);">4단계</div>
+                    <div style="color: var(--text-muted); font-size: 0.9rem;">Fallback 체인</div>
+                </div>
+            </div>
+        </div>
+
+        <div style="margin-top: 80px; padding-top: 40px; border-top: 1px solid rgba(0, 240, 255, 0.1);">
+            <p style="color: var(--text-muted); font-size: 0.9rem; margin: 0;">
+                Built with Claude Code · 2026 Hackathon
+            </p>
+        </div>
+    </section>
+
+    <script>
+        // Smooth scroll for navigation
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                document.querySelector(this.getAttribute('href')).scrollIntoView({
+                    behavior: 'smooth'
+                });
+            });
+        });
+
+        // Intersection Observer for animations
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.style.opacity = '1';
+                    entry.target.style.transform = 'translateY(0)';
+                }
+            });
+        }, observerOptions);
+
+        // Observe all cards and sections
+        document.querySelectorAll('.problem-card, .signal-card, .tech-card, .defense-layer, .pipeline-stage, .arch-box').forEach(el => {
+            el.style.opacity = '0';
+            el.style.transform = 'translateY(30px)';
+            el.style.transition = 'all 0.6s ease';
+            observer.observe(el);
+        });
+
+        // Parallax effect for orbs
+        document.addEventListener('mousemove', (e) => {
+            const x = e.clientX / window.innerWidth;
+            const y = e.clientY / window.innerHeight;
+
+            document.querySelectorAll('.orb').forEach((orb, index) => {
+                const speed = (index + 1) * 20;
+                orb.style.transform = `translate(${x * speed}px, ${y * speed}px)`;
+            });
+        });
+    </script>
+</body>
+</html>

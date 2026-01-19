@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #ffffff; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #FFFFFF; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #0D1117; padding: 14pt 25pt;
+}
+.header h1 {
+  color: #FFFFFF; font-size: 22pt; font-weight: bold; margin: 0;
+}
+.header-sub {
+  color: #E33737; font-size: 10pt; margin: 2pt 0 0 0;
+}
+.content {
+  flex: 1; padding: 12pt 20pt;
+}
+.pipeline {
+  display: flex; flex-wrap: wrap; gap: 6pt;
+}
+.stage {
+  width: 105pt; background: #F4F6F6; border-radius: 3pt; padding: 8pt;
+  border-left: 2pt solid #E33737;
+}
+.stage-num {
+  color: #E33737; font-size: 8pt; font-weight: bold; margin: 0;
+}
+.stage-name {
+  color: #1C2833; font-size: 10pt; font-weight: bold; margin: 2pt 0;
+}
+.stage-desc {
+  color: #2E4053; font-size: 8pt; margin: 0;
+}
+.stage-special {
+  border-left-color: #27AE60;
+  background: #E8F8F5;
+}
+.stage-special .stage-num {
+  color: #27AE60;
+}
+.arrow-right {
+  display: flex; align-items: center; color: #AAB7B8; font-size: 12pt;
+}
+.bottom-info {
+  margin-top: 10pt; display: flex; gap: 10pt;
+}
+.info-box {
+  flex: 1; background: #0D1117; padding: 10pt; border-radius: 4pt;
+}
+.info-title {
+  color: #E33737; font-size: 9pt; font-weight: bold; margin: 0 0 4pt 0;
+}
+.info-text {
+  color: #FFFFFF; font-size: 8pt; margin: 0;
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>CHRONOS™ 9-Stage Analysis Pipeline</h1>
+  <p class="header-sub">Automated Risk Signal Detection Workflow | ~22.7s Complete</p>
+</div>
+<div class="content">
+  <div class="pipeline">
+    <div class="stage">
+      <p class="stage-num">Stage 1</p>
+      <p class="stage-name">SNAPSHOT</p>
+      <p class="stage-desc">Internal Data Load</p>
+    </div>
+    <p class="arrow-right">→</p>
+    <div class="stage">
+      <p class="stage-num">Stage 2</p>
+      <p class="stage-name">DOC_INGEST</p>
+      <p class="stage-desc">ORACLE™ Parser</p>
+    </div>
+    <p class="arrow-right">→</p>
+    <div class="stage stage-special">
+      <p class="stage-num">Stage 3 ★</p>
+      <p class="stage-name">PROFILING</p>
+      <p class="stage-desc">PRISM™ 4-Layer</p>
+    </div>
+    <p class="arrow-right">→</p>
+    <div class="stage">
+      <p class="stage-num">Stage 4</p>
+      <p class="stage-name">EXTERNAL</p>
+      <p class="stage-desc">Web Intelligence</p>
+    </div>
+    <p class="arrow-right">→</p>
+    <div class="stage">
+      <p class="stage-num">Stage 5</p>
+      <p class="stage-name">CONTEXT</p>
+      <p class="stage-desc">NEXUS™ Synthesis</p>
+    </div>
+    <p class="arrow-right">→</p>
+    <div class="stage">
+      <p class="stage-num">Stage 6</p>
+      <p class="stage-name">SIGNAL</p>
+      <p class="stage-desc">SENTINEL™ Extract</p>
+    </div>
+    <p class="arrow-right">→</p>
+    <div class="stage stage-special">
+      <p class="stage-num">Stage 7 ★</p>
+      <p class="stage-name">VALIDATION</p>
+      <p class="stage-desc">AEGIS™ Defense</p>
+    </div>
+    <p class="arrow-right">→</p>
+    <div class="stage">
+      <p class="stage-num">Stage 8</p>
+      <p class="stage-name">INDEX</p>
+      <p class="stage-desc">Vector 2000d</p>
+    </div>
+    <p class="arrow-right">→</p>
+    <div class="stage">
+      <p class="stage-num">Stage 9</p>
+      <p class="stage-name">INSIGHT</p>
+      <p class="stage-desc">Briefing Gen</p>
+    </div>
+  </div>
+  <div class="bottom-info">
+    <div class="info-box">
+      <p class="info-title">Neural Ensemble</p>
+      <p class="info-text">Claude Opus 4.5 → GPT-5 → Gemini 3 Pro (3-Tier Fallback)</p>
+    </div>
+    <div class="info-box">
+      <p class="info-title">GUARDIAN™ Resilience</p>
+      <p class="info-text">Circuit Breaker (threshold=3), Rate Limiter, Auto Recovery</p>
+    </div>
+    <div class="info-box">
+      <p class="info-title">Semantic Engine</p>
+      <p class="info-text">pgvector HNSW 2000d, Cosine Similarity, Case-Based Reasoning</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>

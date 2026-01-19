@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #ffffff; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #FFFFFF; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #1C2833; padding: 18pt 30pt;
+}
+.header h1 {
+  color: #FFFFFF; font-size: 26pt; font-weight: bold; margin: 0;
+}
+.content {
+  display: flex; flex: 1; padding: 20pt 30pt;
+}
+.left {
+  flex: 1; padding-right: 20pt;
+}
+.right {
+  flex: 1; padding-left: 20pt;
+}
+.right-border {
+  width: 3pt; background: #E33737;
+}
+h2 {
+  color: #1C2833; font-size: 16pt; font-weight: bold; margin: 0 0 12pt 0;
+}
+.problem-item {
+  background: #F4F6F6; padding: 10pt 12pt; margin-bottom: 8pt; border-radius: 4pt;
+}
+.problem-item p {
+  color: #2E4053; font-size: 11pt; margin: 0;
+}
+.stat-box {
+  background: #1C2833; padding: 12pt; margin-bottom: 8pt; border-radius: 4pt;
+  text-align: center;
+}
+.stat-number {
+  color: #E33737; font-size: 28pt; font-weight: bold; margin: 0;
+}
+.stat-label {
+  color: #FFFFFF; font-size: 10pt; margin: 4pt 0 0 0;
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Problem Statement</h1>
+</div>
+<div class="content">
+  <div class="left">
+    <h2>기업심사 담당자의 Pain Points</h2>
+    <div class="problem-item">
+      <p>수동 모니터링: 뉴스, 공시, 재무제표를 일일이 확인</p>
+    </div>
+    <div class="problem-item">
+      <p>리스크 탐지 지연: 조기 경고 시그널 놓침</p>
+    </div>
+    <div class="problem-item">
+      <p>정보 과부하: 하루 수백 건 뉴스 중 중요 정보 선별 어려움</p>
+    </div>
+    <div class="problem-item">
+      <p>근거 추적 부재: 의사결정 시 출처 확인에 시간 소요</p>
+    </div>
+  </div>
+  <div class="right-border"></div>
+  <div class="right">
+    <h2>현재 시장 상황</h2>
+    <div class="stat-box">
+      <p class="stat-number">73%</p>
+      <p class="stat-label">수동 리스크 모니터링 비율</p>
+    </div>
+    <div class="stat-box">
+      <p class="stat-number">2-3일</p>
+      <p class="stat-label">평균 리스크 인지 지연</p>
+    </div>
+    <div class="stat-box">
+      <p class="stat-number">40%</p>
+      <p class="stat-label">외부 환경 변화 탐지 누락률</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>

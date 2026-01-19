@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #ffffff; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #FFFFFF; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #1C2833; padding: 16pt 30pt;
+}
+.header h1 {
+  color: #FFFFFF; font-size: 24pt; font-weight: bold; margin: 0;
+}
+.content {
+  flex: 1; padding: 12pt 25pt;
+  display: flex; gap: 15pt;
+}
+.tables {
+  flex: 1.3;
+}
+.table-group {
+  margin-bottom: 8pt;
+}
+.group-title {
+  color: #E33737; font-size: 11pt; font-weight: bold; margin: 0 0 4pt 0;
+}
+.table-row {
+  display: flex; gap: 4pt; flex-wrap: wrap;
+}
+.table-box {
+  background: #F4F6F6; padding: 4pt 8pt; border-radius: 3pt;
+}
+.table-box p {
+  color: #1C2833; font-size: 9pt; margin: 0; font-family: Courier New, monospace;
+}
+.features {
+  flex: 0.7; background: #1C2833; padding: 12pt; border-radius: 6pt;
+}
+.feat-title {
+  color: #E33737; font-size: 12pt; font-weight: bold; margin: 0 0 10pt 0;
+}
+.feat-item {
+  background: #2E4053; padding: 6pt 8pt; margin-bottom: 4pt; border-radius: 3pt;
+}
+.feat-item p {
+  color: #FFFFFF; font-size: 9pt; margin: 0;
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Database Schema (PostgreSQL + pgvector)</h1>
+</div>
+<div class="content">
+  <div class="tables">
+    <div class="table-group">
+      <p class="group-title">Core Master</p>
+      <div class="table-row">
+        <div class="table-box"><p>corp</p></div>
+        <div class="table-box"><p>industry_master</p></div>
+      </div>
+    </div>
+    <div class="table-group">
+      <p class="group-title">Signal System</p>
+      <div class="table-row">
+        <div class="table-box"><p>rkyc_signal</p></div>
+        <div class="table-box"><p>rkyc_signal_index</p></div>
+        <div class="table-box"><p>rkyc_evidence</p></div>
+        <div class="table-box"><p>rkyc_signal_embedding</p></div>
+      </div>
+    </div>
+    <div class="table-group">
+      <p class="group-title">Internal Data</p>
+      <div class="table-row">
+        <div class="table-box"><p>rkyc_internal_snapshot</p></div>
+        <div class="table-box"><p>rkyc_document</p></div>
+        <div class="table-box"><p>rkyc_fact</p></div>
+      </div>
+    </div>
+    <div class="table-group">
+      <p class="group-title">Corp Profiling</p>
+      <div class="table-row">
+        <div class="table-box"><p>rkyc_corp_profile</p></div>
+      </div>
+    </div>
+    <div class="table-group">
+      <p class="group-title">External Intelligence</p>
+      <div class="table-row">
+        <div class="table-box"><p>rkyc_external_news</p></div>
+        <div class="table-box"><p>rkyc_llm_audit_log</p></div>
+      </div>
+    </div>
+    <div class="table-group">
+      <p class="group-title">Jobs</p>
+      <div class="table-row">
+        <div class="table-box"><p>rkyc_job</p></div>
+      </div>
+    </div>
+  </div>
+  <div class="features">
+    <p class="feat-title">Key Features</p>
+    <div class="feat-item"><p>pgvector HNSW 2000d 벡터 인덱스</p></div>
+    <div class="feat-item"><p>Denormalized signal_index</p></div>
+    <div class="feat-item"><p>JSON Pointer Evidence ref_value</p></div>
+    <div class="feat-item"><p>Provenance 필드별 출처 추적</p></div>
+    <div class="feat-item"><p>10 Enums 타입 안전성</p></div>
+    <div class="feat-item"><p>pgbouncer Transaction mode</p></div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #ffffff; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #FFFFFF; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #0D1117; padding: 18pt 30pt;
+}
+.header h1 {
+  color: #FFFFFF; font-size: 24pt; font-weight: bold; margin: 0;
+}
+.header-sub {
+  color: #E33737; font-size: 11pt; margin: 3pt 0 0 0;
+}
+.content {
+  flex: 1; padding: 12pt 25pt 20pt 25pt;
+  display: flex; flex-direction: column;
+}
+.modules {
+  display: flex; gap: 10pt; flex: 1;
+}
+.module {
+  flex: 1; background: #F4F6F6; border-radius: 5pt; padding: 10pt;
+  border-top: 3pt solid #E33737;
+}
+.module-icon {
+  color: #E33737; font-size: 9pt; font-weight: bold; margin: 0 0 3pt 0;
+}
+.module-name {
+  color: #1C2833; font-size: 13pt; font-weight: bold; margin: 0 0 5pt 0;
+}
+.module-desc {
+  color: #2E4053; font-size: 9pt; margin: 0; line-height: 1.3;
+}
+.signal-types {
+  display: flex; gap: 8pt; margin-top: 12pt;
+}
+.signal-badge {
+  flex: 1; padding: 10pt; border-radius: 4pt; text-align: center;
+}
+.signal-direct { background: #E33737; }
+.signal-industry { background: #F39C12; }
+.signal-env { background: #27AE60; }
+.signal-badge p {
+  color: #FFFFFF; font-size: 11pt; font-weight: bold; margin: 0;
+}
+.signal-badge span {
+  color: rgba(255,255,255,0.9); font-size: 9pt; display: block; margin-top: 3pt;
+}
+.bottom-stats {
+  display: flex; gap: 8pt; margin-top: 10pt;
+}
+.stat-box {
+  flex: 1; background: #0D1117; padding: 6pt; border-radius: 4pt; text-align: center;
+}
+.stat-value {
+  color: #E33737; font-size: 16pt; font-weight: bold; margin: 0;
+}
+.stat-label {
+  color: #AAB7B8; font-size: 8pt; margin: 2pt 0 0 0;
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>ARGUS™ AI Engine Core Modules</h1>
+  <p class="header-sub">Proprietary Multi-Agent Neural Architecture</p>
+</div>
+<div class="content">
+  <div class="modules">
+    <div class="module">
+      <p class="module-icon">SENTINEL™</p>
+      <p class="module-name">Signal Detector</p>
+      <p class="module-desc">NLU 기반 시그널 추출, Entity Recognition, Temporal Analysis</p>
+    </div>
+    <div class="module">
+      <p class="module-icon">PRISM™</p>
+      <p class="module-name">Profile Builder</p>
+      <p class="module-desc">4-Layer Fallback 기업 프로파일링, Zero-Failure 보장</p>
+    </div>
+    <div class="module">
+      <p class="module-icon">AEGIS™</p>
+      <p class="module-name">Defense System</p>
+      <p class="module-desc">Anti-Hallucination 4-Layer, Source Verification</p>
+    </div>
+    <div class="module">
+      <p class="module-icon">NEXUS™</p>
+      <p class="module-name">Context Engine</p>
+      <p class="module-desc">2000d Vector, HNSW Index, Semantic Search</p>
+    </div>
+  </div>
+  <div class="signal-types">
+    <div class="signal-badge signal-direct">
+      <p>DIRECT</p>
+      <span>내부 변동 (8 Types)</span>
+    </div>
+    <div class="signal-badge signal-industry">
+      <p>INDUSTRY</p>
+      <span>업종 이벤트</span>
+    </div>
+    <div class="signal-badge signal-env">
+      <p>ENVIRONMENT</p>
+      <span>거시환경 변화</span>
+    </div>
+  </div>
+  <div class="bottom-stats">
+    <div class="stat-box">
+      <p class="stat-value">95%+</p>
+      <p class="stat-label">Accuracy</p>
+    </div>
+    <div class="stat-box">
+      <p class="stat-value">100%</p>
+      <p class="stat-label">Zero-Failure</p>
+    </div>
+    <div class="stat-box">
+      <p class="stat-value">22.7s</p>
+      <p class="stat-label">Pipeline</p>
+    </div>
+    <div class="stat-box">
+      <p class="stat-value">7d TTL</p>
+      <p class="stat-label">Cache</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>

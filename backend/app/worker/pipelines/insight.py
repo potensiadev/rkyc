@@ -108,8 +108,11 @@ class InsightPipeline:
             {
                 "role": "system",
                 "content": (
-                    "You are a senior risk analyst providing executive briefings. "
+                    "You are a senior corporate analyst providing executive briefings. "
                     "Generate concise, actionable insights in Korean. "
+                    "IMPORTANT: Cover both RISK and OPPORTUNITY factors with equal emphasis. "
+                    "Opportunities like revenue growth, new products, factory expansion, technology investment "
+                    "are valuable signals for banks to identify credit expansion opportunities. "
                     "Use probabilistic language: '~로 추정됨', '~가능성 있음', '검토 권고'. "
                     "Avoid definitive statements like '반드시', '즉시 조치 필요'. "
                     "If similar past cases are provided, reference them to provide historical context."
@@ -243,30 +246,59 @@ Summary: {target_signal.get('summary', '')}
         opp_signals = [s for s in signals if s.get("impact_direction") == "OPPORTUNITY"]
         neutral_signals = [s for s in signals if s.get("impact_direction") == "NEUTRAL"]
 
+        # OPPORTUNITY 시그널을 먼저 표시 (기회 요인 강조)
+        if opp_signals:
+            lines.append(f"## 🚀 기회 시그널 ({len(opp_signals)}건) - 성장/투자/수익 개선 기회")
+            for s in opp_signals:
+                strength = s.get("impact_strength", "MED")
+                event_type = s.get("event_type", "")
+                opp_category = self._categorize_opportunity(event_type, s.get("title", ""), s.get("summary", ""))
+                lines.append(f"- [{strength}] [{opp_category}] {s.get('title', '')}: {s.get('summary', '')[:100]}")
+
         if risk_signals:
-            lines.append(f"## 리스크 시그널 ({len(risk_signals)}건)")
+            lines.append(f"\n## ⚠️ 리스크 시그널 ({len(risk_signals)}건)")
             for s in risk_signals:
                 strength = s.get("impact_strength", "MED")
                 lines.append(f"- [{strength}] {s.get('title', '')}: {s.get('summary', '')[:100]}")
 
-        if opp_signals:
-            lines.append(f"\n## 기회 시그널 ({len(opp_signals)}건)")
-            for s in opp_signals:
-                strength = s.get("impact_strength", "MED")
-                lines.append(f"- [{strength}] {s.get('title', '')}: {s.get('summary', '')[:100]}")
-
         if neutral_signals:
-            lines.append(f"\n## 참고 시그널 ({len(neutral_signals)}건)")
+            lines.append(f"\n## 📋 참고 시그널 ({len(neutral_signals)}건)")
             for s in neutral_signals:
                 lines.append(f"- {s.get('title', '')}: {s.get('summary', '')[:100]}")
 
         return "\n".join(lines)
 
+    def _categorize_opportunity(self, event_type: str, title: str, summary: str) -> str:
+        """Categorize opportunity signal for better context."""
+        text = f"{title} {summary}".lower()
+
+        # 카테고리 매핑
+        if any(kw in text for kw in ["매출", "실적", "영업이익", "순이익", "흑자", "수익"]):
+            return "실적개선"
+        elif any(kw in text for kw in ["공장", "증설", "설비", "투자", "확장", "신규 사업장"]):
+            return "성장투자"
+        elif any(kw in text for kw in ["신제품", "신기술", "특허", "개발", "혁신", "r&d"]):
+            return "기술혁신"
+        elif any(kw in text for kw in ["수주", "계약", "고객", "시장", "해외", "진출"]):
+            return "시장확대"
+        elif any(kw in text for kw in ["부채", "유동성", "재무", "신용등급", "건전성"]):
+            return "재무개선"
+        elif any(kw in text for kw in ["정책", "지원", "보조금", "세제", "규제 완화"]):
+            return "정책수혜"
+        elif any(kw in text for kw in ["담보", "자산", "부동산", "특허 가치"]):
+            return "담보강화"
+        elif any(kw in text for kw in ["인수", "합병", "제휴", "파트너", "합작"]):
+            return "전략제휴"
+        elif any(kw in text for kw in ["esg", "환경", "지배구조", "지속가능"]):
+            return "ESG개선"
+        else:
+            return "기회요인"
+
     def _generate_no_signals_insight(self, corp_name: str) -> str:
         """Generate insight when no signals detected."""
         return (
-            f"{corp_name}에 대한 분석 결과, 새로운 리스크 시그널이 발견되지 않았습니다. "
-            "현재 기준으로 특별한 위험 요인은 관찰되지 않으나, "
+            f"{corp_name}에 대한 분석 결과, 새로운 시그널이 발견되지 않았습니다. "
+            "현재 기준으로 특별한 리스크 요인 및 기회 요인은 관찰되지 않으나, "
             "지속적인 모니터링이 권고됩니다."
         )
 
@@ -278,12 +310,17 @@ Summary: {target_signal.get('summary', '')}
 
         insight_parts = [f"{corp_name}에 대해 {len(signals)}개의 시그널이 감지되었습니다."]
 
+        # 기회 시그널을 먼저 언급 (긍정적 요인 강조)
+        if opp_count > 0:
+            insight_parts.append(f"기회 시그널 {opp_count}건 (성장/투자/실적개선 기회)")
         if risk_count > 0:
             insight_parts.append(f"리스크 시그널 {risk_count}건")
-        if opp_count > 0:
-            insight_parts.append(f"기회 시그널 {opp_count}건")
         if high_count > 0:
             insight_parts.append(f"(HIGH 강도 {high_count}건 포함)")
+
+        # 기회 시그널이 있으면 여신 확대 기회 언급
+        if opp_count > 0:
+            insight_parts.append("기회 시그널에 대해서는 여신 확대 및 신규 상품 제안 검토가 권고됩니다.")
 
         insight_parts.append("상세 내용은 시그널 목록을 참조하시기 바랍니다.")
 

@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #ffffff; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #FFFFFF; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #E33737; padding: 14pt 25pt;
+}
+.header h1 {
+  color: #FFFFFF; font-size: 22pt; font-weight: bold; margin: 0;
+}
+.header-sub {
+  color: rgba(255,255,255,0.9); font-size: 10pt; margin: 2pt 0 0 0;
+}
+.content {
+  flex: 1; padding: 12pt 25pt;
+  display: flex; gap: 15pt;
+}
+.layers {
+  flex: 1.2;
+}
+.layer {
+  display: flex; align-items: center; margin-bottom: 8pt;
+}
+.layer-num {
+  width: 40pt; height: 40pt; background: #0D1117; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.layer-num p {
+  color: #FFFFFF; font-size: 12pt; font-weight: bold; margin: 0;
+}
+.layer-content {
+  margin-left: 10pt; flex: 1;
+}
+.layer-title {
+  color: #1C2833; font-size: 11pt; font-weight: bold; margin: 0;
+}
+.layer-desc {
+  color: #2E4053; font-size: 9pt; margin: 2pt 0 0 0;
+}
+.orchestrator {
+  flex: 0.8; background: #0D1117; padding: 12pt; border-radius: 5pt;
+}
+.orch-title {
+  color: #E33737; font-size: 11pt; font-weight: bold; margin: 0 0 8pt 0;
+  text-align: center;
+}
+.orch-layer {
+  background: #1C2833; padding: 5pt 8pt; margin-bottom: 4pt; border-radius: 3pt;
+}
+.orch-layer p {
+  color: #FFFFFF; font-size: 8pt; margin: 0;
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>AEGIS™ Anti-Hallucination Defense</h1>
+  <p class="header-sub">Enterprise-Grade Fact Verification System | 4-Layer Defense</p>
+</div>
+<div class="content">
+  <div class="layers">
+    <div class="layer">
+      <div class="layer-num"><p>L1</p></div>
+      <div class="layer-content">
+        <p class="layer-title">Source Verification</p>
+        <p class="layer-desc">Citation Validator, Domain Credibility Scorer (T1~T4)</p>
+      </div>
+    </div>
+    <div class="layer">
+      <div class="layer-num"><p>L2</p></div>
+      <div class="layer-content">
+        <p class="layer-title">Extraction Guardrails</p>
+        <p class="layer-desc">"Return null if uncertain" Policy, Schema Compliance</p>
+      </div>
+    </div>
+    <div class="layer">
+      <div class="layer-num"><p>L3</p></div>
+      <div class="layer-content">
+        <p class="layer-title">Cross-Validation (Gemini)</p>
+        <p class="layer-desc">Discrepancy Detector, Jaccard Similarity >= 0.7</p>
+      </div>
+    </div>
+    <div class="layer">
+      <div class="layer-num"><p>L4</p></div>
+      <div class="layer-content">
+        <p class="layer-title">Audit Trail</p>
+        <p class="layer-desc">Provenance Tracker, field_provenance, LLM Audit Log</p>
+      </div>
+    </div>
+  </div>
+  <div class="orchestrator">
+    <p class="orch-title">PRISM™ Multi-Agent Orchestrator</p>
+    <div class="orch-layer">
+      <p><b>Layer 0:</b> Intelligent Cache (7d TTL)</p>
+    </div>
+    <div class="orch-layer">
+      <p><b>Layer 1:</b> Perplexity Search Agent</p>
+    </div>
+    <div class="orch-layer">
+      <p><b>Layer 1.5:</b> Gemini Validation Agent</p>
+    </div>
+    <div class="orch-layer">
+      <p><b>Layer 2:</b> Consensus Engine</p>
+    </div>
+    <div class="orch-layer">
+      <p><b>Layer 3:</b> Rule-Based Merge</p>
+    </div>
+    <div class="orch-layer">
+      <p><b>Layer 4:</b> Graceful Degradation</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>
