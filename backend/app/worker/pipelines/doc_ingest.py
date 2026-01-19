@@ -11,7 +11,7 @@ Processing approach:
 import hashlib
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, UTC
 from pathlib import Path
 from typing import Optional
 from uuid import uuid4
@@ -254,7 +254,7 @@ class DocIngestPipeline:
             db.execute(
                 update(Document)
                 .where(Document.doc_id == doc.doc_id)
-                .values(last_ingested_at=datetime.utcnow())
+                .values(last_ingested_at=datetime.now(UTC))
             )
 
             return {
@@ -359,7 +359,7 @@ class DocIngestPipeline:
                     evidence_snippet=fact_data.get("evidence_snippet", "")[:400],
                     evidence_page_no=fact_data.get("page_no", 1),
                     extracted_by="vision-llm",
-                    extracted_at=datetime.utcnow(),
+                    extracted_at=datetime.now(UTC),
                 )
                 db.add(fact)
 

@@ -7,7 +7,7 @@ Anti-Hallucination Architecture:
 - Layer 4: Audit Trail (raw_search_result, field_provenance)
 """
 
-from datetime import datetime
+from datetime import datetime, UTC
 from sqlalchemy import (
     Column,
     String,
@@ -192,7 +192,7 @@ class CorpProfile(Base):
     fetched_at = Column(
         TIMESTAMP(timezone=True),
         nullable=False,
-        default=datetime.utcnow,
+        default=lambda: datetime.now(UTC),
         comment="수집 시점",
     )
     expires_at = Column(
@@ -206,12 +206,12 @@ class CorpProfile(Base):
     # =========================================================================
     created_at = Column(
         TIMESTAMP(timezone=True),
-        default=datetime.utcnow,
+        default=lambda: datetime.now(UTC),
     )
     updated_at = Column(
         TIMESTAMP(timezone=True),
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
     def __repr__(self):
@@ -226,7 +226,7 @@ class CorpProfile(Base):
         """프로파일 TTL 만료 여부 확인"""
         if self.expires_at is None:
             return True
-        return datetime.utcnow() > self.expires_at.replace(tzinfo=None)
+        return datetime.now(UTC) > self.expires_at
 
     def get_field_confidence(self, field_name: str) -> str:
         """특정 필드의 신뢰도 조회"""

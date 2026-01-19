@@ -6,7 +6,7 @@ Endpoints:
 - GET /dashboard/summary - Dashboard 요약 통계
 """
 
-from datetime import datetime
+from datetime import datetime, UTC
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, case, literal_column
@@ -74,5 +74,5 @@ async def get_dashboard_summary(db: AsyncSession = Depends(get_db)):
         opportunity_signals=row.opportunity or 0,
         by_type=type_counts,
         by_status=status_counts,
-        generated_at=datetime.utcnow(),
+        generated_at=datetime.now(UTC),
     )

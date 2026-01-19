@@ -4,7 +4,7 @@ Main Celery tasks for corporate risk analysis
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, UTC
 from uuid import UUID
 
 from sqlalchemy import update
@@ -55,10 +55,10 @@ def update_job_progress(
                 Job.__table__.select().where(Job.job_id == UUID(job_id))
             ).fetchone()
             if job and not job.started_at:
-                update_data["started_at"] = datetime.utcnow()
+                update_data["started_at"] = datetime.now(UTC)
 
         if status in (JobStatus.DONE, JobStatus.FAILED):
-            update_data["finished_at"] = datetime.utcnow()
+            update_data["finished_at"] = datetime.now(UTC)
 
         if error_code:
             update_data["error_code"] = error_code

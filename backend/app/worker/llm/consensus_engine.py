@@ -109,6 +109,8 @@ KOREAN_STOPWORDS = {
     "등의", "을를", "은는", "에서는", "로부터", "이나", "에게는",
     "까지는", "부터는", "만으로", "으로서", "으로써", "에서의",
     "와의", "과의", "로의", "에의", "에도", "에서도", "로도",
+    # 주격+보격 조사 결합 (BUG-001 추가 수정)
+    "이가", "은는", "을를",
     # 접속사/부사
     "및", "등", "또는", "그리고", "하지만", "그러나", "따라서",
     "또한", "그래서", "그런데", "왜냐하면", "즉",
@@ -213,6 +215,12 @@ def _tokenize_with_kiwi(text: str, kiwi) -> set[str]:
             form = token.form.lower()  # 원형
             tag = token.tag  # 품사 태그
 
+            # [P1 FIX] 단일 문자 불용어 필터링 - 품사 태그와 무관하게 적용
+            # "의", "를", "은", "는" 등이 NNG로 잘못 분류되어도 필터링
+            # 반드시 품사 기반 필터링 전에 수행
+            if len(form) == 1 and form in SINGLE_CHAR_STOPWORDS:
+                continue
+
             # 품사 기반 필터링
             if tag in STOPWORD_POS_TAGS:
                 continue
@@ -224,11 +232,6 @@ def _tokenize_with_kiwi(text: str, kiwi) -> set[str]:
             # 일반 명사 중 기능어 필터링 (NNG)
             # "등", "위", "후" 등은 문맥에서 불용어로 작용
             if tag == "NNG" and form in STOPWORD_NOUNS:
-                continue
-
-            # 단일 문자 불용어 필터링
-            # 조사가 단독 출현 시 NNG/IC로 잘못 분류되는 경우 대응
-            if len(form) == 1 and form in SINGLE_CHAR_STOPWORDS:
                 continue
 
             # 접속부사 필터링

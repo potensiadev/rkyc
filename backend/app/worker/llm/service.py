@@ -241,8 +241,22 @@ class LLMService:
             max_tokens=max_tokens,
         )
 
+        # Strip markdown code blocks if present
+        clean_response = response.strip()
+        if clean_response.startswith("```"):
+            # Remove opening backticks and optional language identifier
+            first_newline = clean_response.find("\n")
+            if first_newline != -1:
+                clean_response = clean_response[first_newline+1:]
+            
+            # Remove closing backticks
+            if clean_response.endswith("```"):
+                clean_response = clean_response[:-3]
+        
+        clean_response = clean_response.strip()
+
         try:
-            return json.loads(response)
+            return json.loads(clean_response)
         except json.JSONDecodeError as e:
             raise InvalidResponseError(
                 message=f"Failed to parse JSON response: {e}",

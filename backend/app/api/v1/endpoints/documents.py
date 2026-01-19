@@ -7,7 +7,7 @@ import base64
 import hashlib
 import os
 import time
-from datetime import datetime
+from datetime import datetime, UTC
 from pathlib import Path
 from uuid import UUID, uuid4
 from typing import Optional
@@ -354,9 +354,9 @@ async def upload_document(
         storage_path=str(file_path),
         file_hash=file_hash,
         page_count=1,  # For now, assume single page
-        captured_at=datetime.utcnow(),
+        captured_at=datetime.now(UTC),
         ingest_status=IngestStatus.PENDING,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(UTC),
     )
     db.add(document)
     await db.commit()
@@ -434,9 +434,9 @@ async def upload_and_process_document(
         storage_path=str(file_path),
         file_hash=file_hash,
         page_count=1,
-        captured_at=datetime.utcnow(),
+        captured_at=datetime.now(UTC),
         ingest_status=IngestStatus.RUNNING,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(UTC),
     )
     db.add(document)
     await db.commit()
@@ -507,7 +507,7 @@ async def upload_and_process_document(
                     evidence_snippet=fact_data.get("evidence_snippet", "")[:400],
                     evidence_page_no=fact_data.get("page_no", 1),
                     extracted_by="vision-llm",
-                    extracted_at=datetime.utcnow(),
+                    extracted_at=datetime.now(UTC),
                 )
                 sync_db.add(fact)
 
@@ -532,7 +532,7 @@ async def upload_and_process_document(
 
         # Update document status
         document.ingest_status = IngestStatus.DONE
-        document.last_ingested_at = datetime.utcnow()
+        document.last_ingested_at = datetime.now(UTC)
         await db.commit()
 
         processing_time_ms = int((time.time() - start_time) * 1000)

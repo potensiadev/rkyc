@@ -10,7 +10,7 @@ import ReportDocument from "./ReportDocument";
 import ExportSettingsPanel from "./ExportSettingsPanel";
 import PDFExportModal from "./PDFExportModal";
 import ShareLinkModal from "./ShareLinkModal";
-import { getCorporationById } from "@/data/corporations";
+import { useCorporation } from "@/hooks/useApi";
 
 interface ReportPreviewModalProps {
   open: boolean;
@@ -23,7 +23,7 @@ const ReportPreviewModal = ({
   onClose,
   corporationId,
 }: ReportPreviewModalProps) => {
-  const corporation = getCorporationById(corporationId);
+  const { data: corporation } = useCorporation(corporationId);
   const companyName = corporation?.name ?? "기업";
   const reportRef = useRef<HTMLDivElement>(null);
 
@@ -33,12 +33,12 @@ const ReportPreviewModal = ({
   const [sections, setSections] = useState({
     summary: true,
     companyOverview: true,
-    valueChain: true,
+    valueChain: false,
     signalTypeSummary: true,
     signalTimeline: true,
     evidenceSummary: true,
     loanInsight: true,
-    insightMemory: true,
+    insightMemory: false,
     disclaimer: true,
   });
   const [showPDFModal, setShowPDFModal] = useState(false);
@@ -61,8 +61,8 @@ const ReportPreviewModal = ({
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 size="sm"
                 onClick={() => setShowShareModal(true)}
                 className="gap-2"
@@ -70,7 +70,7 @@ const ReportPreviewModal = ({
                 <Link2 className="h-4 w-4" />
                 공유 링크 생성
               </Button>
-              <Button 
+              <Button
                 size="sm"
                 onClick={() => setShowPDFModal(true)}
                 className="gap-2"
@@ -78,8 +78,8 @@ const ReportPreviewModal = ({
                 <FileDown className="h-4 w-4" />
                 PDF로 내보내기
               </Button>
-              <Button 
-                variant="ghost" 
+              <Button
+                variant="ghost"
                 size="icon"
                 onClick={onClose}
               >

@@ -4,7 +4,7 @@ Stage 7: Save validated signals to database with embedding vectors
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, UTC
 from uuid import uuid4
 from typing import Optional
 
@@ -262,7 +262,7 @@ Summary: {sig.get('summary', '')}
             title=signal_data.get("title", signal_data["summary"][:50]),
             summary_short=signal_data["summary"][:200],
             evidence_count=evidence_count,
-            detected_at=datetime.utcnow(),
+            detected_at=datetime.now(UTC),
             signal_id=signal_id,
         )
         db.add(index)

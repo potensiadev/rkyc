@@ -12,7 +12,7 @@ Endpoints:
 
 from typing import Optional
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, UTC
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, text
@@ -182,7 +182,7 @@ async def update_signal_status(
 ):
     """시그널 상태 변경 (NEW → REVIEWED)"""
 
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
     status_value = status_update.status.value  # "NEW", "REVIEWED", "DISMISSED"
 
     # 시그널 존재 확인
@@ -232,7 +232,7 @@ async def dismiss_signal(
 ):
     """시그널 기각 (사유 포함)"""
 
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
 
     # 시그널 존재 확인
     index_query = select(SignalIndex).where(SignalIndex.signal_id == signal_id)

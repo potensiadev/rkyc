@@ -30,7 +30,7 @@ import hashlib
 import json
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from typing import Any, Optional
 from uuid import UUID, uuid4
 
@@ -90,7 +90,7 @@ class FieldProvenance:
     source_url: Optional[str]
     excerpt: Optional[str]
     confidence: str
-    extraction_date: datetime = field(default_factory=datetime.utcnow)
+    extraction_date: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def to_dict(self) -> dict:
         return {
@@ -441,7 +441,7 @@ class ProvenanceTracker:
             source_url=source_url,
             excerpt=excerpt,
             confidence=confidence,
-            extraction_date=datetime.utcnow(),
+            extraction_date=datetime.now(UTC),
         )
 
     def to_json(self) -> dict:
@@ -801,8 +801,8 @@ class CorpProfilingPipeline:
             lambda cn, ind: self._sync_perplexity_search(cn, ind, perplexity_api_key)
         )
         self.orchestrator.set_claude_synthesis(
-            lambda sources, cn, ind, ic, disc: self._sync_claude_synthesis(
-                sources, cn, ind, ic, disc, llm_service
+            lambda sources, corp_name, industry_name, industry_code, gemini_discrepancies: self._sync_claude_synthesis(
+                sources, corp_name, industry_name, industry_code, gemini_discrepancies, llm_service
             )
         )
 
@@ -901,8 +901,8 @@ class CorpProfilingPipeline:
             "search_failed": orchestrator_result.fallback_layer == FallbackLayer.GRACEFUL_DEGRADATION,
             "validation_warnings": [],
             "status": "ACTIVE",
-            "fetched_at": datetime.utcnow().isoformat(),
-            "expires_at": (datetime.utcnow() + timedelta(days=ttl_days)).isoformat(),
+            "fetched_at": datetime.now(UTC).isoformat(),
+            "expires_at": (datetime.now(UTC) + timedelta(days=ttl_days)).isoformat(),
             "is_expired": False,
             # PRD v1.2 fallback metadata
             "fallback_layer": orchestrator_result.fallback_layer.value,
@@ -1273,8 +1273,8 @@ class CorpProfilingPipeline:
             "search_failed": True,
             "validation_warnings": ["Profile created using industry fallback"],
             "status": "ACTIVE",
-            "fetched_at": datetime.utcnow().isoformat(),
-            "expires_at": (datetime.utcnow() + timedelta(days=FALLBACK_TTL_DAYS)).isoformat(),
+            "fetched_at": datetime.now(UTC).isoformat(),
+            "expires_at": (datetime.now(UTC) + timedelta(days=FALLBACK_TTL_DAYS)).isoformat(),
             "is_expired": False,
         }
 

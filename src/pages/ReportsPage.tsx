@@ -4,21 +4,27 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { FileDown, Link2, Eye, Printer } from "lucide-react";
+import { FileDown, Link2, Eye, Printer, Loader2 } from "lucide-react";
 import ReportDocument from "@/components/reports/ReportDocument";
 import ReportPreviewModal from "@/components/reports/ReportPreviewModal";
 import PDFExportModal from "@/components/reports/PDFExportModal";
 import ShareLinkModal from "@/components/reports/ShareLinkModal";
-import { CORPORATIONS, getCorporationById } from "@/data/corporations";
+import { useCorporations, useCorporation } from "@/hooks/useApi";
 
 const ReportsPage = () => {
-  const [selectedCorporationId, setSelectedCorporationId] = useState(CORPORATIONS[0].id);
+  const { data: corporations = [], isLoading } = useCorporations();
+  const [selectedCorporationId, setSelectedCorporationId] = useState<string>("");
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [showPDFModal, setShowPDFModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const reportRef = useRef<HTMLDivElement>(null);
 
-  const selectedCorporation = getCorporationById(selectedCorporationId);
+  // Set default selection when corporations load
+  if (!selectedCorporationId && corporations.length > 0) {
+    setSelectedCorporationId(corporations[0].id);
+  }
+
+  const { data: selectedCorporation } = useCorporation(selectedCorporationId);
   const companyName = selectedCorporation?.name ?? "기업";
   const defaultFileName = `RKYC_기업시그널보고서_${companyName}_${new Date().toISOString().split('T')[0]}`;
 
@@ -42,79 +48,91 @@ const ReportsPage = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-col sm:flex-row gap-4 items-end">
-              {/* Select component for corporation */}
-              <div className="flex-1 space-y-2 w-full">
-                <Label htmlFor="company">대상 기업 선택</Label>
-                <Select value={selectedCorporationId} onValueChange={setSelectedCorporationId}>
-                  <SelectTrigger id="company">
-                    <SelectValue placeholder="기업 선택" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CORPORATIONS.map((corporation) => (
-                      <SelectItem key={corporation.id} value={corporation.id}>
-                        {corporation.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            {isLoading ? (
+              <div className="flex justify-center p-4">
+                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
               </div>
+            ) : (
+              <div className="flex flex-col sm:flex-row gap-4 items-end">
+                {/* Select component for corporation */}
+                <div className="flex-1 space-y-2 w-full">
+                  <Label htmlFor="company">대상 기업 선택</Label>
+                  <Select value={selectedCorporationId} onValueChange={setSelectedCorporationId}>
+                    <SelectTrigger id="company">
+                      <SelectValue placeholder="기업 선택" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {corporations.map((corporation) => (
+                        <SelectItem key={corporation.id} value={corporation.id}>
+                          {corporation.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              {/* Action Buttons */}
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setShowPreviewModal(true)}>
-                  <Eye className="w-4 h-4 mr-2" />
-                  미리보기
-                </Button>
-                <Button variant="default" onClick={() => setShowPDFModal(true)}>
-                  <FileDown className="w-4 h-4 mr-2" />
-                  PDF 다운로드
-                </Button>
-                <Button variant="secondary" onClick={() => setShowShareModal(true)}>
-                  <Link2 className="w-4 h-4 mr-2" />
-                  링크 공유
-                </Button>
+                {/* Action Buttons */}
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => setShowPreviewModal(true)} disabled={!selectedCorporationId}>
+                    <Eye className="w-4 h-4 mr-2" />
+                    미리보기
+                  </Button>
+                  <Button variant="default" onClick={() => setShowPDFModal(true)} disabled={!selectedCorporationId}>
+                    <FileDown className="w-4 h-4 mr-2" />
+                    PDF 다운로드
+                  </Button>
+                  <Button variant="secondary" onClick={() => setShowShareModal(true)} disabled={!selectedCorporationId}>
+                    <Link2 className="w-4 h-4 mr-2" />
+                    링크 공유
+                  </Button>
+                </div>
               </div>
-            </div>
+            )}
           </CardContent>
         </Card>
 
         {/* Report Preview Area */}
-        <div className="border rounded-lg bg-background shadow-sm overflow-hidden">
-          <div className="bg-muted px-4 py-2 border-b flex justify-between items-center">
-            <span className="text-sm font-medium text-muted-foreground">미리보기: {defaultFileName}.pdf</span>
-            <Button variant="ghost" size="sm" disabled>
-              <Printer className="w-4 h-4 mr-2" /> 인쇄
-            </Button>
-          </div>
-          <div className="h-[600px] overflow-auto bg-white p-8">
-            <div ref={reportRef}>
-              <ReportDocument corporationId={selectedCorporationId} />
+        {selectedCorporationId && (
+          <div className="border rounded-lg bg-background shadow-sm overflow-hidden">
+            <div className="bg-muted px-4 py-2 border-b flex justify-between items-center">
+              <span className="text-sm font-medium text-muted-foreground">미리보기: {defaultFileName}.pdf</span>
+              <Button variant="ghost" size="sm" disabled>
+                <Printer className="w-4 h-4 mr-2" /> 인쇄
+              </Button>
+            </div>
+            <div className="h-[600px] overflow-auto bg-white p-8">
+              <div ref={reportRef}>
+                <ReportDocument corporationId={selectedCorporationId} />
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
       </div>
 
       {/* Modals */}
-      <ReportPreviewModal
-        open={showPreviewModal}
-        onClose={() => setShowPreviewModal(false)}
-        corporationId={selectedCorporationId}
-      />
+      {selectedCorporationId && (
+        <>
+          <ReportPreviewModal
+            open={showPreviewModal}
+            onClose={() => setShowPreviewModal(false)}
+            corporationId={selectedCorporationId}
+          />
 
-      <PDFExportModal
-        open={showPDFModal}
-        onClose={() => setShowPDFModal(false)}
-        fileName={defaultFileName}
-        contentRef={reportRef}
-      />
+          <PDFExportModal
+            open={showPDFModal}
+            onClose={() => setShowPDFModal(false)}
+            fileName={defaultFileName}
+            contentRef={reportRef}
+          />
 
-      <ShareLinkModal
-        open={showShareModal}
-        onClose={() => setShowShareModal(false)}
-        companyName={companyName}
-      />
+          <ShareLinkModal
+            open={showShareModal}
+            onClose={() => setShowShareModal(false)}
+            companyName={companyName}
+          />
+        </>
+      )}
     </MainLayout>
   );
 };

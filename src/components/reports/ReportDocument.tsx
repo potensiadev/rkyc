@@ -1,15 +1,10 @@
 import { Separator } from "@/components/ui/separator";
-import { getCorporationById, getCorporationByName, Corporation } from "@/data/corporations";
+import { useCorporation, useSignals, useCorporationSnapshot } from "@/hooks/useApi";
 import {
-  getSignalsByCorporationId,
-  getAllEvidencesForCorporation,
-  getCorporationSignalCounts,
   formatDate,
 } from "@/data/signals";
-import { getInsightMemoryByCorporationId } from "@/data/insightMemory";
-import { getValueChainByCorpId } from "@/data/valueChain";
-import { Signal, SIGNAL_TYPE_CONFIG, SIGNAL_IMPACT_CONFIG, Evidence } from "@/types/signal";
-import ValueChainSection from "./ValueChainSection";
+import { Signal, SIGNAL_TYPE_CONFIG, Evidence } from "@/types/signal";
+import { Loader2 } from "lucide-react";
 
 interface ReportDocumentProps {
   corporationId: string;
@@ -31,18 +26,28 @@ const ReportDocument = ({
   sectionsToShow = {
     summary: true,
     companyOverview: true,
-    valueChain: true,
+    valueChain: false, // Disabled as data removed
     signalTypeSummary: true,
     signalTimeline: true,
     evidenceSummary: true,
     loanInsight: true,
-    insightMemory: true,
+    insightMemory: false, // Disabled as data removed
     disclaimer: true,
   }
 }: ReportDocumentProps) => {
-  // 중앙화된 데이터 소스에서 기업 정보 조회
-  const corporation = getCorporationById(corporationId);
-  
+  // Hook으로 데이터 조회
+  const { data: corporation, isLoading: isCorpLoading } = useCorporation(corporationId);
+  const { data: signals = [], isLoading: isSignalsLoading } = useSignals({ corp_id: corporationId });
+  const { data: snapshot } = useCorporationSnapshot(corporationId);
+
+  if (isCorpLoading || isSignalsLoading) {
+    return (
+      <div className="flex justify-center items-center py-20">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
   if (!corporation) {
     return (
       <div className="text-center py-8 text-muted-foreground">
@@ -51,15 +56,22 @@ const ReportDocument = ({
     );
   }
 
-  // 중앙화된 데이터 소스에서 시그널 조회
-  const signals = getSignalsByCorporationId(corporationId);
-  const signalCounts = getCorporationSignalCounts(corporationId);
-  const evidences = getAllEvidencesForCorporation(corporationId);
-  const insightMemory = getInsightMemoryByCorporationId(corporationId);
-  const valueChain = getValueChainByCorpId(corporationId);
+  // Signal Counts
+  const signalCounts = {
+    total: signals.length,
+    direct: signals.filter(s => s.signalCategory === "direct").length,
+    industry: signals.filter(s => s.signalCategory === "industry").length,
+    environment: signals.filter(s => s.signalCategory === "environment").length,
+  };
+
+  // Evidences collection
+  const evidences: Evidence[] = [];
+  signals.forEach(s => {
+    if (s.evidences) evidences.push(...s.evidences);
+  });
 
   // 시그널 타임라인 (최신순)
-  const timelineSignals = [...signals].sort((a, b) => 
+  const timelineSignals = [...signals].sort((a, b) =>
     new Date(b.detectedAt).getTime() - new Date(a.detectedAt).getTime()
   );
 
@@ -73,12 +85,12 @@ const ReportDocument = ({
     const riskCount = signals.filter(s => s.impact === "risk").length;
     const oppCount = signals.filter(s => s.impact === "opportunity").length;
     const neutralCount = signals.filter(s => s.impact === "neutral").length;
-    
+
     const parts = [];
     if (riskCount > 0) parts.push("위험");
     if (oppCount > 0) parts.push("기회");
     if (neutralCount > 0) parts.push("참고");
-    
+
     return parts.join(" / ") || "참고";
   };
 
@@ -132,8 +144,8 @@ const ReportDocument = ({
               본 보고서는 {corporation.name}에 대해 RKYC 시스템이 최근 감지한 시그널을 요약한 참고 자료입니다.
             </p>
             <p>
-              보고 기간 동안 직접 시그널 {signalCounts.direct}건, 산업 시그널 {signalCounts.industry}건, 
-              환경 시그널 {signalCounts.environment}건이 감지되었습니다. 
+              보고 기간 동안 직접 시그널 {signalCounts.direct}건, 산업 시그널 {signalCounts.industry}건,
+              환경 시그널 {signalCounts.environment}건이 감지되었습니다.
               {signals.length > 0 && "해당 시그널들은 기업의 사업 활동, 산업 동향, 거시경제 환경과 관련되어 있습니다."}
             </p>
             <p>
@@ -165,21 +177,20 @@ const ReportDocument = ({
               <span className="w-32 text-muted-foreground">업종</span>
               <span className="text-foreground">{corporation.industry}</span>
             </div>
-            <div className="flex">
-              <span className="w-32 text-muted-foreground">주요 사업</span>
-              <span className="text-foreground">{corporation.mainBusiness}</span>
-            </div>
-            <div className="flex">
-              <span className="w-32 text-muted-foreground">당행 거래 여부</span>
-              <span className="text-foreground">{corporation.bankRelationship?.hasRelationship ? "여신 보유" : "해당 없음"}</span>
-            </div>
+            {corporation.bankRelationship?.hasRelationship && (
+              <div className="flex">
+                <span className="w-32 text-muted-foreground">당행 거래 여부</span>
+                <span className="text-foreground">여신 보유</span>
+              </div>
+            )}
+            {snapshot?.snapshot_json?.corp?.kyc_status && (
+              <div className="flex">
+                <span className="w-32 text-muted-foreground">내부 등급</span>
+                <span className="text-foreground">{snapshot.snapshot_json.corp.kyc_status.internal_risk_grade}</span>
+              </div>
+            )}
           </div>
         </section>
-      )}
-
-      {/* Value Chain */}
-      {sectionsToShow.valueChain && valueChain && (
-        <ValueChainSection valueChain={valueChain} />
       )}
 
       {/* Signal Summary by Type */}
@@ -253,7 +264,7 @@ const ReportDocument = ({
                     {formatDate(signal.detectedAt)}
                   </span>
                   <span className="w-16 text-muted-foreground shrink-0">
-                    {SIGNAL_TYPE_CONFIG[signal.signalCategory].label.replace(" 시그널", "")}
+                    {SIGNAL_TYPE_CONFIG[signal.signalCategory]?.label.replace(" 시그널", "") || signal.signalCategory}
                   </span>
                   <span className="text-foreground">{signal.title}</span>
                 </div>
@@ -290,14 +301,14 @@ const ReportDocument = ({
       )}
 
       {/* Loan Reference Insight - Conditional */}
-      {corporation.bankRelationship?.hasRelationship && sectionsToShow.loanInsight && (
+      {(corporation.bankRelationship?.hasRelationship || snapshot?.snapshot_json?.credit?.has_loan) && sectionsToShow.loanInsight && (
         <section className="mb-8">
           <h2 className="text-lg font-semibold text-foreground mb-4 pb-2 border-b border-border">
             여신 참고 관점 요약
           </h2>
           <div className="text-sm text-muted-foreground space-y-3 leading-relaxed">
             <p>
-              해당 기업은 당행 여신 거래가 있는 기업으로, 최근 감지된 시그널은 
+              해당 기업은 당행 여신 거래가 있는 기업으로, 최근 감지된 시그널은
               여신 관리 관점에서 참고할 수 있는 정보를 포함하고 있습니다.
             </p>
             {signals.length > 0 && (
@@ -314,34 +325,12 @@ const ReportDocument = ({
         </section>
       )}
 
-      {/* Insight Memory */}
-      {sectionsToShow.insightMemory && insightMemory && (
-        <section className="mb-8">
-          <h2 className="text-lg font-semibold text-foreground mb-4 pb-2 border-b border-border">
-            과거 사례 참고 (Insight Memory)
-          </h2>
-          <div className="text-sm text-muted-foreground space-y-2">
-            <div className="flex">
-              <span className="w-40">유사 사례 건수</span>
-              <span className="text-foreground">{insightMemory.similarCaseCount}건</span>
-            </div>
-            <div className="flex">
-              <span className="w-40">일반적 영향 분류</span>
-              <span className="text-foreground">{insightMemory.impactClassification} 영향</span>
-            </div>
-            <p className="mt-3 text-xs italic">
-              위 정보는 과거 유사 시그널 사례를 참고용으로 제공하며, 현재 상황에 대한 예측이나 판단을 의미하지 않습니다.
-            </p>
-          </div>
-        </section>
-      )}
-
       {/* Disclaimer */}
       {sectionsToShow.disclaimer && (
         <section className="mt-12 pt-6 border-t-2 border-border">
           <div className="bg-muted p-4 rounded text-xs text-muted-foreground leading-relaxed">
-            본 보고서는 RKYC 시스템이 감지한 시그널을 기반으로 생성된 참고 자료입니다. 
-            자동 판단, 점수화, 예측 또는 조치를 의미하지 않으며, 
+            본 보고서는 RKYC 시스템이 감지한 시그널을 기반으로 생성된 참고 자료입니다.
+            자동 판단, 점수화, 예측 또는 조치를 의미하지 않으며,
             최종 판단은 담당자 및 관련 조직의 책임 하에 이루어집니다.
           </div>
         </section>
