@@ -26,6 +26,7 @@ from app.worker.pipelines import (
     NoSnapshotError,
     NoCorporationError,
 )
+from app.worker.pipelines.corp_profiling import get_corp_profiling_pipeline
 
 logger = logging.getLogger(__name__)
 
@@ -87,15 +88,16 @@ def run_analysis_pipeline(self, job_id: str, corp_id: str):
     """
     Main analysis pipeline orchestrator.
 
-    8-Stage Pipeline:
+    9-Stage Pipeline:
     1. SNAPSHOT - Collect internal snapshot data
-    2. DOC_INGEST - Parse submitted documents (skipped for now)
-    3. EXTERNAL - Search external news/events (Phase 5)
-    4. UNIFIED_CONTEXT - Build unified context
-    5. SIGNAL - Extract risk signals using LLM
-    6. VALIDATION - Apply guardrails (Phase 4)
-    7. INDEX - Save to database
-    8. INSIGHT - Generate final briefing (Phase 5)
+    2. DOC_INGEST - Parse submitted documents
+    3. PROFILING - Corp profiling for ENVIRONMENT signal enhancement (NEW)
+    4. EXTERNAL - Search external news/events
+    5. UNIFIED_CONTEXT - Build unified context
+    6. SIGNAL - Extract risk signals using LLM
+    7. VALIDATION - Apply guardrails
+    8. INDEX - Save to database
+    9. INSIGHT - Generate final briefing
     """
     logger.info(f"Starting analysis pipeline for job={job_id}, corp_id={corp_id}")
 
@@ -141,12 +143,54 @@ def run_analysis_pipeline(self, job_id: str, corp_id: str):
             doc_data = {"documents_processed": 0, "facts_extracted": 0, "doc_summaries": {}}
         update_job_progress(job_id, JobStatus.RUNNING, ProgressStep.DOC_INGEST, 25)
 
-        # Stage 3: EXTERNAL (Perplexity search if API key configured)
-        update_job_progress(job_id, JobStatus.RUNNING, ProgressStep.EXTERNAL, 30)
+        # Stage 3: PROFILING (Corp profiling for ENVIRONMENT signal grounding)
+        update_job_progress(job_id, JobStatus.RUNNING, ProgressStep.PROFILING, 28)
         corp_name = snapshot_data.get("corporation", {}).get("corp_name", "")
-        industry_name = snapshot_data.get("corporation", {}).get("industry_code", "")
-        external_data = external_pipeline.execute(corp_name, industry_name, corp_id)
-        update_job_progress(job_id, JobStatus.RUNNING, ProgressStep.EXTERNAL, 40)
+        industry_code = snapshot_data.get("corporation", {}).get("industry_code", "")
+
+        # Run async profiling pipeline in sync context
+        import asyncio
+        profiling_pipeline = get_corp_profiling_pipeline()
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            profile_result = loop.run_until_complete(
+                profiling_pipeline.execute(
+                    corp_id=corp_id,
+                    corp_name=corp_name,
+                    industry_code=industry_code,
+                    db_session=None,  # Will use raw SQL in pipeline
+                    llm_service=signal_pipeline.llm_service if hasattr(signal_pipeline, 'llm_service') else None,
+                )
+            )
+            loop.close()
+            logger.info(
+                f"PROFILING completed: confidence={profile_result.profile.get('profile_confidence')}, "
+                f"queries_selected={len(profile_result.selected_queries)}, "
+                f"is_cached={profile_result.is_cached}"
+            )
+            # Store profile data for context building
+            profile_data = {
+                "profile": profile_result.profile,
+                "selected_queries": profile_result.selected_queries,
+                "query_details": profile_result.query_details,
+            }
+        except Exception as e:
+            # PROFILING failure should not stop the pipeline
+            logger.warning(f"PROFILING stage failed (non-fatal): {e}")
+            profile_data = {
+                "profile": None,
+                "selected_queries": [],
+                "query_details": [],
+            }
+        update_job_progress(job_id, JobStatus.RUNNING, ProgressStep.PROFILING, 32)
+
+        # Stage 4: EXTERNAL (Perplexity search if API key configured)
+        update_job_progress(job_id, JobStatus.RUNNING, ProgressStep.EXTERNAL, 35)
+        external_data = external_pipeline.execute(corp_name, industry_code, corp_id)
+        # Attach profile data to external_data for context pipeline
+        external_data["profile_data"] = profile_data
+        update_job_progress(job_id, JobStatus.RUNNING, ProgressStep.EXTERNAL, 42)
 
         # Stage 4: UNIFIED_CONTEXT
         update_job_progress(job_id, JobStatus.RUNNING, ProgressStep.UNIFIED_CONTEXT, 45)

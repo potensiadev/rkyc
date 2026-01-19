@@ -26,6 +26,7 @@ class JobStatus(str, enum.Enum):
 class ProgressStep(str, enum.Enum):
     SNAPSHOT = "SNAPSHOT"
     DOC_INGEST = "DOC_INGEST"
+    PROFILING = "PROFILING"  # Corp Profiling for ENVIRONMENT signal enhancement
     EXTERNAL = "EXTERNAL"
     UNIFIED_CONTEXT = "UNIFIED_CONTEXT"
     SIGNAL = "SIGNAL"

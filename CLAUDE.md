@@ -926,6 +926,127 @@ backend/sql/migration_embedding_dimension.sql
 - `rkyc_case_index.embedding` → vector(2000)
 - HNSW 인덱스 생성 완료
 
+### 세션 10 (2026-01-19) - Corp Profiling Pipeline 구현 (Anti-Hallucination) ✅
+**목표**: ENVIRONMENT 시그널의 Grounding 정확도 향상, Hallucination 방지
+
+**PRD 기반**: `docs/PRD/Corp Profiling Pipeline for ENVIRONMENT Signal Enhancement.md`
+
+**완료 항목**:
+
+#### 1. Anti-Hallucination 4-Layer Defense Model 설계 및 구현
+| Layer | 목적 | 구현 |
+|-------|------|------|
+| **Layer 1** | Source Verification | `PerplexityResponseParser` - 도메인 신뢰도 분류 |
+| **Layer 2** | Extraction Guardrails | LLM 프롬프트 - "null if unknown" 규칙 |
+| **Layer 3** | Validation Layer | `CorpProfileValidator` - 범위/일관성 검증 |
+| **Layer 4** | Audit Trail | `ProvenanceTracker` - 필드별 출처 추적 |
+
+#### 2. DB 마이그레이션 (migration_v7_corp_profile.sql)
+- `rkyc_corp_profile` 테이블 생성
+- ENUM 추가: `CORP_PROFILE` (evidence_type), `PROFILE_KEYPATH` (ref_type), `PROFILING` (progress_step)
+- 인덱스: corp_id, expires_at, confidence, is_fallback
+
+#### 3. CorpProfilingPipeline 핵심 컴포넌트
+| 컴포넌트 | 역할 |
+|----------|------|
+| `PerplexityResponseParser` | 검색 결과 파싱 및 소스 품질 평가 |
+| `CorpProfileValidator` | 프로파일 검증 (범위, 일관성, 커버리지) |
+| `ConfidenceDeterminer` | 필드별/전체 신뢰도 결정 |
+| `ProvenanceTracker` | 필드별 출처 추적 (URL, excerpt, confidence) |
+| `EnvironmentQuerySelector` | 조건부 쿼리 선택 (11개 카테고리) |
+| `ProfileEvidenceCreator` | Signal Evidence 생성 (CORP_PROFILE 타입) |
+
+#### 4. 조건부 ENVIRONMENT 쿼리 선택 로직
+| 조건 | 활성화 쿼리 |
+|------|------------|
+| `export_ratio >= 30%` | FX_RISK, TRADE_BLOC |
+| `country_exposure`에 중국 | GEOPOLITICAL, SUPPLY_CHAIN, REGULATION |
+| `country_exposure`에 미국 | GEOPOLITICAL, REGULATION, TRADE_BLOC |
+| `key_materials` 존재 | COMMODITY, SUPPLY_CHAIN |
+| `overseas_operations` 존재 | GEOPOLITICAL, PANDEMIC_HEALTH, POLITICAL_INSTABILITY |
+| 업종 C26/C21 | CYBER_TECH |
+| 업종 D35 | ENERGY_SECURITY |
+| 업종 C10 | FOOD_SECURITY |
+
+#### 5. 파이프라인 통합
+- 9단계 파이프라인으로 확장: SNAPSHOT → DOC_INGEST → **PROFILING** → EXTERNAL → ...
+- `analysis.py`에 PROFILING 스테이지 추가
+- Profile 데이터를 Context에 전달
+
+#### 6. API 엔드포인트
+| Method | Endpoint | 설명 |
+|--------|----------|------|
+| GET | `/corporations/{corp_id}/profile` | 프로파일 조회 |
+| GET | `/corporations/{corp_id}/profile/detail` | 상세 조회 (Provenance 포함) |
+| POST | `/corporations/{corp_id}/profile/refresh` | 강제 갱신 |
+| GET | `/corporations/{corp_id}/profile/queries` | 조건부 쿼리 선택 결과 |
+
+**신규 파일**:
+```
+backend/sql/migration_v7_corp_profile.sql
+backend/app/models/profile.py
+backend/app/schemas/profile.py
+backend/app/worker/pipelines/corp_profiling.py
+backend/app/api/v1/endpoints/profiles.py
+```
+
+**수정된 파일**:
+```
+backend/app/models/__init__.py
+backend/app/models/job.py (ProgressStep.PROFILING 추가)
+backend/app/worker/pipelines/__init__.py
+backend/app/worker/tasks/analysis.py
+backend/app/api/v1/router.py
+```
+
+**Anti-Hallucination 핵심 전략**:
+1. **Source Attribution 필수**: 모든 필드에 source_url, excerpt 추적
+2. **Confidence 다단계**: HIGH (공시/IR) → MED (뉴스) → LOW (추정)
+3. **null if unknown**: LLM이 불확실하면 추측 대신 null 반환
+4. **Fallback 명시**: is_fallback=true로 업종 기본값 사용 표시
+5. **Raw 보관**: raw_search_result에 원본 Perplexity 응답 저장
+
+### 세션 10-2 (2026-01-19) - Corp Profiling 마이그레이션 적용 및 API 테스트 ✅
+**목표**: Supabase에 마이그레이션 적용 및 API 엔드포인트 테스트
+
+**완료 항목**:
+
+#### 1. Supabase 마이그레이션 적용
+- `migration_v7_corp_profile.sql` Python asyncpg로 적용
+- `rkyc_corp_profile` 테이블 생성 (24개 컬럼)
+- ENUM 확장: CORP_PROFILE, PROFILE_KEYPATH, PROFILING
+
+#### 2. 테스트 데이터 삽입
+- 엠케이전자(8001-3719240) 프로파일 데이터 삽입
+- field_provenance 포함 (revenue_krw, export_ratio_pct 등)
+- pgbouncer 호환 설정 적용 (`statement_cache_size=0`)
+
+#### 3. API 엔드포인트 테스트 결과
+| Endpoint | Method | Status | 결과 |
+|----------|--------|--------|------|
+| `/corporations/{id}/profile` | GET | ✅ | 프로파일 반환 |
+| `/corporations/{id}/profile/detail` | GET | ✅ | 상세 + provenance |
+| `/corporations/{id}/profile/queries` | GET | ✅ | 9개 쿼리 선택 |
+| `/corporations/{id}/profile/refresh` | POST | ✅ | 갱신 트리거 |
+
+#### 4. 쿼리 선택 결과 (8001-3719240)
+- **선택됨 (9개)**: FX_RISK, TRADE_BLOC, GEOPOLITICAL, SUPPLY_CHAIN, REGULATION, COMMODITY, PANDEMIC_HEALTH, POLITICAL_INSTABILITY, CYBER_TECH
+- **건너뜀 (2개)**: ENERGY_SECURITY, FOOD_SECURITY (업종 코드 불일치)
+
+#### 5. Import 순환 의존성 해결
+- `EnvironmentQuerySelector`를 `app/services/query_selector.py`로 분리
+- API 서버에서 Worker 의존성 없이 쿼리 선택 로직 사용 가능
+
+**신규 파일**:
+```
+backend/app/services/query_selector.py
+```
+
+**수정된 파일**:
+```
+backend/app/api/v1/endpoints/profiles.py (import 경로 변경)
+```
+
 ## 참고 사항
 - **인증은 PRD 2.3에 따라 대회 범위 제외** - 구현하지 않음
 - **schema_v2.sql, seed_v2.sql 사용** (v1은 deprecated)
@@ -935,11 +1056,13 @@ backend/sql/migration_embedding_dimension.sql
 - **Backend 로컬 실행**: `cd backend && uvicorn app.main:app --reload`
 - **Worker 로컬 실행**: `cd backend && celery -A app.worker.celery_app worker --loglevel=info --pool=solo`
 - **OPENAI_API_KEY 필요**: Embedding 서비스용
+- **PERPLEXITY_API_KEY 필요**: Corp Profiling용
 - **Internal/External LLM 분리**: MVP에서는 논리적 분리만 (실제 분리는 Phase 2)
 - **DOC_INGEST**: PDF 텍스트 파싱 + 정규식 + LLM fallback 방식
 - **LLM Fallback**: Claude Opus 4.5 → GPT-5 → Gemini 3 Pro (3단계)
 - **Embedding**: text-embedding-3-large (2000d, pgvector 최대)
 - **Vector Index**: HNSW (m=16, ef_construction=64)
+- **Corp Profiling**: TTL 7일, Fallback TTL 1일
 
 ---
-*Last Updated: 2026-01-06 (세션 9 완료 - LLM 모델 업그레이드 및 Embedding 확장)*
+*Last Updated: 2026-01-19 (세션 10-2 완료 - Corp Profiling 마이그레이션 적용 및 API 테스트)*

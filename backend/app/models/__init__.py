@@ -5,6 +5,7 @@ from app.models.signal import Signal, Evidence, SignalIndex
 from app.models.job import Job
 from app.models.snapshot import InternalSnapshot, InternalSnapshotLatest
 from app.models.document import Document, DocumentPage, Fact
+from app.models.profile import CorpProfile
 
 # Security Architecture - External Intel
 from app.models.external_intel import (
@@ -33,6 +34,8 @@ __all__ = [
     "Document",
     "DocumentPage",
     "Fact",
+    # Corp Profile
+    "CorpProfile",
     # External Intel
     "ExternalNews",
     "ExternalAnalysis",

@@ -8,6 +8,13 @@ from app.worker.pipelines.validation import ValidationPipeline
 from app.worker.pipelines.deduplication import DeduplicationPipeline, deduplicate_within_batch
 from app.worker.pipelines.index import IndexPipeline, DuplicateSignalError
 from app.worker.pipelines.insight import InsightPipeline
+from app.worker.pipelines.corp_profiling import (
+    CorpProfilingPipeline,
+    get_corp_profiling_pipeline,
+    CorpProfileValidator,
+    EnvironmentQuerySelector,
+    ProfileEvidenceCreator,
+)
 
 __all__ = [
     "SnapshotPipeline",
@@ -24,4 +31,10 @@ __all__ = [
     "IndexPipeline",
     "DuplicateSignalError",
     "InsightPipeline",
+    # Corp Profiling (Anti-Hallucination)
+    "CorpProfilingPipeline",
+    "get_corp_profiling_pipeline",
+    "CorpProfileValidator",
+    "EnvironmentQuerySelector",
+    "ProfileEvidenceCreator",
 ]
