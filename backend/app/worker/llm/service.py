@@ -167,13 +167,19 @@ class LLMService:
                     }
 
                     # Add response format if specified (for JSON mode)
-                    if response_format:
+                    # Note: Anthropic models don't support response_format directly
+                    if response_format and provider != "anthropic":
                         kwargs["response_format"] = response_format
 
                     # Make the call
                     response = completion(**kwargs)
 
                     content = response.choices[0].message.content
+
+                    # Check for empty response
+                    if not content or not content.strip():
+                        raise ValueError("Empty response from LLM")
+
                     logger.info(f"Successfully got response from {model}")
 
                     return content

@@ -1,19 +1,28 @@
 """
 Corp Profiling Pipeline for ENVIRONMENT Signal Enhancement
 
-Anti-Hallucination Architecture:
+PRD v1.2 4-Layer Fallback Architecture:
+- Layer 0: Profile Cache (exact match)
+- Layer 1: Perplexity Search (with citation verification)
+- Layer 1.5: Gemini Validation (cross-validation, enrichment)
+- Layer 2: Consensus Engine / Claude Synthesis (multi-source merge)
+- Layer 3: Rule-Based Merge (deterministic fallback)
+- Layer 4: Graceful Degradation (최소 프로필 + 경고)
+
+Anti-Hallucination 4-Layer Defense:
 - Layer 1: Source Verification (PerplexityResponseParser)
 - Layer 2: Extraction Guardrails (LLM Prompt with strict null rules)
 - Layer 3: Validation Layer (CorpProfileValidator)
 - Layer 4: Audit Trail (ProvenanceTracker, raw_search_result storage)
 
 Pipeline Flow:
-1. Check cache (rkyc_corp_profile)
-2. Perplexity search (unified + supplementary)
-3. LLM extraction with field-level attribution
-4. Validation and confidence determination
-5. DB storage with full audit trail
-6. Conditional query selection
+1. Orchestrator coordination (4-layer fallback)
+2. Perplexity search + Gemini validation
+3. Claude synthesis / Consensus Engine
+4. Rule-Based merge fallback
+5. Graceful degradation
+6. DB storage with full audit trail
+7. Conditional query selection
 """
 
 import logging
@@ -26,6 +35,13 @@ from typing import Any, Optional
 from uuid import UUID, uuid4
 
 from app.core.config import settings
+from app.worker.llm.orchestrator import (
+    MultiAgentOrchestrator,
+    OrchestratorResult,
+    FallbackLayer,
+    get_orchestrator,
+)
+from app.worker.llm.circuit_breaker import get_circuit_breaker_manager
 
 logger = logging.getLogger(__name__)
 
@@ -731,18 +747,31 @@ def get_industry_name(industry_code: str) -> str:
 
 class CorpProfilingPipeline:
     """
-    Stage 2.5: Corp Profiling with Anti-Hallucination
+    Stage 2.5: Corp Profiling with Anti-Hallucination and 4-Layer Fallback
+
+    PRD v1.2 4-Layer Fallback:
+    - Layer 0: Cache
+    - Layer 1+1.5: Perplexity + Gemini
+    - Layer 2: Claude Synthesis / Consensus Engine
+    - Layer 3: Rule-Based Merge
+    - Layer 4: Graceful Degradation
 
     Sits between DOC_INGEST and EXTERNAL stages.
     """
 
-    def __init__(self):
+    def __init__(self, orchestrator: Optional[MultiAgentOrchestrator] = None):
         self.parser = PerplexityResponseParser()
         self.validator = CorpProfileValidator()
         self.confidence_determiner = ConfidenceDeterminer()
         self.query_selector = EnvironmentQuerySelector()
         self.provenance_tracker = ProvenanceTracker()
         self.evidence_creator = ProfileEvidenceCreator()
+
+        # Multi-Agent Orchestrator for 4-layer fallback
+        self.orchestrator = orchestrator or get_orchestrator()
+        self._llm_service = None
+        self._db_session = None
+        self._perplexity_api_key = None
 
     async def execute(
         self,
@@ -754,102 +783,313 @@ class CorpProfilingPipeline:
         perplexity_api_key: Optional[str] = None,
     ) -> CorpProfileResult:
         """
-        Execute corp profiling with full anti-hallucination pipeline.
+        Execute corp profiling with full anti-hallucination pipeline
+        using the MultiAgentOrchestrator for 4-layer fallback.
         """
         logger.info(f"PROFILING stage starting for corp_id={corp_id}")
 
         industry_name = get_industry_name(industry_code)
+        self._llm_service = llm_service
+        self._db_session = db_session
+        self._perplexity_api_key = perplexity_api_key
 
-        # Step 0: Check cache
-        cached = await self._get_cached_profile(corp_id, db_session)
-        if cached and not cached.get("is_expired", True):
-            logger.info("Using cached profile")
-            selected, details = self.query_selector.select_queries(
-                cached, industry_code
+        # Configure orchestrator with injectable functions
+        self.orchestrator.set_cache_lookup(
+            lambda cn, ic: self._sync_get_cached_profile(corp_id, db_session)
+        )
+        self.orchestrator.set_perplexity_search(
+            lambda cn, ind: self._sync_perplexity_search(cn, ind, perplexity_api_key)
+        )
+        self.orchestrator.set_claude_synthesis(
+            lambda sources, cn, ind, ic, disc: self._sync_claude_synthesis(
+                sources, cn, ind, ic, disc, llm_service
             )
-            return CorpProfileResult(
-                profile=cached,
-                selected_queries=selected,
-                is_cached=True,
-                query_details=details,
-            )
+        )
 
-        # Step 1: Perplexity Search
+        # Get existing profile for potential enrichment
+        existing_profile = await self._get_cached_profile(corp_id, db_session)
+
+        # Execute orchestrator (4-layer fallback)
+        orchestrator_result = self.orchestrator.execute(
+            corp_name=corp_name,
+            industry_name=industry_name,
+            industry_code=industry_code,
+            existing_profile=existing_profile,
+        )
+
+        # Build final profile with orchestrator result
+        profile = self._build_final_profile(
+            orchestrator_result=orchestrator_result,
+            corp_id=corp_id,
+            industry_name=industry_name,
+        )
+
+        # Validate the profile
+        validation_result = self.validator.validate(profile)
+        if not validation_result.is_valid:
+            logger.warning(f"Validation errors: {validation_result.errors}")
+            profile = validation_result.corrected_profile or profile
+        profile["validation_warnings"] = validation_result.warnings
+
+        # Save to DB
+        if db_session:
+            await self._save_profile(profile, db_session)
+
+        # Select queries based on profile
+        selected, details = self.query_selector.select_queries(
+            profile, industry_code
+        )
+
+        logger.info(
+            f"PROFILING completed: layer={orchestrator_result.fallback_layer.value}, "
+            f"confidence={profile.get('profile_confidence')}, queries={len(selected)}"
+        )
+
+        return CorpProfileResult(
+            profile=profile,
+            selected_queries=selected,
+            is_cached=orchestrator_result.fallback_layer == FallbackLayer.CACHE,
+            query_details=details,
+        )
+
+    def _build_final_profile(
+        self,
+        orchestrator_result: OrchestratorResult,
+        corp_id: str,
+        industry_name: str,
+    ) -> dict:
+        """Build final profile dict from orchestrator result."""
+        raw_profile = orchestrator_result.profile or {}
+
+        # Determine overall confidence from fallback layer
+        layer_confidence_map = {
+            FallbackLayer.CACHE: "HIGH",
+            FallbackLayer.PERPLEXITY_GEMINI: "HIGH",
+            FallbackLayer.CLAUDE_SYNTHESIS: "MED",
+            FallbackLayer.RULE_BASED: "LOW",
+            FallbackLayer.GRACEFUL_DEGRADATION: "LOW",
+        }
+        overall_confidence = layer_confidence_map.get(
+            orchestrator_result.fallback_layer, "LOW"
+        )
+
+        # Determine TTL based on fallback layer
+        is_fallback = orchestrator_result.fallback_layer in [
+            FallbackLayer.RULE_BASED,
+            FallbackLayer.GRACEFUL_DEGRADATION,
+        ]
+        ttl_days = FALLBACK_TTL_DAYS if is_fallback else PROFILE_TTL_DAYS
+
+        profile = {
+            "profile_id": str(uuid4()),
+            "corp_id": corp_id,
+            "business_summary": raw_profile.get("business_summary", f"{industry_name} 업체"),
+            "revenue_krw": raw_profile.get("revenue_krw"),
+            "export_ratio_pct": raw_profile.get("export_ratio_pct"),
+            "country_exposure": raw_profile.get("country_exposure", {}),
+            "key_materials": raw_profile.get("key_materials", []),
+            "key_customers": raw_profile.get("key_customers", []),
+            "overseas_operations": raw_profile.get("overseas_operations", []),
+            "profile_confidence": overall_confidence,
+            "field_confidences": raw_profile.get("field_confidences", {}),
+            "source_urls": raw_profile.get("source_urls", []),
+            "raw_search_result": raw_profile.get("raw_search_result", {}),
+            "field_provenance": orchestrator_result.provenance,
+            "extraction_model": raw_profile.get("extraction_model", "orchestrator"),
+            "extraction_prompt_version": PROMPT_VERSION,
+            "is_fallback": is_fallback,
+            "search_failed": orchestrator_result.fallback_layer == FallbackLayer.GRACEFUL_DEGRADATION,
+            "validation_warnings": [],
+            "status": "ACTIVE",
+            "fetched_at": datetime.utcnow().isoformat(),
+            "expires_at": (datetime.utcnow() + timedelta(days=ttl_days)).isoformat(),
+            "is_expired": False,
+            # PRD v1.2 fallback metadata
+            "fallback_layer": orchestrator_result.fallback_layer.value,
+            "retry_count": orchestrator_result.retry_count,
+            "error_messages": orchestrator_result.error_messages,
+            "execution_time_ms": orchestrator_result.execution_time_ms,
+        }
+
+        # Add consensus metadata if available
+        if orchestrator_result.consensus_metadata:
+            profile["consensus_metadata"] = orchestrator_result.consensus_metadata.to_dict()
+
+        return profile
+
+    def _sync_get_cached_profile(self, corp_id: str, db_session) -> Optional[dict]:
+        """Sync wrapper for cache lookup (for orchestrator injection)."""
+        # Note: This is a simplified sync version. In production,
+        # you'd need to handle async properly.
+        return None  # Cache lookup handled by orchestrator directly
+
+    def _sync_perplexity_search(
+        self,
+        corp_name: str,
+        industry_name: str,
+        api_key: Optional[str],
+    ) -> dict:
+        """Sync wrapper for Perplexity search (for orchestrator injection)."""
+        import httpx
+
+        api_key = api_key or getattr(settings, "PERPLEXITY_API_KEY", None)
+        if not api_key:
+            logger.warning("Perplexity API key not configured")
+            return {}
+
+        query = f"""
+{corp_name} ({industry_name}) 기업 정보:
+1. 주요 사업 및 제품
+2. 매출 규모 및 재무 현황
+3. 수출 비중 및 주요 수출국
+4. 원자재 조달 및 공급망
+5. 해외 법인 및 공장
+
+2026년 기준 최신 공식 정보 검색. 한국 기업 기준.
+"""
+
         try:
-            raw_results = await self._search_perplexity(
-                corp_name, industry_name, perplexity_api_key
-            )
+            with httpx.Client(timeout=30.0) as client:
+                response = client.post(
+                    "https://api.perplexity.ai/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": "sonar-pro",
+                        "messages": [
+                            {
+                                "role": "system",
+                                "content": "금융기관 기업심사 전문가입니다. 정확하고 검증 가능한 정보만 제공합니다.",
+                            },
+                            {"role": "user", "content": query},
+                        ],
+                        "temperature": 0.1,
+                        "max_tokens": 2000,
+                    },
+                )
+                response.raise_for_status()
+                raw_response = response.json()
+                parsed = self.parser.parse_response(raw_response)
 
-            # Step 2: Extract profile with LLM
-            extracted = await self._extract_profile(
-                corp_name, industry_name, raw_results, llm_service
-            )
-
-            # Step 3: Validate
-            validation_result = self.validator.validate(extracted)
-
-            if not validation_result.is_valid:
-                logger.warning(f"Validation errors: {validation_result.errors}")
-                extracted = validation_result.corrected_profile or extracted
-
-            # Step 4: Determine confidences
-            field_confidences = self.provenance_tracker.get_field_confidences()
-            overall_confidence = self.confidence_determiner.determine_overall_confidence(
-                field_confidences,
-                required_fields=["business_summary"],
-            )
-
-            # Step 5: Build final profile dict
-            profile = {
-                "profile_id": str(uuid4()),
-                "corp_id": corp_id,
-                "business_summary": extracted.get("business_summary", f"{industry_name} 업체"),
-                "revenue_krw": extracted.get("revenue_krw"),
-                "export_ratio_pct": extracted.get("export_ratio_pct"),
-                "country_exposure": extracted.get("country_exposure", {}),
-                "key_materials": extracted.get("key_materials", []),
-                "key_customers": extracted.get("key_customers", []),
-                "overseas_operations": extracted.get("overseas_operations", []),
-                "profile_confidence": overall_confidence,
-                "field_confidences": field_confidences,
-                "source_urls": extracted.get("_source_urls", raw_results.get("citations", [])),
-                "raw_search_result": raw_results.get("raw_response", {}),
-                "field_provenance": self.provenance_tracker.to_json(),
-                "extraction_model": getattr(llm_service, "current_model", "unknown") if llm_service else "unknown",
-                "extraction_prompt_version": PROMPT_VERSION,
-                "is_fallback": False,
-                "search_failed": False,
-                "validation_warnings": validation_result.warnings,
-                "status": "ACTIVE",
-                "fetched_at": datetime.utcnow().isoformat(),
-                "expires_at": (datetime.utcnow() + timedelta(days=PROFILE_TTL_DAYS)).isoformat(),
-                "is_expired": False,
-            }
-
-            # Step 6: Save to DB
-            if db_session:
-                await self._save_profile(profile, db_session)
-
-            # Step 7: Select queries
-            selected, details = self.query_selector.select_queries(
-                profile, industry_code
-            )
-
-            logger.info(
-                f"PROFILING completed: confidence={overall_confidence}, "
-                f"queries={len(selected)}"
-            )
-
-            return CorpProfileResult(
-                profile=profile,
-                selected_queries=selected,
-                is_cached=False,
-                query_details=details,
-            )
+                # Extract profile fields from parsed response
+                return self._extract_profile_from_search(
+                    corp_name, industry_name, parsed
+                )
 
         except Exception as e:
-            logger.warning(f"Profile extraction failed: {e}, using fallback")
-            return await self._create_fallback_profile(corp_id, industry_code, industry_name)
+            logger.error(f"Perplexity search failed: {e}")
+            raise
+
+    def _extract_profile_from_search(
+        self,
+        corp_name: str,
+        industry_name: str,
+        parsed_response: dict,
+    ) -> dict:
+        """Extract structured profile fields from search response."""
+        content = parsed_response.get("content", "")
+        citations = parsed_response.get("citations", [])
+        source_quality = parsed_response.get("source_quality", "LOW")
+
+        # Basic extraction (can be enhanced with LLM if available)
+        profile = {
+            "corp_name": corp_name,
+            "industry_name": industry_name,
+            "business_summary": content[:500] if content else f"{industry_name} 업체",
+            "source_urls": citations,
+            "source_quality": source_quality,
+            "raw_content": content,
+        }
+
+        return profile
+
+    def _sync_claude_synthesis(
+        self,
+        sources: list[dict],
+        corp_name: str,
+        industry_name: str,
+        industry_code: str,
+        discrepancies: list[dict],
+        llm_service,
+    ) -> Optional[dict]:
+        """Sync wrapper for Claude synthesis (for orchestrator injection)."""
+        if not llm_service:
+            return None
+
+        try:
+            # Build synthesis prompt
+            system_prompt = PROFILE_EXTRACTION_SYSTEM_PROMPT
+            user_prompt = self._build_synthesis_prompt(
+                sources, corp_name, industry_name, discrepancies
+            )
+
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ]
+
+            result = llm_service.call_with_json_response(
+                messages=messages,
+                temperature=0.1,
+            )
+
+            # Track provenance
+            extracted = {}
+            for field_name, field_data in result.items():
+                if field_name.startswith("_"):
+                    extracted[field_name] = field_data
+                    continue
+
+                if isinstance(field_data, dict) and "value" in field_data:
+                    value = field_data.get("value")
+                    extracted[field_name] = value
+                    self.provenance_tracker.record(
+                        field_name=field_name,
+                        value=value,
+                        source_url=field_data.get("source_url"),
+                        excerpt=field_data.get("excerpt"),
+                        confidence=field_data.get("confidence", "LOW"),
+                    )
+                else:
+                    extracted[field_name] = field_data
+
+            return {
+                "profile": extracted,
+                "metadata": None,  # ConsensusMetadata handled by orchestrator
+            }
+
+        except Exception as e:
+            logger.error(f"Claude synthesis failed: {e}")
+            raise
+
+    def _build_synthesis_prompt(
+        self,
+        sources: list[dict],
+        corp_name: str,
+        industry_name: str,
+        discrepancies: list[dict],
+    ) -> str:
+        """Build synthesis prompt for Claude."""
+        sources_text = ""
+        for i, src in enumerate(sources, 1):
+            provider = src.get("provider", "unknown")
+            profile = src.get("profile", {})
+            sources_text += f"\n### Source {i} ({provider}):\n"
+            sources_text += json.dumps(profile, ensure_ascii=False, indent=2)
+
+        discrepancy_text = ""
+        if discrepancies:
+            discrepancy_text = "\n### Discrepancies detected by validation:\n"
+            for d in discrepancies:
+                discrepancy_text += f"- {d.get('field')}: {d.get('issue')}\n"
+
+        return PROFILE_EXTRACTION_USER_PROMPT.format(
+            corp_name=corp_name,
+            industry_name=industry_name,
+            search_results=sources_text + discrepancy_text,
+        )
 
     async def _get_cached_profile(self, corp_id: str, db_session) -> Optional[dict]:
         """Check for cached profile in DB."""

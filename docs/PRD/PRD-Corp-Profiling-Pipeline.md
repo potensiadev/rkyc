@@ -1112,19 +1112,19 @@ GET /api/v1/admin/circuit-breaker/status
 
 ---
 
-## 16. PM 결정 필요 사항 (v1.1 추가)
+## 16. PM 결정 사항 (v1.2 확정)
 
-CTO/Tech Lead 기술 검토 결과, 다음 사항에 대한 PM 결정이 필요합니다.
+CTO/Tech Lead 기술 검토 후 PM 결정이 확정되었습니다.
 
 ### Q1. Gemini 사용 방식 최종 결정
 
 | Option | 설명 | 장점 | 단점 |
 |--------|------|------|------|
-| **A. 검증자 역할 (권장)** | Perplexity 결과 검증 + 생성형 보완 | 기존 아키텍처 유지, 교차 검증 가능 | Gemini 생성 정보 신뢰도 불명확 |
-| **B. Gemini 제외** | Perplexity + Claude 2-Agent | 단순화, 비용 절감 | 교차 검증 불가 |
-| **C. Gemini + Google Search API** | 실제 검색 기능 추가 | 병렬 검색 가능 | 추가 비용 $0.01~0.02/건 |
+| **✅ A. 검증자 역할** | Perplexity 결과 검증 + 생성형 보완 | 기존 아키텍처 유지, 교차 검증 가능 | Gemini 생성 정보 신뢰도 불명확 |
+| B. Gemini 제외 | Perplexity + Claude 2-Agent | 단순화, 비용 절감 | 교차 검증 불가 |
+| C. Gemini + Google Search API | 실제 검색 기능 추가 | 병렬 검색 가능 | 추가 비용 $0.01~0.02/건 |
 
-→ **PM 결정**: _________________
+→ **PM 결정**: ✅ **Option A - 검증자 역할** (Layer 1.5)
 
 ### Q2. 비용 증가 수용 여부
 
@@ -1135,7 +1135,7 @@ CTO/Tech Lead 기술 검토 결과, 다음 사항에 대한 PM 결정이 필요�
 | Production 월 비용 | $480 | $2,160 | $720 |
 
 → **PM 결정**:
-- [ ] Claude Opus 유지 (품질 우선)
+- [x] **Claude Opus 유지 (품질 우선)**
 - [ ] Claude Sonnet 전환 (비용 절감)
 - [ ] 하이브리드 (중요 기업만 Opus)
 
@@ -1143,14 +1143,37 @@ CTO/Tech Lead 기술 검토 결과, 다음 사항에 대한 PM 결정이 필요�
 
 | Option | TTL | 갱신 방식 | 월 비용 (1,000개 기업 기준) |
 |--------|-----|----------|---------------------------|
-| **A. 현재 (적극적)** | 7일 | Background 자동 | $2,160 (Opus) / $720 (Sonnet) |
-| **B. 보수적** | 14일 | On-demand | $1,080 (Opus) / $360 (Sonnet) |
-| **C. 최소** | 30일 | 수동만 | $500 (Opus) / $170 (Sonnet) |
+| **✅ A. 현재 (적극적)** | 7일 | Background 자동 | $2,160 (Opus) |
+| B. 보수적 | 14일 | On-demand | $1,080 (Opus) |
+| C. 최소 | 30일 | 수동만 | $500 (Opus) |
 
-→ **PM 결정**: _________________
+→ **PM 결정**: ✅ **Option A - 7일 TTL, Background 자동 갱신**
+
+### 확정된 아키텍처 요약
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Corp Profiling Pipeline                   │
+├─────────────────────────────────────────────────────────────┤
+│  Layer 0: Redis Cache (7일 TTL)                             │
+│      ↓ MISS                                                  │
+│  Layer 1: Perplexity (Primary Search)                       │
+│      ↓                                                       │
+│  Layer 1.5: Gemini (Validation + Enrichment)                │
+│      ↓                                                       │
+│  Layer 2: Claude Opus (Synthesis + Consensus)               │
+│      ↓ FAILURE                                               │
+│  Layer 3: Rule-Based Fallback                               │
+│      ↓ FAILURE                                               │
+│  Layer 4: Graceful Degradation (Stale Cache)                │
+└─────────────────────────────────────────────────────────────┘
+
+비용: $0.27/기업, $2,160/월 (1,000기업 기준)
+갱신: 7일 TTL, Background 자동 + 페이지 방문 시 트리거
+```
 
 ---
 
 **문서 끝**
 
-*Last Updated: 2026-01-19 (v1.1 - CTO/Tech Lead 검토 반영)*
+*Last Updated: 2026-01-19 (v1.2 - PM 결정 확정)*

@@ -56,28 +56,58 @@ CREATE TABLE IF NOT EXISTS rkyc_corp_profile (
     -- ========================================================================
     -- Extracted Profile Fields
     -- ========================================================================
-    business_summary TEXT NOT NULL,
+    business_summary TEXT,  -- Nullable for initial profile creation
     revenue_krw BIGINT,
     export_ratio_pct INTEGER CHECK (export_ratio_pct IS NULL OR (export_ratio_pct >= 0 AND export_ratio_pct <= 100)),
+
+    -- 기본 정보 (PRD v1.2 확장)
+    ceo_name VARCHAR(100),
+    employee_count INTEGER,
+    founded_year INTEGER,
+    headquarters VARCHAR(200),
+    executives JSONB DEFAULT '[]',
+
+    -- 사업 개요
+    industry_overview TEXT,
+    business_model VARCHAR(200),
+
+    -- 재무
+    financial_history JSONB DEFAULT '[]',  -- 3개년 재무 스냅샷
 
     -- Exposure Information
     country_exposure JSONB DEFAULT '{}',      -- {"중국": 20, "미국": 30}
     key_materials TEXT[] DEFAULT '{}',        -- ["실리콘 웨이퍼", "PCB"]
     key_customers TEXT[] DEFAULT '{}',        -- ["삼성전자", "SK하이닉스"]
-    overseas_operations TEXT[] DEFAULT '{}',  -- ["베트남 하노이 공장"]
+    overseas_operations TEXT[] DEFAULT '{}',  -- ["베트남 하노이 공장"] (레거시 호환)
+
+    -- Value Chain (PRD v1.2 신규)
+    competitors JSONB DEFAULT '[]',
+    macro_factors JSONB DEFAULT '[]',
+
+    -- 공급망 (PRD v1.2 신규)
+    supply_chain JSONB DEFAULT '{"key_suppliers": [], "supplier_countries": {}, "single_source_risk": [], "material_import_ratio_pct": null}',
+
+    -- 해외 사업 (PRD v1.2 신규)
+    overseas_business JSONB DEFAULT '{"subsidiaries": [], "manufacturing_countries": []}',
+
+    -- 주주
+    shareholders JSONB DEFAULT '[]',
+
+    -- Consensus 메타데이터 (PRD v1.2)
+    consensus_metadata JSONB DEFAULT '{"consensus_at": null, "perplexity_success": false, "gemini_success": false, "claude_success": false, "total_fields": 0, "matched_fields": 0, "discrepancy_fields": 0, "enriched_fields": 0, "overall_confidence": "LOW", "fallback_layer": 0, "retry_count": 0, "error_messages": []}',
 
     -- ========================================================================
     -- Confidence & Attribution (Anti-Hallucination Layer 2)
     -- ========================================================================
-    profile_confidence confidence_level NOT NULL,
-    field_confidences JSONB NOT NULL DEFAULT '{}',  -- {"export_ratio_pct": "HIGH", "country_exposure": "MED"}
-    source_urls TEXT[] NOT NULL DEFAULT '{}',
+    profile_confidence VARCHAR(10) DEFAULT 'LOW' CHECK (profile_confidence IN ('HIGH', 'MED', 'LOW', 'NONE', 'CACHED', 'STALE')),
+    field_confidences JSONB DEFAULT '{}',  -- {"export_ratio_pct": "HIGH", "country_exposure": "MED"}
+    source_urls TEXT[] DEFAULT '{}',
 
     -- ========================================================================
     -- AUDIT TRAIL (Anti-Hallucination Layer 4 - Critical)
     -- ========================================================================
     raw_search_result JSONB,                  -- Complete Perplexity response for traceability
-    field_provenance JSONB NOT NULL DEFAULT '{}',  -- Per-field source mapping
+    field_provenance JSONB DEFAULT '{}',  -- Per-field source mapping
     -- Example: {
     --   "export_ratio_pct": {
     --     "source_url": "https://dart.fss.or.kr/...",
@@ -105,7 +135,7 @@ CREATE TABLE IF NOT EXISTS rkyc_corp_profile (
     -- TTL Management
     -- ========================================================================
     fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    expires_at TIMESTAMPTZ NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '7 days'),
 
     -- ========================================================================
     -- Timestamps

@@ -21,14 +21,13 @@ INSERT INTO industry_master (industry_code, industry_name, industry_group, is_se
 -- ============================================
 
 INSERT INTO corp (corp_id, corp_reg_no, corp_name, biz_no, industry_code, ceo_name) VALUES
--- 실제 기업 (2개)
-('8001-3719240', '134511-0004412', '엠케이전자', '123-45-67890', 'C26', '김명규'),
-('8000-7647330', '110111-0012345', '동부건설', '234-56-78901', 'F41', '박동호'),
--- 가상 기업 (4개)
-('4028-1234567', '180111-0123456', '전북식품', '345-67-89012', 'C10', '이정민'),
-('6201-2345678', '200111-0234567', '광주정밀기계', '456-78-90123', 'C29', '최광수'),
-('4301-3456789', '180211-0345678', '익산바이오텍', '567-89-01234', 'C21', '박바이오'),
-('6701-4567890', '200311-0456789', '나주태양에너지', '678-90-12345', 'D35', '송태양');
+-- 테스트 대상 기업 (6개) - 2026-01-19 이미지 기준 동기화
+('8001-3719240', '134511-0004412', '엠케이전자', '135-81-06406', 'C26', '현기진'),
+('8000-7647330', '110111-0012345', '동부건설', '824-87-03495', 'F41', '윤진오'),
+('4028-1234567', '180111-0123456', '전북식품', '418-01-55362', 'C10', '강동구'),
+('6201-2345678', '200111-0234567', '광주정밀기계', '415-02-96323', 'C29', '강성우'),
+('4301-3456789', '180211-0345678', '삼성전자', '124-81-00998', 'C21', '전영현'),
+('6701-4567890', '200311-0456789', '휴림로봇', '109-81-60401', 'D35', '김봉관');
 
 -- ============================================
 -- 3. INTERNAL SNAPSHOT (PRD 7장 스키마 준수)
@@ -42,9 +41,9 @@ INSERT INTO rkyc_internal_snapshot (snapshot_id, corp_id, snapshot_version, snap
     "corp_id": "8001-3719240",
     "corp_reg_no": "134511-0004412",
     "corp_name": "엠케이전자",
-    "biz_no": "123-45-67890",
+    "biz_no": "135-81-06406",
     "industry_code": "C26",
-    "ceo_name": "김명규",
+    "ceo_name": "현기진",
     "kyc_status": {
       "is_kyc_completed": true,
       "last_kyc_updated": "2024-11-15",
@@ -83,9 +82,9 @@ INSERT INTO rkyc_internal_snapshot (snapshot_id, corp_id, snapshot_version, snap
     "corp_id": "8000-7647330",
     "corp_reg_no": "110111-0012345",
     "corp_name": "동부건설",
-    "biz_no": "234-56-78901",
+    "biz_no": "824-87-03495",
     "industry_code": "F41",
-    "ceo_name": "박동호",
+    "ceo_name": "윤진오",
     "kyc_status": {
       "is_kyc_completed": true,
       "last_kyc_updated": "2024-10-20",
@@ -124,9 +123,9 @@ INSERT INTO rkyc_internal_snapshot (snapshot_id, corp_id, snapshot_version, snap
     "corp_id": "4028-1234567",
     "corp_reg_no": "180111-0123456",
     "corp_name": "전북식품",
-    "biz_no": "345-67-89012",
+    "biz_no": "418-01-55362",
     "industry_code": "C10",
-    "ceo_name": "이정민",
+    "ceo_name": "강동구",
     "kyc_status": {
       "is_kyc_completed": true,
       "last_kyc_updated": "2024-09-10",
@@ -165,9 +164,9 @@ INSERT INTO rkyc_internal_snapshot (snapshot_id, corp_id, snapshot_version, snap
     "corp_id": "6201-2345678",
     "corp_reg_no": "200111-0234567",
     "corp_name": "광주정밀기계",
-    "biz_no": "456-78-90123",
+    "biz_no": "415-02-96323",
     "industry_code": "C29",
-    "ceo_name": "최광수",
+    "ceo_name": "강성우",
     "kyc_status": {
       "is_kyc_completed": true,
       "last_kyc_updated": "2024-08-05",
@@ -198,17 +197,17 @@ INSERT INTO rkyc_internal_snapshot (snapshot_id, corp_id, snapshot_version, snap
   }
 }', 'd4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5');
 
--- 익산바이오텍 Snapshot
+-- 삼성전자 Snapshot (구 익산바이오텍)
 INSERT INTO rkyc_internal_snapshot (snapshot_id, corp_id, snapshot_version, snapshot_json, snapshot_hash) VALUES
 ('55555555-0001-0001-0001-000000000001', '4301-3456789', 1, '{
   "schema_version": "v1.0",
   "corp": {
     "corp_id": "4301-3456789",
     "corp_reg_no": "180211-0345678",
-    "corp_name": "익산바이오텍",
-    "biz_no": "567-89-01234",
+    "corp_name": "삼성전자",
+    "biz_no": "124-81-00998",
     "industry_code": "C21",
-    "ceo_name": "박바이오",
+    "ceo_name": "전영현",
     "kyc_status": {
       "is_kyc_completed": true,
       "last_kyc_updated": "2024-11-01",
@@ -239,17 +238,17 @@ INSERT INTO rkyc_internal_snapshot (snapshot_id, corp_id, snapshot_version, snap
   }
 }', 'e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6');
 
--- 나주태양에너지 Snapshot
+-- 휴림로봇 Snapshot (구 나주태양에너지)
 INSERT INTO rkyc_internal_snapshot (snapshot_id, corp_id, snapshot_version, snapshot_json, snapshot_hash) VALUES
 ('66666666-0001-0001-0001-000000000001', '6701-4567890', 1, '{
   "schema_version": "v1.0",
   "corp": {
     "corp_id": "6701-4567890",
     "corp_reg_no": "200311-0456789",
-    "corp_name": "나주태양에너지",
-    "biz_no": "678-90-12345",
+    "corp_name": "휴림로봇",
+    "biz_no": "109-81-60401",
     "industry_code": "D35",
-    "ceo_name": "송태양",
+    "ceo_name": "김봉관",
     "kyc_status": {
       "is_kyc_completed": true,
       "last_kyc_updated": "2024-07-20",
@@ -474,7 +473,7 @@ INSERT INTO rkyc_signal (signal_id, corp_id, signal_type, event_type, event_sign
 'e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0', 1, 'NEUTRAL', 'LOW', 'LOW',
 '탄소중립 정책 강화 추세. 중장기적으로 설비 투자 필요성 있으나 당장의 영향은 제한적.');
 
--- =========== 익산바이오텍 (5개 Signal) ===========
+-- =========== 삼성전자 (5개 Signal) - 구 익산바이오텍 ===========
 
 -- DIRECT: 여신 현황
 INSERT INTO rkyc_signal (signal_id, corp_id, signal_type, event_type, event_signature, snapshot_version, impact_direction, impact_strength, confidence, summary) VALUES
@@ -506,7 +505,7 @@ INSERT INTO rkyc_signal (signal_id, corp_id, signal_type, event_type, event_sign
 'e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5', 1, 'RISK', 'HIGH', 'HIGH',
 '식약처 임상시험 규제 강화 발표. 신약 개발 일정 지연 및 비용 증가 가능성 높음.');
 
--- =========== 나주태양에너지 (4개 Signal) ===========
+-- =========== 휴림로봇 (4개 Signal) - 구 나주태양에너지 ===========
 
 -- DIRECT: 여신 현황
 INSERT INTO rkyc_signal (signal_id, corp_id, signal_type, event_type, event_signature, snapshot_version, impact_direction, impact_strength, confidence, summary) VALUES
@@ -568,7 +567,7 @@ INSERT INTO rkyc_evidence (signal_id, evidence_type, ref_type, ref_value, snippe
 ('00000019-0001-0001-0001-000000000001', 'EXTERNAL', 'URL', 'f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4', '전기차 전환 가속화 뉴스', '{"published_at": "2024-12-15"}'),
 ('00000020-0001-0001-0001-000000000001', 'EXTERNAL', 'URL', 'f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5', '탄소중립 정책 관련', '{"published_at": "2024-12-10"}');
 
--- 익산바이오텍 Evidence
+-- 삼성전자 Evidence (구 익산바이오텍)
 INSERT INTO rkyc_evidence (signal_id, evidence_type, ref_type, ref_value, snippet, meta) VALUES
 ('00000021-0001-0001-0001-000000000001', 'INTERNAL_FIELD', 'SNAPSHOT_KEYPATH', '/credit/loan_summary/total_exposure_krw', '총 여신 노출: 2,500,000,000원', '{"source": "internal_snapshot", "version": 1}'),
 ('00000022-0001-0001-0001-000000000001', 'INTERNAL_FIELD', 'SNAPSHOT_KEYPATH', '/corp/kyc_status/internal_risk_grade', '내부 리스크 등급: MED', '{"source": "internal_snapshot", "version": 1}'),
@@ -576,7 +575,7 @@ INSERT INTO rkyc_evidence (signal_id, evidence_type, ref_type, ref_value, snippe
 ('00000024-0001-0001-0001-000000000001', 'EXTERNAL', 'URL', 'f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6', '바이오 업종 투자심리 위축', '{"published_at": "2024-12-18"}'),
 ('00000025-0001-0001-0001-000000000001', 'EXTERNAL', 'URL', 'a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4', '식약처, 바이오의약품 임상시험 규제 대폭 강화', '{"published_at": "2024-12-15", "publisher": "식품의약품안전처"}');
 
--- 나주태양에너지 Evidence
+-- 휴림로봇 Evidence (구 나주태양에너지)
 INSERT INTO rkyc_evidence (signal_id, evidence_type, ref_type, ref_value, snippet, meta) VALUES
 ('00000026-0001-0001-0001-000000000001', 'INTERNAL_FIELD', 'SNAPSHOT_KEYPATH', '/credit/loan_summary/total_exposure_krw', '총 여신 노출: 1,500,000,000원', '{"source": "internal_snapshot", "version": 1}'),
 ('00000027-0001-0001-0001-000000000001', 'INTERNAL_FIELD', 'SNAPSHOT_KEYPATH', '/corp/kyc_status/internal_risk_grade', '내부 리스크 등급: LOW', '{"source": "internal_snapshot", "version": 1}'),
@@ -635,7 +634,7 @@ INSERT INTO rkyc_dashboard_summary (counts_json, top_signals) VALUES
 '[
   {"corp_name": "동부건설", "event_type": "OVERDUE_FLAG_ON", "impact": "RISK/HIGH"},
   {"corp_name": "동부건설", "event_type": "INDUSTRY_SHOCK", "impact": "RISK/HIGH"},
-  {"corp_name": "익산바이오텍", "event_type": "POLICY_REGULATION_CHANGE", "impact": "RISK/HIGH"}
+  {"corp_name": "삼성전자", "event_type": "POLICY_REGULATION_CHANGE", "impact": "RISK/HIGH"}
 ]');
 
 -- ============================================

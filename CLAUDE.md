@@ -219,16 +219,16 @@ SNAPSHOT → DOC_INGEST → EXTERNAL → CONTEXT → SIGNAL → VALIDATION → I
 - 예: `/credit/loan_summary/total_exposure_krw`
 - 예: `/corp/kyc_status/internal_risk_grade`
 
-## 시드 데이터 v2 (6개 기업, 29개 시그널)
+## 시드 데이터 v2 (6개 기업, 29개 시그널) - 2026-01-19 동기화
 
-| 기업명 | corp_id | industry_code | Signal (D/I/E) |
-|-------|---------|---------------|----------------|
-| 엠케이전자 | 8001-3719240 | C26 | 5개 (3/1/1) |
-| 동부건설 | 8000-7647330 | F41 | 6개 (4/1/1) |
-| 전북식품 | 4028-1234567 | C10 | 5개 (3/1/1) |
-| 광주정밀기계 | 6201-2345678 | C29 | 4개 (2/1/1) |
-| 익산바이오텍 | 4301-3456789 | C21 | 5개 (3/1/1) |
-| 나주태양에너지 | 6701-4567890 | D35 | 4개 (2/1/1) |
+| 기업명 | corp_id | industry_code | ceo_name | biz_no | Signal (D/I/E) |
+|-------|---------|---------------|----------|--------|----------------|
+| 엠케이전자 | 8001-3719240 | C26 | 현기진 | 135-81-06406 | 5개 (3/1/1) |
+| 동부건설 | 8000-7647330 | F41 | 윤진오 | 824-87-03495 | 6개 (4/1/1) |
+| 전북식품 | 4028-1234567 | C10 | 강동구 | 418-01-55362 | 5개 (3/1/1) |
+| 광주정밀기계 | 6201-2345678 | C29 | 강성우 | 415-02-96323 | 4개 (2/1/1) |
+| 삼성전자 | 4301-3456789 | C21 | 전영현 | 124-81-00998 | 5개 (3/1/1) |
+| 휴림로봇 | 6701-4567890 | D35 | 김봉관 | 109-81-60401 | 4개 (2/1/1) |
 
 **Signal 분포:**
 - DIRECT: 17개
@@ -1110,6 +1110,168 @@ backend/app/api/v1/endpoints/profiles.py (import 경로 변경)
 docs/PRD-Corp-Profiling-Pipeline.md
 ```
 
+### 세션 12 (2026-01-19) - PRD v1.2 구현: Consensus Engine + Circuit Breaker ✅
+**목표**: PRD-Corp-Profiling-Pipeline v1.2 구현 (PM 결정 사항 반영)
+
+**PM 결정 사항 (확정)**:
+- **Q1**: Gemini 사용 방식 → **Option A: 검증자 역할** (Layer 1.5)
+- **Q2**: 비용 수용 → **Claude Opus** ($0.27/기업, 품질 우선)
+- **Q3**: 갱신 주기 → **7일 TTL, Background 자동 갱신**
+
+**완료 항목**:
+
+#### 1. Layer 1.5: Gemini Validation 구현
+- `gemini_adapter.py` 신규 생성
+- `search()` → NotImplementedError (검색 불가 명시)
+- `validate()` → Perplexity 결과 검증
+- `enrich_missing_fields()` → 누락 필드 생성형 보완
+- **source: "GEMINI_INFERRED"** 자동 표시
+
+#### 2. Consensus Engine 구현
+- `consensus_engine.py` 신규 생성
+- **Jaccard Similarity** >= 0.7 문자열 매칭
+- 한국어 Stopwords 처리
+- FieldConsensus, ConsensusMetadata 데이터 클래스
+- `merge()` → Perplexity + Gemini 결과 합성
+- discrepancy 필드 자동 플래깅
+
+#### 3. Circuit Breaker 패턴 구현
+- `circuit_breaker.py` 신규 생성
+- 상태: CLOSED → OPEN → HALF_OPEN
+- PRD v1.2 설정:
+  - Perplexity: threshold=3, cooldown=300s
+  - Gemini: threshold=3, cooldown=300s
+  - Claude: threshold=2, cooldown=600s
+- CircuitBreakerManager 싱글톤
+- `execute_with_circuit_breaker()` 래퍼
+
+#### 4. Circuit Breaker Status API
+- `admin.py` 신규 생성
+- `GET /api/v1/admin/circuit-breaker/status` - 전체 상태 조회
+- `GET /api/v1/admin/circuit-breaker/status/{provider}` - 개별 상태
+- `POST /api/v1/admin/circuit-breaker/reset` - 수동 리셋
+- `GET /api/v1/admin/health/llm` - LLM 건강 상태 요약
+
+#### 5. Corp Profile 스키마 확장
+- `migration_v7_corp_profile.sql` 업데이트
+- 신규 필드:
+  - 기본 정보: ceo_name, employee_count, founded_year, headquarters, executives
+  - Value Chain: competitors, macro_factors
+  - 공급망: supply_chain (key_suppliers, supplier_countries, single_source_risk)
+  - 해외 사업: overseas_business (subsidiaries, manufacturing_countries)
+  - 주주: shareholders
+  - 재무: financial_history
+- **consensus_metadata** JSONB 필드 (fallback_layer, retry_count, error_messages)
+
+#### 6. Background Refresh 태스크
+- `profile_refresh.py` 신규 생성
+- `refresh_corp_profile` - 단일 기업 갱신
+- `refresh_expiring_profiles` - 만료 임박 프로필 갱신 (매시간)
+- `refresh_all_profiles` - 야간 배치 전체 갱신
+- `trigger_profile_refresh_on_signal` - 시그널 감지 시 갱신
+- Rate limiting: 분당 10개, 시간당 100개, 일일 500개
+
+#### 7. PRD v1.2 업데이트
+- PM 결정 사항 Section 16에 반영
+- 확정된 아키텍처 요약 추가
+
+**신규 파일**:
+```
+backend/app/worker/llm/gemini_adapter.py
+backend/app/worker/llm/consensus_engine.py
+backend/app/worker/llm/circuit_breaker.py
+backend/app/api/v1/endpoints/admin.py
+backend/app/worker/tasks/profile_refresh.py
+```
+
+**수정된 파일**:
+```
+backend/app/worker/llm/__init__.py
+backend/app/worker/tasks/__init__.py
+backend/app/api/v1/router.py
+backend/sql/migration_v7_corp_profile.sql
+docs/PRD/PRD-Corp-Profiling-Pipeline.md
+```
+
+### 세션 13 (2026-01-19) - MultiAgentOrchestrator 구현 및 Pipeline 통합 ✅
+**목표**: PRD-Corp-Profiling-Pipeline v1.2의 4-Layer Fallback을 조율하는 Orchestrator 구현
+
+**완료 항목**:
+
+#### 1. MultiAgentOrchestrator 클래스 생성
+- `orchestrator.py` 신규 생성 (530+ 라인)
+- **4-Layer Fallback 조율**:
+  - Layer 0: Cache (캐시 조회)
+  - Layer 1+1.5: Perplexity Search + Gemini Validation
+  - Layer 2: Claude Synthesis / Consensus Engine
+  - Layer 3: Rule-Based Merge (결정론적 병합)
+  - Layer 4: Graceful Degradation (최소 프로필 + 경고)
+
+#### 2. 핵심 데이터 구조
+- `FallbackLayer` Enum: CACHE, PERPLEXITY_GEMINI, CLAUDE_SYNTHESIS, RULE_BASED, GRACEFUL_DEGRADATION
+- `OrchestratorResult`: profile, fallback_layer, retry_count, error_messages, consensus_metadata, provenance
+- `RuleBasedMergeConfig`: 소스 우선순위, 필수 필드, 숫자/비율 필드 검증 규칙
+
+#### 3. Rule-Based Merge 구현 (Layer 3)
+- **소스 우선순위**:
+  - PERPLEXITY_VERIFIED: 100
+  - GEMINI_VALIDATED: 90
+  - CLAUDE_SYNTHESIZED: 80
+  - GEMINI_INFERRED: 50
+  - RULE_BASED: 30
+- **검증 로직**:
+  - 숫자 필드 범위 검증
+  - 비율 합계 검증 (export + domestic = 100)
+  - 필수 필드 강제 설정
+
+#### 4. Graceful Degradation 구현 (Layer 4)
+- 모든 Layer 실패 시 최소 프로필 반환
+- `_degraded: true` 플래그
+- 기존 프로필에서 안전한 필드 복사
+
+#### 5. Circuit Breaker 통합
+- 각 Provider별 Circuit Breaker 상태 확인
+- 자동 record_success/record_failure 호출
+- `get_circuit_status()` 메서드로 상태 조회
+
+#### 6. corp_profiling.py 업데이트
+- Orchestrator 주입 패턴 적용
+- Injectable 함수: set_cache_lookup, set_perplexity_search, set_claude_synthesis
+- `_build_final_profile()`: Orchestrator 결과 → 최종 프로필 변환
+- fallback_layer 기반 TTL 및 confidence 결정
+
+#### 7. LLM 모듈 Export 업데이트
+- `__init__.py`에 Orchestrator 관련 클래스/함수 추가
+- `MultiAgentOrchestrator`, `OrchestratorResult`, `FallbackLayer`, `RuleBasedMergeConfig`, `get_orchestrator`, `reset_orchestrator`
+
+**신규 파일**:
+```
+backend/app/worker/llm/orchestrator.py
+```
+
+**수정된 파일**:
+```
+backend/app/worker/pipelines/corp_profiling.py
+backend/app/worker/llm/__init__.py
+```
+
+**Orchestrator 실행 흐름**:
+```
+execute()
+  ├── _try_cache() → Layer 0
+  │   └── 캐시 히트 시 바로 반환
+  ├── _try_perplexity_gemini() → Layer 1+1.5
+  │   ├── Perplexity 검색 (Circuit Breaker)
+  │   └── Gemini 검증 (Circuit Breaker)
+  ├── _try_claude_synthesis() → Layer 2
+  │   └── Consensus Engine 또는 Claude 합성
+  ├── _try_rule_based_merge() → Layer 3
+  │   ├── 소스 우선순위 기반 필드 선택
+  │   └── 범위 검증 및 비율 보정
+  └── _graceful_degradation() → Layer 4
+      └── 최소 프로필 + 경고 플래그
+```
+
 ---
 
 ## 참고 사항
@@ -1122,12 +1284,15 @@ docs/PRD-Corp-Profiling-Pipeline.md
 - **Worker 로컬 실행**: `cd backend && celery -A app.worker.celery_app worker --loglevel=info --pool=solo`
 - **OPENAI_API_KEY 필요**: Embedding 서비스용
 - **PERPLEXITY_API_KEY 필요**: Corp Profiling용
+- **GOOGLE_API_KEY 필요**: Gemini Validation용 (Layer 1.5)
 - **Internal/External LLM 분리**: MVP에서는 논리적 분리만 (실제 분리는 Phase 2)
 - **DOC_INGEST**: PDF 텍스트 파싱 + 정규식 + LLM fallback 방식
 - **LLM Fallback**: Claude Opus 4.5 → GPT-5 → Gemini 3 Pro (3단계)
 - **Embedding**: text-embedding-3-large (2000d, pgvector 최대)
 - **Vector Index**: HNSW (m=16, ef_construction=64)
 - **Corp Profiling**: TTL 7일, Fallback TTL 1일
+- **Consensus Engine**: Jaccard Similarity >= 0.7, Perplexity 우선
+- **Circuit Breaker**: Perplexity/Gemini 3회/5분, Claude 2회/10분
 
 ---
-*Last Updated: 2026-01-19 (세션 11 완료 - Corp Profiling PRD 작성 및 Multi-Agent 설계)*
+*Last Updated: 2026-01-19 (세션 13 완료 - MultiAgentOrchestrator 구현 및 Pipeline 통합)*
