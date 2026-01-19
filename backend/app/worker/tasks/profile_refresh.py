@@ -15,7 +15,7 @@ from typing import Optional
 from celery import shared_task
 from sqlalchemy import text
 
-from app.worker.db import get_sync_db_session
+from app.worker.db import get_sync_db
 from app.worker.pipelines.corp_profiling import CorpProfilingPipeline, get_corp_profiling_pipeline
 from app.worker.llm.circuit_breaker import get_circuit_breaker_manager
 
@@ -53,7 +53,7 @@ def refresh_corp_profile(
     logger.info(f"[ProfileRefresh] Starting for {corp_id} (force={force}, source={trigger_source})")
 
     try:
-        with get_sync_db_session() as session:
+        with get_sync_db() as session:
             # 기업 정보 조회
             corp_query = text("""
                 SELECT c.corp_id, c.corp_nm, c.industry_code, im.industry_nm
@@ -156,7 +156,7 @@ def refresh_expiring_profiles():
     logger.info("[ProfileRefresh] Starting expiring profiles refresh")
 
     try:
-        with get_sync_db_session() as session:
+        with get_sync_db() as session:
             # 24시간 내 만료 예정 프로필 조회
             query = text("""
                 SELECT corp_id
@@ -221,7 +221,7 @@ def refresh_all_profiles():
     logger.info("[ProfileRefresh] Starting nightly full refresh")
 
     try:
-        with get_sync_db_session() as session:
+        with get_sync_db() as session:
             # 최근 갱신 순으로 전체 기업 조회 (오래된 것 우선)
             query = text("""
                 SELECT c.corp_id

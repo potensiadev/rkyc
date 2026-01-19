@@ -226,8 +226,17 @@ def _tokenize_with_kiwi(text: str, kiwi) -> set[str]:
             if tag == "NNG" and form in STOPWORD_NOUNS:
                 continue
 
+            # 단일 문자 불용어 필터링
+            # 조사가 단독 출현 시 NNG/IC로 잘못 분류되는 경우 대응
+            if len(form) == 1 and form in SINGLE_CHAR_STOPWORDS:
+                continue
+
             # 접속부사 필터링
             if tag in ("MAJ", "MAG") and form in STOPWORD_ADVERBS:
+                continue
+
+            # IC(감탄사) 중 조사 역할인 것 필터링
+            if tag == "IC" and form in SINGLE_CHAR_STOPWORDS:
                 continue
 
             # 빈 토큰 제외
