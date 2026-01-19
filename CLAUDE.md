@@ -1047,6 +1047,71 @@ backend/app/services/query_selector.py
 backend/app/api/v1/endpoints/profiles.py (import 경로 변경)
 ```
 
+### 세션 11 (2026-01-19) - Corp Profiling PRD 작성 및 Multi-Agent 설계 ✅
+**목표**: Corp Profiling Pipeline PRD 작성 및 Multi-Agent Consensus Engine 설계
+
+**완료 항목**:
+
+#### 1. Multi-Agent 아키텍처 설계
+- **Perplexity + Gemini 병렬 호출** (OpenAI 미사용)
+- **Perplexity 우선 원칙**: 불일치 시 Perplexity 결과 채택
+- **Adapter 패턴**: LLM별 통일된 인터페이스
+- **Structured Logging + Trace ID**: 디버깅 용이성
+- **2-Tier Cache**: Individual (24h) + Final (7d)
+
+#### 2. 4-Layer Fallback 설계 (절대 실패 방지)
+| Layer | 역할 | Fallback 조건 |
+|-------|------|--------------|
+| Layer 0 | Cache Check | - |
+| Layer 1 | Perplexity + Gemini 병렬 검색 | 둘 다 실패 → Layer 4 |
+| Layer 2 | Claude Synthesis | Claude 실패 → Layer 3 |
+| Layer 3 | Rule-Based Merge | - |
+| Layer 4 | Graceful Degradation | DB 기존 데이터 또는 최소 Profile |
+
+#### 3. Consensus Engine 설계
+- **일치 조건**: 숫자 ≤10%, 리스트 50%, 국가 Top3 중 2개
+- **불일치 시**: Perplexity 우선 + discrepancy 플래그
+- **Consensus Metadata**: 각 LLM 성공 여부, discrepancy_fields, overall_confidence
+
+#### 4. Corp Profile 스키마 확장
+- **기존 7개** → **19개 항목**으로 확장
+- **신규 항목**:
+  - 기본 정보: ceo_name, employee_count, founded_year, headquarters, executives
+  - Value Chain: industry_overview, business_model, competitors, macro_factors
+  - 공급망: supply_chain (key_suppliers, supplier_countries, single_source_risk)
+  - 해외 사업: overseas_business (subsidiaries, manufacturing_countries)
+  - 주주: shareholders
+  - 재무: financial_history (3개년)
+
+#### 5. Frontend 통합 설계
+- **기본 뷰 / 상세 뷰** 분리 (CPO 요구사항)
+- **NULL → 빈값 표시** 규칙 확정
+- **Background 갱신**: 사용자 페이지 방문 시 자동 갱신 시작
+- **"정보 갱신" 버튼**: 수동 강제 갱신
+
+#### 6. Circuit Breaker 설정
+| LLM | failure_threshold | cooldown |
+|-----|-------------------|----------|
+| Perplexity | 3회 | 5분 |
+| Gemini | 3회 | 5분 |
+| Claude | 2회 | 10분 |
+
+#### 7. PRD 문서 작성
+- `docs/PRD-Corp-Profiling-Pipeline.md` 생성 (15개 섹션, 800+ 라인)
+
+**PRD 기억 사항** (계속 기억):
+1. **supply_chain 추가**: 공급망 현황 섹션 (key_suppliers, supplier_countries, single_source_risk)
+2. **NULL → 빈값**: "NULL" 텍스트 표시 금지, "-" 또는 빈칸
+3. **기본 뷰 / 상세 뷰**: discrepancy, source는 상세 뷰에서만
+4. **Background 갱신**: 페이지 방문 시 자동 갱신 + 토스트 알림
+
+**신규 파일**:
+```
+docs/PRD-Corp-Profiling-Pipeline.md
+```
+
+---
+
 ## 참고 사항
 - **인증은 PRD 2.3에 따라 대회 범위 제외** - 구현하지 않음
 - **schema_v2.sql, seed_v2.sql 사용** (v1은 deprecated)
@@ -1065,4 +1130,4 @@ backend/app/api/v1/endpoints/profiles.py (import 경로 변경)
 - **Corp Profiling**: TTL 7일, Fallback TTL 1일
 
 ---
-*Last Updated: 2026-01-19 (세션 10-2 완료 - Corp Profiling 마이그레이션 적용 및 API 테스트)*
+*Last Updated: 2026-01-19 (세션 11 완료 - Corp Profiling PRD 작성 및 Multi-Agent 설계)*
