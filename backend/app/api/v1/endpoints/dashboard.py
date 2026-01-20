@@ -4,6 +4,10 @@ Dashboard 통계 조회
 
 Endpoints:
 - GET /dashboard/summary - Dashboard 요약 통계
+
+Migration v11 변경:
+- signal_index에서 상태 필드 제거됨
+- 상태 통계는 Signal 테이블과 JOIN하여 조회
 """
 
 from datetime import datetime, UTC
@@ -13,6 +17,7 @@ from sqlalchemy import select, func, case, literal_column
 from app.core.database import get_db
 from app.models.signal import (
     SignalIndex,
+    Signal,
     SignalType,
     ImpactDirection,
     SignalStatus,
@@ -28,9 +33,12 @@ async def get_dashboard_summary(db: AsyncSession = Depends(get_db)):
     Dashboard 요약 통계
 
     최적화: 단일 쿼리로 모든 통계를 집계 (N+1 문제 해결)
+
+    Migration v11 변경:
+    - Signal 테이블과 JOIN하여 상태 통계 조회
     """
 
-    # 단일 쿼리로 모든 통계 집계
+    # 단일 쿼리로 모든 통계 집계 (v11: Signal JOIN으로 상태 조회)
     stats_query = select(
         func.count().label("total"),
         # Impact Direction 카운트
@@ -41,15 +49,15 @@ async def get_dashboard_summary(db: AsyncSession = Depends(get_db)):
         func.sum(case((SignalIndex.signal_type == SignalType.DIRECT, 1), else_=0)).label("type_direct"),
         func.sum(case((SignalIndex.signal_type == SignalType.INDUSTRY, 1), else_=0)).label("type_industry"),
         func.sum(case((SignalIndex.signal_type == SignalType.ENVIRONMENT, 1), else_=0)).label("type_environment"),
-        # Signal Status 카운트 (NULL은 NEW로 집계)
+        # Signal Status 카운트 (v11: Signal 테이블에서 조회, NULL은 NEW로 집계)
         func.sum(case(
-            (SignalIndex.signal_status == SignalStatus.NEW, 1),
-            (SignalIndex.signal_status.is_(None), 1),
+            (Signal.signal_status == SignalStatus.NEW, 1),
+            (Signal.signal_status.is_(None), 1),
             else_=0
         )).label("status_new"),
-        func.sum(case((SignalIndex.signal_status == SignalStatus.REVIEWED, 1), else_=0)).label("status_reviewed"),
-        func.sum(case((SignalIndex.signal_status == SignalStatus.DISMISSED, 1), else_=0)).label("status_dismissed"),
-    ).select_from(SignalIndex)
+        func.sum(case((Signal.signal_status == SignalStatus.REVIEWED, 1), else_=0)).label("status_reviewed"),
+        func.sum(case((Signal.signal_status == SignalStatus.DISMISSED, 1), else_=0)).label("status_dismissed"),
+    ).select_from(SignalIndex).join(Signal, Signal.signal_id == SignalIndex.signal_id)
 
     result = await db.execute(stats_query)
     row = result.one()
