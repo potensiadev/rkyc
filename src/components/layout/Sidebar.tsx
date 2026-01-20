@@ -13,6 +13,7 @@ import {
   Factory,
   Globe,
   Newspaper,
+  UserPlus,
 } from "lucide-react";
 
 interface SubMenuItem {
@@ -76,6 +77,12 @@ const navigationItems: NavigationItem[] = [
     label: "분석 현황",
     icon: BarChart3,
     path: "/analytics",
+  },
+  {
+    id: "new-kyc",
+    label: "신규 법인 KYC",
+    icon: UserPlus,
+    path: "/new-kyc",
   },
 ];
 

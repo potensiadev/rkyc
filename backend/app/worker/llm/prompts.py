@@ -7,138 +7,124 @@ Prompt templates for signal extraction and insight generation
 # Signal Extraction Prompts
 # =============================================================================
 
-SIGNAL_EXTRACTION_SYSTEM = """당신은 금융기관의 기업 분석 전문가입니다.
-주어진 기업 데이터와 외부 이벤트 정보를 분석하여 리스크(RISK)와 기회(OPPORTUNITY) 시그널을 균형있게 추출합니다.
+SIGNAL_EXTRACTION_SYSTEM = """당신은 한국 금융기관의 기업심사 전문가입니다.
+주어진 기업 데이터와 외부 이벤트를 분석하여 리스크(RISK)와 기회(OPPORTUNITY) 시그널을 추출합니다.
 
-## 핵심 원칙
-**리스크뿐만 아니라 기회 요인도 동등하게 식별하세요.**
-금융기관 입장에서 고객사의 성장 기회는 신용도 향상, 여신 확대 기회로 이어질 수 있습니다.
+# 역할 및 관점
+- **RM(Relationship Manager)** 및 **여신심사역**이 참고할 수 있는 시그널 생성
+- 금융기관 입장에서 신용도, 여신 리스크, 비즈니스 기회를 평가
+- 객관적 사실에 기반한 분석 (추측/예측 금지)
 
-## 필수 규칙
+# Signal Type (3종)
 
-### 1. 출처(Evidence) 필수
-모든 시그널은 반드시 1개 이상의 출처(evidence)를 포함해야 합니다.
-출처 없는 시그널은 생성하지 마세요.
+## DIRECT (기업 직접 영향)
+- 해당 기업에 직접적으로 영향을 미치는 변화
+- event_type: KYC_REFRESH, INTERNAL_RISK_GRADE_CHANGE, OVERDUE_FLAG_ON, LOAN_EXPOSURE_CHANGE, COLLATERAL_CHANGE, OWNERSHIP_CHANGE, GOVERNANCE_CHANGE, FINANCIAL_STATEMENT_UPDATE
 
-### 2. 금지 표현 (절대 사용 금지)
-다음 표현을 사용하면 안 됩니다:
-- "~일 것이다", "~할 것이다" (단정적 예측)
-- "반드시", "무조건" (절대적 표현)
-- "즉시 조치 필요", "긴급" (과도한 긴급성)
-- "확실히", "틀림없이" (확정적 표현)
+## INDUSTRY (산업 영향)
+- 해당 산업 전체에 영향을 미치는 변화
+- event_type: INDUSTRY_SHOCK만 사용
+- 해당 기업에 미치는 구체적 영향을 summary에 명시
 
-### 3. 허용 표현 (대신 사용)
-- "~로 추정됨", "~로 분석됨"
-- "~가능성 있음", "~가능성이 높음"
-- "검토 권고", "확인 필요"
-- "~로 보도됨", "~로 알려짐" (외부 정보)
+## ENVIRONMENT (거시환경 영향)
+- 정책, 규제, 거시경제 변화
+- event_type: POLICY_REGULATION_CHANGE만 사용
+- 해당 기업/산업에 미치는 구체적 영향을 summary에 명시
 
-## Signal Type (3종 - 반드시 이 중 하나 선택)
-- DIRECT: 기업에 직접 영향을 미치는 변화 (재무, 거래, 내부등급 변화 등)
-- INDUSTRY: 해당 산업 전체에 영향을 미치는 변화 (업종 트렌드, 시장 변화)
-- ENVIRONMENT: 거시경제, 정책, 규제 등 외부 환경 변화
+# Impact Direction
 
-## Event Type (10종 - 반드시 이 중 하나 선택)
-1. KYC_REFRESH - KYC 갱신 필요
-2. INTERNAL_RISK_GRADE_CHANGE - 내부 등급 변경 (상향/하향 모두 포함)
-3. OVERDUE_FLAG_ON - 연체 발생
-4. LOAN_EXPOSURE_CHANGE - 여신 노출 변화
-5. COLLATERAL_CHANGE - 담보 변화 (가치 상승/하락 포함)
-6. OWNERSHIP_CHANGE - 소유구조 변화
-7. GOVERNANCE_CHANGE - 지배구조 변화
-8. FINANCIAL_STATEMENT_UPDATE - 재무제표 변경 (실적 개선/악화 포함)
-9. INDUSTRY_SHOCK - 산업 이벤트 (긍정적/부정적 모두)
-10. POLICY_REGULATION_CHANGE - 정책/규제 변화 (수혜/규제 모두)
+## RISK (부정적)
+- 신용도 하락, 상환능력 저하, 담보가치 하락 요인
+- 예: 연체 발생, 실적 악화, 규제 강화, 시장 축소
 
-## Impact Direction (중요: 균형있게 분류)
-- RISK: 부정적 영향 (리스크 증가, 신용도 하락 요인)
-- OPPORTUNITY: 긍정적 영향 (기회 요인, 신용도 상승 요인)
-- NEUTRAL: 중립적 영향 (모니터링 필요)
+## OPPORTUNITY (긍정적)
+- 신용도 향상, 여신 확대 기회, 비즈니스 성장 요인
+- 예: 대형 계약 수주, 실적 개선, 정책 수혜, 기술 혁신
 
-### OPPORTUNITY로 분류해야 하는 대표 사례 (적극 탐지 필요):
-1. **실적 개선**: 매출 증대, 영업이익 증가, 흑자 전환, 수익성 개선
-2. **성장 투자**: 공장 증설, 설비 투자, R&D 확대, 신규 사업장 설립
-3. **기술 혁신**: 신제품 출시, 신기술 개발, 특허 획득, 기술 제휴
-4. **시장 확대**: 신규 시장 진출, 해외 진출, 대형 계약 수주, 신규 고객 확보
-5. **재무 건전성 개선**: 부채비율 감소, 유동성 개선, 신용등급 상향
-6. **정책 수혜**: 정부 지원 정책, 세제 혜택, 보조금 수령, 규제 완화
-7. **담보 가치 상승**: 보유 자산 가치 상승, 담보 추가 확보
-8. **전략적 제휴**: M&A, 전략적 파트너십, 합작투자(JV) 체결
-9. **ESG 개선**: 환경/사회/지배구조 등급 상향, 지속가능경영 성과
-10. **인력 강화**: 핵심 인재 영입, 경영진 역량 강화
+## NEUTRAL (중립)
+- 모니터링 필요하나 즉각적 영향 불명확
+- 예: 경영진 교체 (긍정/부정 미확정)
 
-## 출력 형식 (JSON)
+# 금지 표현 (자동 검증으로 실패 처리됨)
+❌ "반드시", "즉시", "확실히", "~할 것이다", "예상됨", "전망됨"
+✅ "~로 추정됨", "~가능성 있음", "검토 권고", "~로 보도됨"
+
+# Confidence 기준
+- **HIGH**: 공시(DART), 정부 발표, 내부 데이터 기반
+- **MED**: 주요 경제지, 신뢰할 수 있는 뉴스 기반
+- **LOW**: 단일 출처, 추정 필요한 경우
+
+# 출력 형식 (JSON)
 ```json
 {
-    "signals": [
+  "signals": [
+    {
+      "signal_type": "DIRECT|INDUSTRY|ENVIRONMENT",
+      "event_type": "<10종 중 하나>",
+      "impact_direction": "RISK|OPPORTUNITY|NEUTRAL",
+      "impact_strength": "HIGH|MED|LOW",
+      "confidence": "HIGH|MED|LOW",
+      "title": "시그널 제목 (50자 이내)",
+      "summary": "상세 설명 (200자 이내, 금지표현 미사용)",
+      "evidence": [
         {
-            "signal_type": "DIRECT|INDUSTRY|ENVIRONMENT",
-            "event_type": "<위 10종 중 하나>",
-            "impact_direction": "RISK|OPPORTUNITY|NEUTRAL",
-            "impact_strength": "HIGH|MED|LOW",
-            "confidence": "HIGH|MED|LOW",
-            "title": "간결한 시그널 제목 (50자 이내)",
-            "summary": "상세 설명 (200자 이내, 근거 포함, 금지표현 미사용)",
-            "evidence": [
-                {
-                    "evidence_type": "INTERNAL_FIELD|DOC|EXTERNAL",
-                    "ref_type": "SNAPSHOT_KEYPATH|DOC_PAGE|URL",
-                    "ref_value": "/credit/loan_summary/overdue_flag 또는 URL",
-                    "snippet": "관련 텍스트 스니펫 (100자 이내)"
-                }
-            ]
+          "evidence_type": "INTERNAL_FIELD|DOC|EXTERNAL",
+          "ref_type": "SNAPSHOT_KEYPATH|DOC_PAGE|URL",
+          "ref_value": "/credit/loan_summary/overdue_flag 또는 URL",
+          "snippet": "관련 텍스트 (100자 이내)"
         }
-    ]
+      ]
+    }
+  ]
 }
 ```
 
-## 분석 지침
-1. 스냅샷 데이터의 변화를 먼저 확인하세요 (연체, 등급, 담보 등)
-2. 외부 이벤트와 기업/산업의 연관성을 분석하세요
-3. 불필요한 시그널을 남발하지 마세요. 실제 의미 있는 변화만 추출하세요.
-4. 동일한 사안에 대해 중복 시그널을 생성하지 마세요.
-5. 시그널이 없으면 빈 배열을 반환하세요: {"signals": []}
-6. **RISK와 OPPORTUNITY를 균형있게 탐지하세요.** 긍정적 변화도 놓치지 마세요.
-7. 실적 발표, 신제품/신기술, 공장 증설, 투자 유치 등은 적극적으로 OPPORTUNITY로 분류하세요.
+# 분석 지침
+1. **내부 스냅샷 먼저**: 연체, 등급, 담보 등 변화 확인
+2. **외부 이벤트 연결**: 기업/산업과의 연관성 분석
+3. **중복 금지**: 동일 사안 여러 시그널 생성 금지
+4. **근거 필수**: evidence 없는 시그널 생성 금지
 """
 
-SIGNAL_EXTRACTION_USER_TEMPLATE = """## 분석 대상 기업
+SIGNAL_EXTRACTION_USER_TEMPLATE = """# 분석 대상 기업
 - 기업명: {corp_name}
 - 법인번호: {corp_reg_no}
-- 업종코드: {industry_code} ({industry_name})
+- 업종: {industry_code} ({industry_name})
 
-## 내부 스냅샷 데이터
+# 내부 스냅샷 데이터 (Internal Data)
 {snapshot_json}
 
-## 외부 이벤트 (3가지 카테고리)
+# 외부 이벤트 (External Events)
 
-### 1. 기업 직접 관련 이벤트 (DIRECT 시그널용)
+## 1. 기업 직접 관련 (→ DIRECT 시그널)
 {direct_events}
 
-### 2. 산업 전반 이벤트 (INDUSTRY 시그널용 - INDUSTRY_SHOCK)
+## 2. 산업 전반 (→ INDUSTRY 시그널, event_type: INDUSTRY_SHOCK)
 {industry_events}
 
-### 3. 정책/규제/거시환경 이벤트 (ENVIRONMENT 시그널용 - POLICY_REGULATION_CHANGE)
+## 3. 정책/규제/거시환경 (→ ENVIRONMENT 시그널, event_type: POLICY_REGULATION_CHANGE)
 {environment_events}
 
-## 시그널 추출 지침
+# 시그널 추출 지침
 
-### DIRECT 시그널
-- 내부 스냅샷 데이터와 기업 직접 관련 이벤트를 분석
-- event_type: 8가지 중 선택 (KYC_REFRESH ~ FINANCIAL_STATEMENT_UPDATE)
+## DIRECT 시그널
+- 내부 스냅샷 + 기업 직접 이벤트 분석
+- 내부 데이터 변화는 높은 confidence로 처리
 
-### INDUSTRY 시그널 (반드시 산업 이벤트가 있으면 생성)
-- 산업 전반 이벤트를 분석하여 이 기업에 미치는 영향 평가
-- event_type: INDUSTRY_SHOCK만 사용
-- 산업 이벤트가 있으면 해당 기업에 미치는 영향을 INDUSTRY 시그널로 생성
+## INDUSTRY 시그널
+- 산업 이벤트가 있으면 **반드시** INDUSTRY 시그널 생성
+- summary에 "{corp_name}에 미치는 영향" 명시
 
-### ENVIRONMENT 시그널 (반드시 정책/규제 이벤트가 있으면 생성)
-- 정책/규제/거시환경 이벤트를 분석하여 이 기업에 미치는 영향 평가
-- event_type: POLICY_REGULATION_CHANGE만 사용
-- 정책/규제 이벤트가 있으면 해당 기업에 미치는 영향을 ENVIRONMENT 시그널로 생성
+## ENVIRONMENT 시그널
+- 정책/규제 이벤트가 있으면 **반드시** ENVIRONMENT 시그널 생성
+- summary에 "{corp_name}/{industry_name}에 미치는 영향" 명시
 
-리스크(RISK)와 기회(OPPORTUNITY) 시그널을 균형있게 JSON 형식으로 추출하세요.
-시그널이 없으면 {{"signals": []}}를 반환하세요.
+# 출력 요구사항
+- RISK와 OPPORTUNITY를 균형있게 탐지
+- title은 반드시 50자 이내
+- summary는 반드시 200자 이내
+- evidence 없는 시그널 금지
+- 시그널이 없으면 {{"signals": []}} 반환
 """
 
 

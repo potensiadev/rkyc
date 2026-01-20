@@ -330,6 +330,92 @@ export function useRefreshCorpProfile() {
   });
 }
 
+// ============================================================
+// 신규 법인 KYC Hooks
+// ============================================================
+
+import {
+  getNewKycJobStatus,
+  getNewKycReport,
+  NewKycJobStatusResponse,
+  NewKycReportResponse,
+} from '@/lib/api';
+
+// 신규 KYC Job 상태 폴링 훅
+export function useNewKycJobStatus(jobId: string) {
+  return useQuery({
+    queryKey: ['new-kyc', 'job', jobId],
+    queryFn: () => getNewKycJobStatus(jobId),
+    enabled: !!jobId,
+    refetchInterval: (query) => {
+      const data = query.state.data as NewKycJobStatusResponse | undefined;
+      // QUEUED 또는 RUNNING 상태일 때만 폴링
+      if (data?.status === 'QUEUED' || data?.status === 'RUNNING') {
+        return 2000; // 2초 간격
+      }
+      return false;
+    },
+  });
+}
+
+// 신규 KYC 리포트 조회 훅
+export function useNewKycReport(jobId: string) {
+  return useQuery({
+    queryKey: ['new-kyc', 'report', jobId],
+    queryFn: () => getNewKycReport(jobId),
+    enabled: !!jobId,
+    staleTime: 5 * 60 * 1000, // 5분
+  });
+}
+
+// ============================================================
+// Session 16: Signal Enriched Detail Hooks (풍부한 시그널 상세)
+// ============================================================
+
+import {
+  getSignalEnrichedDetail,
+  getSignalSimilarCases,
+  getSignalRelated,
+  GetSignalEnrichedParams,
+  ApiSignalEnrichedDetail,
+  ApiSimilarCase,
+  ApiRelatedSignal,
+  ApiCorpContext,
+  ApiEnrichedEvidence,
+  ApiVerification,
+  ApiImpactAnalysis,
+} from '@/lib/api';
+
+// Signal Enriched Detail 조회 훅 (풍부한 상세 정보)
+export function useSignalEnrichedDetail(signalId: string, params?: GetSignalEnrichedParams) {
+  return useQuery({
+    queryKey: ['signal', signalId, 'enriched', params],
+    queryFn: () => getSignalEnrichedDetail(signalId, params),
+    enabled: !!signalId,
+    staleTime: 2 * 60 * 1000, // 2분
+  });
+}
+
+// 유사 과거 케이스 조회 훅
+export function useSignalSimilarCases(signalId: string, limit?: number, minSimilarity?: number) {
+  return useQuery({
+    queryKey: ['signal', signalId, 'similar-cases', { limit, minSimilarity }],
+    queryFn: () => getSignalSimilarCases(signalId, limit, minSimilarity),
+    enabled: !!signalId,
+    staleTime: 5 * 60 * 1000, // 5분
+  });
+}
+
+// 관련 시그널 조회 훅
+export function useSignalRelated(signalId: string, relationTypes?: string[], limit?: number) {
+  return useQuery({
+    queryKey: ['signal', signalId, 'related', { relationTypes, limit }],
+    queryFn: () => getSignalRelated(signalId, relationTypes, limit),
+    enabled: !!signalId,
+    staleTime: 2 * 60 * 1000, // 2분
+  });
+}
+
 // API 타입 re-export (페이지에서 직접 사용)
 export type {
   ApiSignalDetail,
@@ -340,4 +426,14 @@ export type {
   SignalStatusType,
   ApiCorpProfileResponse,
   ApiCorpProfileDetailResponse,
+  NewKycJobStatusResponse,
+  NewKycReportResponse,
+  // Session 16: Enriched types
+  ApiSignalEnrichedDetail,
+  ApiSimilarCase,
+  ApiRelatedSignal,
+  ApiCorpContext,
+  ApiEnrichedEvidence,
+  ApiVerification,
+  ApiImpactAnalysis,
 };

@@ -13,6 +13,9 @@ import CorporateDetailPage from "./pages/CorporateDetailPage";
 import DailyBriefingPage from "./pages/DailyBriefingPage";
 import AnalyticsStatusPage from "./pages/AnalyticsStatusPage";
 import ReportsPage from "./pages/ReportsPage";
+import NewKycUploadPage from "./pages/NewKycUploadPage";
+import NewKycAnalysisPage from "./pages/NewKycAnalysisPage";
+import NewKycReportPage from "./pages/NewKycReportPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -34,6 +37,10 @@ const App = () => (
           <Route path="/signals/environment" element={<EnvironmentSignalPage />} />
           <Route path="/signals/:signalId" element={<SignalDetailPage />} />
           <Route path="/corporates/:corporateId" element={<CorporateDetailPage />} />
+          {/* 신규 법인 KYC */}
+          <Route path="/new-kyc" element={<NewKycUploadPage />} />
+          <Route path="/new-kyc/analysis/:jobId" element={<NewKycAnalysisPage />} />
+          <Route path="/new-kyc/report/:jobId" element={<NewKycReportPage />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

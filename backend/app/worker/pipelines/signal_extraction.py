@@ -1,11 +1,18 @@
 """
 Signal Extraction Pipeline Stage
 Stage 5: Extract risk signals using LLM
+
+Production-grade validation with:
+- Forbidden word detection
+- Headline length validation
+- Signal type / Event type mapping validation
+- Confidence-based source verification
 """
 
 import json
 import hashlib
 import logging
+import re
 from typing import Optional
 
 from app.worker.llm.service import LLMService
@@ -16,6 +23,48 @@ from app.worker.llm.prompts import (
 from app.worker.llm.exceptions import AllProvidersFailedError
 
 logger = logging.getLogger(__name__)
+
+# =============================================================================
+# Validation Rules
+# =============================================================================
+
+# Forbidden words in summary (auto-fail if present)
+FORBIDDEN_WORDS = [
+    "반드시",
+    "즉시",
+    "확실히",
+    "틀림없이",
+    "무조건",
+    "긴급",
+    "예상됨",
+    "전망됨",
+    "~할 것이다",
+    "~일 것이다",
+    "것으로 보인다",  # Too speculative
+]
+
+# Compiled regex patterns for forbidden words
+FORBIDDEN_PATTERNS = [re.compile(re.escape(word)) for word in FORBIDDEN_WORDS]
+
+# Signal Type to allowed Event Types mapping
+SIGNAL_EVENT_MAPPING = {
+    "DIRECT": {
+        "KYC_REFRESH",
+        "INTERNAL_RISK_GRADE_CHANGE",
+        "OVERDUE_FLAG_ON",
+        "LOAN_EXPOSURE_CHANGE",
+        "COLLATERAL_CHANGE",
+        "OWNERSHIP_CHANGE",
+        "GOVERNANCE_CHANGE",
+        "FINANCIAL_STATEMENT_UPDATE",
+    },
+    "INDUSTRY": {"INDUSTRY_SHOCK"},
+    "ENVIRONMENT": {"POLICY_REGULATION_CHANGE"},
+}
+
+# Maximum lengths (PRD 14.7 rkyc_signal schema)
+MAX_TITLE_LENGTH = 50
+MAX_SUMMARY_LENGTH = 200
 
 
 class SignalExtractionPipeline:
@@ -125,11 +174,19 @@ class SignalExtractionPipeline:
 
     def _enrich_signal(self, signal: dict, context: dict) -> Optional[dict]:
         """
-        Enrich signal with metadata and compute event signature.
+        Enrich signal with metadata and validate.
+
+        Validation rules:
+        1. Required fields present
+        2. Evidence exists (minimum 1)
+        3. Valid enum values
+        4. Signal type / Event type mapping
+        5. Forbidden words check
+        6. Length constraints (headline, title, summary)
 
         Returns None if signal is invalid.
         """
-        # Validate required fields
+        # 1. Validate required fields
         required_fields = [
             "signal_type", "event_type", "impact_direction",
             "impact_strength", "confidence", "title", "summary"
@@ -139,29 +196,23 @@ class SignalExtractionPipeline:
                 logger.warning(f"Signal missing required field: {field}")
                 return None
 
-        # Validate evidence
+        # 2. Validate evidence
         evidence = signal.get("evidence", [])
         if not evidence:
             logger.warning("Signal has no evidence, skipping")
             return None
 
-        # Validate enums
-        valid_signal_types = {"DIRECT", "INDUSTRY", "ENVIRONMENT"}
-        valid_event_types = {
-            "KYC_REFRESH", "INTERNAL_RISK_GRADE_CHANGE", "OVERDUE_FLAG_ON",
-            "LOAN_EXPOSURE_CHANGE", "COLLATERAL_CHANGE", "OWNERSHIP_CHANGE",
-            "GOVERNANCE_CHANGE", "FINANCIAL_STATEMENT_UPDATE",
-            "INDUSTRY_SHOCK", "POLICY_REGULATION_CHANGE"
-        }
+        # 3. Validate enums
         valid_directions = {"RISK", "OPPORTUNITY", "NEUTRAL"}
         valid_strengths = {"HIGH", "MED", "LOW"}
 
-        if signal["signal_type"] not in valid_signal_types:
-            logger.warning(f"Invalid signal_type: {signal['signal_type']}")
+        signal_type = signal["signal_type"]
+        event_type = signal["event_type"]
+
+        if signal_type not in SIGNAL_EVENT_MAPPING:
+            logger.warning(f"Invalid signal_type: {signal_type}")
             return None
-        if signal["event_type"] not in valid_event_types:
-            logger.warning(f"Invalid event_type: {signal['event_type']}")
-            return None
+
         if signal["impact_direction"] not in valid_directions:
             logger.warning(f"Invalid impact_direction: {signal['impact_direction']}")
             return None
@@ -172,7 +223,49 @@ class SignalExtractionPipeline:
             logger.warning(f"Invalid confidence: {signal['confidence']}")
             return None
 
-        # Add metadata
+        # 4. Validate signal_type / event_type mapping
+        allowed_events = SIGNAL_EVENT_MAPPING[signal_type]
+        if event_type not in allowed_events:
+            logger.warning(
+                f"Invalid event_type '{event_type}' for signal_type '{signal_type}'. "
+                f"Allowed: {allowed_events}"
+            )
+            return None
+
+        # 5. Check forbidden words in summary
+        summary = signal.get("summary", "")
+        for pattern in FORBIDDEN_PATTERNS:
+            if pattern.search(summary):
+                logger.warning(
+                    f"Signal summary contains forbidden word, skipping: "
+                    f"'{pattern.pattern}' in '{summary[:50]}...'"
+                )
+                return None
+
+        # Also check title for forbidden words
+        title = signal.get("title", "")
+        if title:
+            for pattern in FORBIDDEN_PATTERNS:
+                if pattern.search(title):
+                    logger.warning(
+                        f"Signal title contains forbidden word: '{pattern.pattern}'"
+                    )
+                    return None
+
+        # 6. Validate length constraints
+        if len(title) > MAX_TITLE_LENGTH:
+            logger.warning(
+                f"Title too long ({len(title)} > {MAX_TITLE_LENGTH}), truncating"
+            )
+            signal["title"] = title[:MAX_TITLE_LENGTH]
+
+        if len(summary) > MAX_SUMMARY_LENGTH:
+            logger.warning(
+                f"Summary too long ({len(summary)} > {MAX_SUMMARY_LENGTH}), truncating"
+            )
+            signal["summary"] = summary[:MAX_SUMMARY_LENGTH]
+
+        # Add metadata (PRD 14.7 rkyc_signal schema)
         signal["corp_id"] = context.get("corp_id", "")
         signal["snapshot_version"] = context.get("snapshot_version", 0)
         signal["event_signature"] = self._compute_signature(signal)

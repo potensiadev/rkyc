@@ -317,3 +317,291 @@ export async function refreshCorpProfile(corpId: string): Promise<ApiProfileRefr
     },
   });
 }
+
+// ============================================================
+// 신규 법인 KYC API
+// ============================================================
+
+// 신규 KYC 분석 요청 타입
+export interface NewKycAnalysisRequest {
+  corpName?: string;
+  memo?: string;
+  files: { type: string; file: File }[];
+}
+
+// 신규 KYC 분석 응답
+export interface NewKycAnalysisResponse {
+  job_id: string;
+  status: string;
+  message: string;
+}
+
+// 신규 KYC Job 상태 응답
+export interface NewKycJobStatusResponse {
+  job_id: string;
+  status: 'QUEUED' | 'RUNNING' | 'DONE' | 'FAILED';
+  corp_name?: string;
+  progress: {
+    step: string | null;
+    percent: number;
+  };
+  error?: {
+    code: string | null;
+    message: string | null;
+  };
+}
+
+// 신규 KYC 리포트 - 시그널
+export interface NewKycSignal {
+  signal_id?: string;
+  signal_type: string;
+  event_type: string;
+  impact_direction: 'RISK' | 'OPPORTUNITY' | 'NEUTRAL';
+  impact_strength: 'HIGH' | 'MED' | 'LOW';
+  confidence: 'HIGH' | 'MED' | 'LOW';
+  title: string;
+  summary: string;
+  evidences?: {
+    evidence_type: string;
+    ref_type: string;
+    ref_value: string;
+    snippet?: string;
+  }[];
+}
+
+// 신규 KYC 리포트 응답
+export interface NewKycReportResponse {
+  job_id: string;
+  corp_info: {
+    corp_name?: string;
+    biz_no?: string;
+    corp_reg_no?: string;
+    ceo_name?: string;
+    founded_date?: string;
+    industry?: string;
+    capital?: number;
+    address?: string;
+  };
+  financial_summary?: {
+    year: number;
+    revenue?: number;
+    operating_profit?: number;
+    debt_ratio?: number;
+  };
+  shareholders?: {
+    name: string;
+    ownership_pct: number;
+  }[];
+  signals: NewKycSignal[];
+  insight?: string;
+  created_at: string;
+}
+
+// 신규 KYC 분석 시작
+export async function startNewKycAnalysis(request: NewKycAnalysisRequest): Promise<NewKycAnalysisResponse> {
+  const formData = new FormData();
+
+  if (request.corpName) {
+    formData.append('corp_name', request.corpName);
+  }
+  if (request.memo) {
+    formData.append('memo', request.memo);
+  }
+
+  // 파일 추가
+  request.files.forEach(({ type, file }) => {
+    formData.append(`file_${type}`, file);
+  });
+
+  const response = await fetch(`${API_BASE_URL}/api/v1/new-kyc/analyze`, {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!response.ok) {
+    throw new ApiError(response.status, `API Error: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+// 신규 KYC Job 상태 조회
+export async function getNewKycJobStatus(jobId: string): Promise<NewKycJobStatusResponse> {
+  return fetchApi<NewKycJobStatusResponse>(`/api/v1/new-kyc/jobs/${jobId}`);
+}
+
+// 신규 KYC 리포트 조회
+export async function getNewKycReport(jobId: string): Promise<NewKycReportResponse> {
+  return fetchApi<NewKycReportResponse>(`/api/v1/new-kyc/report/${jobId}`);
+}
+
+// ============================================================
+// Session 16: Signal Enriched Detail API (풍부한 시그널 상세)
+// ============================================================
+
+// 유사 과거 케이스
+export interface ApiSimilarCase {
+  id: string;
+  similarity_score: number;
+  corp_id: string | null;
+  corp_name: string | null;
+  industry_code: string | null;
+  signal_type: string | null;
+  event_type: string | null;
+  summary: string | null;
+  outcome: string | null;
+}
+
+// 소스 검증 결과
+export interface ApiVerification {
+  id: string;
+  verification_type: string;
+  source_name: string | null;
+  source_url: string | null;
+  verification_status: 'VERIFIED' | 'PARTIAL' | 'UNVERIFIED' | 'CONFLICTING';
+  confidence_contribution: number | null;
+  details: Record<string, unknown> | null;
+  verified_at: string;
+}
+
+// 영향도 분석
+export interface ApiImpactAnalysis {
+  id: string;
+  analysis_type: 'FINANCIAL' | 'CREDIT' | 'OPERATIONAL' | 'REGULATORY';
+  metric_name: string;
+  current_value: number | null;
+  projected_impact: number | null;
+  impact_direction: 'INCREASE' | 'DECREASE' | 'STABLE' | null;
+  impact_percentage: number | null;
+  industry_avg: number | null;
+  industry_percentile: number | null;
+  reasoning: string | null;
+  data_source: string | null;
+}
+
+// 관련 시그널
+export interface ApiRelatedSignal {
+  signal_id: string;
+  relation_type: 'SAME_CORP' | 'SAME_INDUSTRY' | 'CAUSAL' | 'TEMPORAL';
+  relation_strength: number | null;
+  corp_id: string;
+  corp_name: string;
+  signal_type: string;
+  event_type: string;
+  impact_direction: string;
+  impact_strength: string;
+  title: string;
+  summary_short: string | null;
+  detected_at: string;
+  description: string | null;
+}
+
+// 기업 컨텍스트
+export interface ApiCorpContext {
+  corp_id: string;
+  corp_name: string;
+  industry_code: string;
+  industry_name: string | null;
+  revenue_krw: number | null;
+  employee_count: number | null;
+  export_ratio_pct: number | null;
+  country_exposure: string[] | null;
+  key_materials: string[] | null;
+  key_customers: string[] | null;
+  supply_chain_risk: 'LOW' | 'MED' | 'HIGH' | null;
+  internal_risk_grade: string | null;
+  overdue_flag: boolean | null;
+  total_exposure_krw: number | null;
+  profile_confidence: string | null;
+  profile_updated_at: string | null;
+}
+
+// 확장된 Evidence
+export interface ApiEnrichedEvidence extends ApiEvidence {
+  source_credibility: 'OFFICIAL' | 'MAJOR_MEDIA' | 'MINOR_MEDIA' | 'UNKNOWN' | null;
+  verification_status: string | null;
+  retrieved_at: string | null;
+  source_domain: string | null;
+  is_primary_source: boolean;
+}
+
+// 풍부한 시그널 상세 응답
+export interface ApiSignalEnrichedDetail extends ApiSignal {
+  summary: string;
+  evidences: ApiEnrichedEvidence[];
+  analysis_reasoning: string | null;
+  llm_model: string | null;
+  corp_context: ApiCorpContext | null;
+  similar_cases: ApiSimilarCase[];
+  verifications: ApiVerification[];
+  impact_analysis: ApiImpactAnalysis[];
+  related_signals: ApiRelatedSignal[];
+  insight_excerpt: string | null;
+}
+
+// Signal Enriched Detail 조회
+export interface GetSignalEnrichedParams {
+  include_similar_cases?: boolean;
+  include_verifications?: boolean;
+  include_impact?: boolean;
+  include_related?: boolean;
+}
+
+export async function getSignalEnrichedDetail(
+  signalId: string,
+  params?: GetSignalEnrichedParams
+): Promise<ApiSignalEnrichedDetail> {
+  const searchParams = new URLSearchParams();
+
+  if (params?.include_similar_cases !== undefined) {
+    searchParams.set('include_similar_cases', String(params.include_similar_cases));
+  }
+  if (params?.include_verifications !== undefined) {
+    searchParams.set('include_verifications', String(params.include_verifications));
+  }
+  if (params?.include_impact !== undefined) {
+    searchParams.set('include_impact', String(params.include_impact));
+  }
+  if (params?.include_related !== undefined) {
+    searchParams.set('include_related', String(params.include_related));
+  }
+
+  const query = searchParams.toString();
+  return fetchApi<ApiSignalEnrichedDetail>(
+    `/api/v1/signals/${signalId}/enriched${query ? `?${query}` : ''}`
+  );
+}
+
+// 유사 케이스만 조회
+export async function getSignalSimilarCases(
+  signalId: string,
+  limit?: number,
+  minSimilarity?: number
+): Promise<ApiSimilarCase[]> {
+  const searchParams = new URLSearchParams();
+  if (limit) searchParams.set('limit', String(limit));
+  if (minSimilarity) searchParams.set('min_similarity', String(minSimilarity));
+
+  const query = searchParams.toString();
+  return fetchApi<ApiSimilarCase[]>(
+    `/api/v1/signals/${signalId}/similar-cases${query ? `?${query}` : ''}`
+  );
+}
+
+// 관련 시그널만 조회
+export async function getSignalRelated(
+  signalId: string,
+  relationTypes?: string[],
+  limit?: number
+): Promise<ApiRelatedSignal[]> {
+  const searchParams = new URLSearchParams();
+  if (relationTypes) {
+    relationTypes.forEach(t => searchParams.append('relation_types', t));
+  }
+  if (limit) searchParams.set('limit', String(limit));
+
+  const query = searchParams.toString();
+  return fetchApi<ApiRelatedSignal[]>(
+    `/api/v1/signals/${signalId}/related${query ? `?${query}` : ''}`
+  );
+}
