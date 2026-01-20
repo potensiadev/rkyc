@@ -51,6 +51,7 @@ from app.worker.llm.circuit_breaker import (
     CircuitConfig,
     CircuitStatus,
     CircuitOpenError,
+    CircuitBreakerRedisError,
     get_circuit_breaker,
     get_circuit_breaker_manager,
 )
@@ -107,6 +108,7 @@ __all__ = [
     "CircuitConfig",
     "CircuitStatus",
     "CircuitOpenError",
+    "CircuitBreakerRedisError",
     "get_circuit_breaker",
     "get_circuit_breaker_manager",
     # PRD v1.2 - Multi-Agent Orchestrator

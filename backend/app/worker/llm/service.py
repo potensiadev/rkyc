@@ -443,19 +443,20 @@ class LLMService:
         errors = []
 
         # Vision-capable models only (3-stage fallback)
+        # Using actually existing models with vision support
         vision_models = [
             {
-                "model": "claude-opus-4-5-20251101",
+                "model": "claude-3-5-sonnet-20241022",  # Claude 3.5 Sonnet (vision capable)
                 "provider": "anthropic",
                 "max_tokens": 4096,
             },
             {
-                "model": "gpt-5",
+                "model": "gpt-4o",  # GPT-4o (vision capable)
                 "provider": "openai",
                 "max_tokens": 4096,
             },
             {
-                "model": "gemini/gemini-3-pro-preview",
+                "model": "gemini/gemini-1.5-pro",  # Gemini 1.5 Pro (vision capable)
                 "provider": "google",
                 "max_tokens": 4096,
             },

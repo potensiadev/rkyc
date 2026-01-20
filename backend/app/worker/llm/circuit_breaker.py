@@ -30,24 +30,51 @@ logger = logging.getLogger(__name__)
 _redis_client = None
 
 
+class CircuitBreakerRedisError(Exception):
+    """Redis가 필수인데 연결 실패 시 발생"""
+    pass
+
+
 def _get_redis():
-    """Redis 클라이언트 가져오기 (lazy initialization)"""
+    """
+    Redis 클라이언트 가져오기 (lazy initialization).
+
+    v1.4 변경:
+    - CIRCUIT_BREAKER_REQUIRE_REDIS=True (기본값)이면 Redis 연결 실패 시 예외 발생
+    - 프로덕션 환경에서 Circuit Breaker 상태 손실 방지
+    """
     global _redis_client
     if _redis_client is None:
         try:
             import redis
             from app.core.config import settings
             redis_url = getattr(settings, 'REDIS_URL', None)
+            require_redis = getattr(settings, 'CIRCUIT_BREAKER_REQUIRE_REDIS', True)
+
             if redis_url:
                 _redis_client = redis.from_url(redis_url, decode_responses=True)
                 # Test connection
                 _redis_client.ping()
                 logger.info("[CircuitBreaker] Redis connection established for state persistence")
             else:
-                logger.warning("[CircuitBreaker] REDIS_URL not configured, using in-memory storage")
+                if require_redis:
+                    raise CircuitBreakerRedisError(
+                        "REDIS_URL not configured but CIRCUIT_BREAKER_REQUIRE_REDIS=True. "
+                        "Set CIRCUIT_BREAKER_REQUIRE_REDIS=False to use in-memory storage (not recommended for production)."
+                    )
+                logger.warning("[CircuitBreaker] REDIS_URL not configured, using in-memory storage (NOT RECOMMENDED)")
                 _redis_client = False  # Mark as unavailable
+        except CircuitBreakerRedisError:
+            raise  # Re-raise our custom error
         except Exception as e:
-            logger.warning(f"[CircuitBreaker] Redis connection failed, using in-memory: {e}")
+            from app.core.config import settings
+            require_redis = getattr(settings, 'CIRCUIT_BREAKER_REQUIRE_REDIS', True)
+            if require_redis:
+                raise CircuitBreakerRedisError(
+                    f"Redis connection failed but CIRCUIT_BREAKER_REQUIRE_REDIS=True: {e}. "
+                    "Set CIRCUIT_BREAKER_REQUIRE_REDIS=False to use in-memory storage (not recommended for production)."
+                )
+            logger.warning(f"[CircuitBreaker] Redis connection failed, using in-memory (NOT RECOMMENDED): {e}")
             _redis_client = False
     return _redis_client if _redis_client else None
 

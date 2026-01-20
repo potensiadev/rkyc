@@ -205,22 +205,27 @@ async def get_signal_detail(
     Migration v11 변경:
     - 상태 정보(signal_status, reviewed_at, dismissed_at, dismiss_reason)는
       Signal 테이블에서만 조회 (signal_index는 상태 필드 없음)
+
+    N+1 최적화 (v11.1):
+    - Query 1: SignalIndex + Signal JOIN (기존 3개 → 1개)
+    - Query 2: Evidence 조회 (배열이므로 별도)
     """
 
-    # SignalIndex에서 기본 정보
-    index_query = select(SignalIndex).where(SignalIndex.signal_id == signal_id)
-    index_result = await db.execute(index_query)
-    signal_index = index_result.scalar_one_or_none()
+    # Query 1: SignalIndex + Signal JOIN으로 한 번에 조회
+    combined_query = (
+        select(SignalIndex, Signal)
+        .outerjoin(Signal, Signal.signal_id == SignalIndex.signal_id)
+        .where(SignalIndex.signal_id == signal_id)
+    )
+    combined_result = await db.execute(combined_query)
+    row = combined_result.one_or_none()
 
-    if not signal_index:
+    if not row:
         raise HTTPException(status_code=404, detail="Signal not found")
 
-    # Signal 원본에서 전체 summary + 상태 정보
-    signal_query = select(Signal).where(Signal.signal_id == signal_id)
-    signal_result = await db.execute(signal_query)
-    signal = signal_result.scalar_one_or_none()
+    signal_index, signal = row
 
-    # Evidence 조회
+    # Query 2: Evidence 조회
     evidence_query = select(Evidence).where(Evidence.signal_id == signal_id).order_by(Evidence.created_at.desc())
     evidence_result = await db.execute(evidence_query)
     evidences = evidence_result.scalars().all()

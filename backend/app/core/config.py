@@ -22,9 +22,11 @@ class Settings(BaseSettings):
     PORT: int = 8000
 
     # Database (Supabase PostgreSQL)
+    # Note: Supabase free tier has limited connections (~20 total)
+    # Using conservative pool size to avoid connection exhaustion
     DATABASE_URL: str = Field(..., description="PostgreSQL connection string")
-    DB_POOL_SIZE: int = 20
-    DB_MAX_OVERFLOW: int = 10
+    DB_POOL_SIZE: int = 5
+    DB_MAX_OVERFLOW: int = 5
     DB_ECHO: bool = False
 
     # Supabase API
@@ -36,6 +38,13 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379"
     REDIS_BROKER_DB: int = Field(default=0, description="Redis DB number for Celery broker")
     REDIS_RESULT_DB: int = Field(default=1, description="Redis DB number for Celery results")
+
+    # Circuit Breaker Configuration
+    # In production, Redis is required to persist circuit breaker state across worker restarts
+    CIRCUIT_BREAKER_REQUIRE_REDIS: bool = Field(
+        default=True,
+        description="Require Redis for circuit breaker state persistence (recommended for production)"
+    )
 
     @property
     def CELERY_BROKER_URL(self) -> str:

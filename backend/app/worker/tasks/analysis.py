@@ -26,6 +26,11 @@ from app.worker.pipelines import (
     NoSnapshotError,
     NoCorporationError,
 )
+from app.worker.llm.exceptions import (
+    RateLimitError,
+    TimeoutError as LLMTimeoutError,
+    AllProvidersFailedError,
+)
 from app.worker.pipelines.corp_profiling import get_corp_profiling_pipeline
 
 logger = logging.getLogger(__name__)
@@ -79,7 +84,9 @@ def update_job_progress(
 @celery_app.task(
     bind=True,
     name="run_analysis_pipeline",
-    autoretry_for=(Exception,),
+    # Only retry on transient errors (rate limits, timeouts, provider failures)
+    # Business logic errors (ValueError, KeyError) should NOT be retried
+    autoretry_for=(RateLimitError, LLMTimeoutError, AllProvidersFailedError, ConnectionError, TimeoutError),
     retry_kwargs={"max_retries": 3, "countdown": 60},
     retry_backoff=True,
     retry_backoff_max=300,
