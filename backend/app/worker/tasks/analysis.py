@@ -81,6 +81,91 @@ def update_job_progress(
         logger.info(f"Job {job_id} updated: status={status.value}, step={step}, percent={percent}")
 
 
+def _save_profile_sync(profile: dict) -> None:
+    """
+    Save corp profile to database using sync session.
+
+    This is called after async profiling pipeline completes,
+    since the pipeline itself doesn't have a sync db session.
+    """
+    import json
+    from sqlalchemy import text
+
+    try:
+        with get_sync_db() as db:
+            # Upsert (insert or update) - using CAST instead of :: for SQLAlchemy compatibility
+            query = text("""
+                INSERT INTO rkyc_corp_profile (
+                    profile_id, corp_id, business_summary, revenue_krw, export_ratio_pct,
+                    country_exposure, key_materials, key_customers, overseas_operations,
+                    profile_confidence, field_confidences, source_urls,
+                    raw_search_result, field_provenance, extraction_model, extraction_prompt_version,
+                    is_fallback, search_failed, validation_warnings, status,
+                    fetched_at, expires_at
+                ) VALUES (
+                    CAST(:profile_id AS uuid), :corp_id, :business_summary, :revenue_krw, :export_ratio_pct,
+                    CAST(:country_exposure AS jsonb), :key_materials, :key_customers, :overseas_operations,
+                    CAST(:profile_confidence AS confidence_level), CAST(:field_confidences AS jsonb), :source_urls,
+                    CAST(:raw_search_result AS jsonb), CAST(:field_provenance AS jsonb), :extraction_model, :extraction_prompt_version,
+                    :is_fallback, :search_failed, :validation_warnings, :status,
+                    CAST(:fetched_at AS timestamptz), CAST(:expires_at AS timestamptz)
+                )
+                ON CONFLICT (corp_id) DO UPDATE SET
+                    business_summary = EXCLUDED.business_summary,
+                    revenue_krw = EXCLUDED.revenue_krw,
+                    export_ratio_pct = EXCLUDED.export_ratio_pct,
+                    country_exposure = EXCLUDED.country_exposure,
+                    key_materials = EXCLUDED.key_materials,
+                    key_customers = EXCLUDED.key_customers,
+                    overseas_operations = EXCLUDED.overseas_operations,
+                    profile_confidence = EXCLUDED.profile_confidence,
+                    field_confidences = EXCLUDED.field_confidences,
+                    source_urls = EXCLUDED.source_urls,
+                    raw_search_result = EXCLUDED.raw_search_result,
+                    field_provenance = EXCLUDED.field_provenance,
+                    extraction_model = EXCLUDED.extraction_model,
+                    extraction_prompt_version = EXCLUDED.extraction_prompt_version,
+                    is_fallback = EXCLUDED.is_fallback,
+                    search_failed = EXCLUDED.search_failed,
+                    validation_warnings = EXCLUDED.validation_warnings,
+                    status = EXCLUDED.status,
+                    fetched_at = EXCLUDED.fetched_at,
+                    expires_at = EXCLUDED.expires_at,
+                    updated_at = NOW()
+            """)
+
+            db.execute(query, {
+                "profile_id": str(profile.get("profile_id", "")),
+                "corp_id": profile.get("corp_id", ""),
+                "business_summary": profile.get("business_summary"),
+                "revenue_krw": profile.get("revenue_krw"),
+                "export_ratio_pct": profile.get("export_ratio_pct"),
+                "country_exposure": json.dumps(profile.get("country_exposure", {})),
+                "key_materials": profile.get("key_materials", []),
+                "key_customers": profile.get("key_customers", []),
+                "overseas_operations": profile.get("overseas_operations", []),
+                "profile_confidence": profile.get("profile_confidence", "LOW"),
+                "field_confidences": json.dumps(profile.get("field_confidences", {})),
+                "source_urls": profile.get("source_urls", []),
+                "raw_search_result": json.dumps(profile.get("raw_search_result", {})),
+                "field_provenance": json.dumps(profile.get("field_provenance", {})),
+                "extraction_model": profile.get("extraction_model"),
+                "extraction_prompt_version": profile.get("extraction_prompt_version"),
+                "is_fallback": profile.get("is_fallback", False),
+                "search_failed": profile.get("search_failed", False),
+                "validation_warnings": profile.get("validation_warnings", []),
+                "status": profile.get("status", "ACTIVE"),
+                "fetched_at": profile.get("fetched_at"),
+                "expires_at": profile.get("expires_at"),
+            })
+            db.commit()
+            logger.info(f"Saved profile for corp_id={profile.get('corp_id')}")
+
+    except Exception as e:
+        logger.error(f"Failed to save profile: {e}")
+        # Don't raise - profile save failure shouldn't stop the pipeline
+
+
 @celery_app.task(
     bind=True,
     name="run_analysis_pipeline",
@@ -203,6 +288,11 @@ def run_analysis_pipeline(self, job_id: str, corp_id: str):
                 "selected_queries": profile_result.selected_queries,
                 "query_details": profile_result.query_details,
             }
+
+            # Save profile to DB using sync session (async pipeline doesn't have db_session)
+            if profile_result.profile:
+                _save_profile_sync(profile_result.profile)
+
         except Exception as e:
             # PROFILING failure should not stop the pipeline
             logger.warning(f"PROFILING stage failed (non-fatal): {e}")

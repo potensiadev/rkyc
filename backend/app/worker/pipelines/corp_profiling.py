@@ -73,6 +73,30 @@ MED_TRUST_DOMAINS = [
     "hani.co.kr",
 ]
 
+# Domains to exclude from citations (blogs, user-generated content)
+EXCLUDED_DOMAINS = [
+    "blog.naver.com",
+    "m.blog.naver.com",
+    "blog.daum.net",
+    "tistory.com",
+    "brunch.co.kr",
+    "velog.io",
+    "medium.com",
+    "wordpress.com",
+    "blogspot.com",
+    "cafe.naver.com",
+    "cafe.daum.net",
+    "dcinside.com",
+    "fmkorea.com",
+    "clien.net",
+    "ruliweb.com",
+    "ppomppu.co.kr",
+    "instiz.net",
+    "theqoo.net",
+    "reddit.com",
+    "quora.com",
+]
+
 # Extraction prompt version for reproducibility
 PROMPT_VERSION = "v1.0"
 
@@ -138,8 +162,13 @@ class PerplexityResponseParser:
     Anti-Hallucination Layer 1: Source Verification
     """
 
-    def parse_response(self, raw_response: dict) -> dict:
-        """Extract content, citations, and assess source quality."""
+    def parse_response(self, raw_response: dict, exclude_blogs: bool = True) -> dict:
+        """Extract content, citations, and assess source quality.
+
+        Args:
+            raw_response: Raw Perplexity API response
+            exclude_blogs: If True, filter out blog/community URLs from citations
+        """
         content = ""
         citations = []
 
@@ -155,11 +184,20 @@ class PerplexityResponseParser:
         if not citations:
             citations = self._extract_urls_from_content(content)
 
+        # Filter out blog/community URLs if requested
+        if exclude_blogs:
+            original_count = len(citations)
+            citations = self._filter_excluded_domains(citations)
+            filtered_count = original_count - len(citations)
+            if filtered_count > 0:
+                logger.info(f"Filtered {filtered_count} blog/community URLs from citations")
+
         source_quality = self._assess_source_quality(citations)
 
         return {
             "content": content,
             "citations": citations,
+            "filtered_blog_count": filtered_count if exclude_blogs else 0,
             "source_quality": source_quality,
             "raw_response": raw_response,
         }
@@ -169,6 +207,16 @@ class PerplexityResponseParser:
         url_pattern = r'https?://[^\s<>"{}|\\^`\[\]]+'
         urls = re.findall(url_pattern, content)
         return list(set(urls))[:10]  # Limit to 10 unique URLs
+
+    def _filter_excluded_domains(self, urls: list[str]) -> list[str]:
+        """Filter out blog/community URLs from the list."""
+        filtered = []
+        for url in urls:
+            url_lower = url.lower()
+            is_excluded = any(domain in url_lower for domain in EXCLUDED_DOMAINS)
+            if not is_excluded:
+                filtered.append(url)
+        return filtered
 
     def _assess_source_quality(self, citations: list[str]) -> str:
         """

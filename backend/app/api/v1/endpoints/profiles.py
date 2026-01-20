@@ -309,7 +309,9 @@ async def refresh_corp_profile(
     request: ProfileRefreshRequest = ProfileRefreshRequest(),
     db: AsyncSession = Depends(get_db),
 ):
-    """Trigger profile refresh."""
+    """Trigger profile refresh by creating an analysis job."""
+    from app.models.job import Job, JobType, JobStatus
+
     # Verify corporation exists
     corp_query = text("SELECT corp_id FROM corp WHERE corp_id = :corp_id")
     corp_result = await db.execute(corp_query, {"corp_id": corp_id})
@@ -319,7 +321,7 @@ async def refresh_corp_profile(
             detail=f"Corporation not found: {corp_id}",
         )
 
-    # For now, just mark existing profile as expired to trigger refresh on next analysis
+    # Mark existing profile as expired if force=true
     if request.force:
         update_query = text("""
             UPDATE rkyc_corp_profile
@@ -328,13 +330,50 @@ async def refresh_corp_profile(
             WHERE corp_id = :corp_id
         """)
         await db.execute(update_query, {"corp_id": corp_id})
+
+    # Create analysis Job to trigger PROFILING pipeline
+    new_job = Job(
+        job_type=JobType.ANALYZE,
+        corp_id=corp_id,
+        status=JobStatus.QUEUED,
+    )
+    db.add(new_job)
+    await db.commit()
+    await db.refresh(new_job)
+
+    # Dispatch Celery task
+    celery_dispatch_failed = False
+    celery_error_message = None
+    try:
+        from app.worker.tasks.analysis import run_analysis_pipeline
+        task = run_analysis_pipeline.delay(str(new_job.job_id), corp_id)
+        logger.info(f"Profile refresh: Celery task dispatched for job_id={new_job.job_id}, corp_id={corp_id}")
+    except Exception as e:
+        celery_dispatch_failed = True
+        celery_error_message = str(e)
+        logger.error(f"Profile refresh: Celery dispatch failed - {e}")
+
+        # Update job status to FAILED
+        new_job.status = JobStatus.FAILED
+        new_job.error_code = "CELERY_DISPATCH_FAILED"
+        new_job.error_message = f"Worker 연결 실패: {str(e)[:200]}"
         await db.commit()
 
+    if celery_dispatch_failed:
+        return {
+            "message": f"프로필 갱신 작업 생성 실패: {celery_error_message[:100]}",
+            "corp_id": corp_id,
+            "job_id": str(new_job.job_id),
+            "status": "FAILED",
+            "error": "Worker에 연결할 수 없습니다. 관리자에게 문의하세요.",
+        }
+
     return {
-        "message": f"Profile refresh triggered for corp_id: {corp_id}",
+        "message": f"프로필 갱신 작업이 시작되었습니다.",
         "corp_id": corp_id,
-        "force": request.force,
-        "note": "Run analysis job to generate new profile",
+        "job_id": str(new_job.job_id),
+        "status": "QUEUED",
+        "note": "작업 완료 후 프로필이 자동으로 갱신됩니다.",
     }
 
 

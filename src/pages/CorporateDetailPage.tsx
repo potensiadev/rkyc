@@ -26,10 +26,11 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import ReportPreviewModal from "@/components/reports/ReportPreviewModal";
-import { useCorporation, useSignals, useCorporationSnapshot, useCorpProfile, useRefreshCorpProfile } from "@/hooks/useApi";
+import { useCorporation, useSignals, useCorporationSnapshot, useCorpProfile, useRefreshCorpProfile, useJobStatus } from "@/hooks/useApi";
 import type { ProfileConfidence } from "@/types/profile";
+import { useQueryClient } from "@tanstack/react-query";
 
 // Confidence 배지 색상 헬퍼
 function getConfidenceBadge(confidence: ProfileConfidence | undefined): { bg: string; text: string; label: string } {
@@ -56,14 +57,53 @@ function formatKRW(value: number | null | undefined): string {
 export default function CorporateDetailPage() {
   const { corporateId } = useParams();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [refreshJobId, setRefreshJobId] = useState<string | null>(null);
+  const [refreshStatus, setRefreshStatus] = useState<'idle' | 'running' | 'done' | 'failed'>('idle');
 
   // API 훅 사용
   const { data: corporation, isLoading: isLoadingCorp } = useCorporation(corporateId || "");
   const { data: apiSignals, isLoading: isLoadingSignals } = useSignals({ corp_id: corporateId });
   const { data: snapshot, isLoading: isLoadingSnapshot } = useCorporationSnapshot(corporateId || "");
-  const { data: profile, isLoading: isLoadingProfile, error: profileError } = useCorpProfile(corporateId || "");
+  const { data: profile, isLoading: isLoadingProfile, error: profileError, refetch: refetchProfile } = useCorpProfile(corporateId || "");
   const refreshProfile = useRefreshCorpProfile();
+
+  // Job 상태 폴링
+  const { data: jobStatus } = useJobStatus(refreshJobId || '', {
+    enabled: !!refreshJobId && refreshStatus === 'running',
+  });
+
+  // Job 완료 시 프로필 다시 로드
+  useEffect(() => {
+    if (jobStatus?.status === 'DONE') {
+      setRefreshStatus('done');
+      setRefreshJobId(null);
+      // 프로필 쿼리 무효화하여 다시 로드
+      queryClient.invalidateQueries({ queryKey: ['corporation', corporateId, 'profile'] });
+    } else if (jobStatus?.status === 'FAILED') {
+      setRefreshStatus('failed');
+      setRefreshJobId(null);
+    }
+  }, [jobStatus?.status, queryClient, corporateId]);
+
+  // 정보 갱신 버튼 핸들러
+  const handleRefreshProfile = async () => {
+    if (!corporateId) return;
+    setRefreshStatus('running');
+
+    try {
+      const result = await refreshProfile.mutateAsync(corporateId);
+      if (result.status === 'QUEUED' && result.job_id) {
+        setRefreshJobId(result.job_id);
+      } else if (result.status === 'FAILED') {
+        setRefreshStatus('failed');
+      }
+    } catch (error) {
+      console.error('Profile refresh failed:', error);
+      setRefreshStatus('failed');
+    }
+  };
 
   // 로딩 상태
   if (isLoadingCorp) {
@@ -302,28 +342,54 @@ export default function CorporateDetailPage() {
                     {getConfidenceBadge(profile.profile_confidence).label}
                   </span>
                 )}
+                {refreshStatus === 'running' && (
+                  <span className="text-xs text-blue-600 flex items-center gap-1">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    분석 중...
+                  </span>
+                )}
+                {refreshStatus === 'done' && (
+                  <span className="text-xs text-green-600 flex items-center gap-1">
+                    <CheckCircle className="w-3 h-3" />
+                    완료
+                  </span>
+                )}
+                {refreshStatus === 'failed' && (
+                  <span className="text-xs text-red-600 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" />
+                    실패
+                  </span>
+                )}
                 <Button
                   variant="outline"
                   size="sm"
                   className="gap-1"
-                  onClick={() => refreshProfile.mutate(corporateId || '')}
-                  disabled={refreshProfile.isPending || isLoadingProfile}
+                  onClick={handleRefreshProfile}
+                  disabled={refreshProfile.isPending || isLoadingProfile || refreshStatus === 'running'}
                 >
-                  <RefreshCw className={`w-3 h-3 ${refreshProfile.isPending ? 'animate-spin' : ''}`} />
+                  <RefreshCw className={`w-3 h-3 ${(refreshProfile.isPending || refreshStatus === 'running') ? 'animate-spin' : ''}`} />
                   정보 갱신
                 </Button>
               </div>
             </div>
 
-            {isLoadingProfile ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground mr-2" />
-                <span className="text-sm text-muted-foreground">외부 정보를 불러오는 중...</span>
+            {(isLoadingProfile || refreshStatus === 'running') ? (
+              <div className="flex flex-col items-center justify-center py-8">
+                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground mb-2" />
+                <span className="text-sm text-muted-foreground">
+                  {refreshStatus === 'running' ? '프로필 생성 중...' : '외부 정보를 불러오는 중...'}
+                </span>
+                {refreshStatus === 'running' && jobStatus && (
+                  <span className="text-xs text-muted-foreground mt-1">
+                    {jobStatus.progress?.step || '대기 중'}
+                  </span>
+                )}
               </div>
             ) : profileError ? (
-              <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
-                <AlertCircle className="w-4 h-4 mr-2 text-orange-500" />
-                외부 정보가 아직 생성되지 않았습니다. "정보 갱신" 버튼을 클릭하여 생성해 주세요.
+              <div className="flex flex-col items-center justify-center py-8 text-sm text-muted-foreground">
+                <AlertCircle className="w-5 h-5 mb-2 text-orange-500" />
+                <span>외부 정보가 아직 생성되지 않았습니다.</span>
+                <span className="text-xs mt-1">"정보 갱신" 버튼을 클릭하여 생성해 주세요.</span>
               </div>
             ) : profile ? (
               <div className="space-y-6">

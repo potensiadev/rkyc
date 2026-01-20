@@ -240,7 +240,10 @@ export interface ApiCorpProfileDetailResponse extends ApiCorpProfileResponse {
 
 // Refresh trigger response
 export interface ApiProfileRefreshResponse {
-  job_id: string;
-  status: string;
   message: string;
+  corp_id: string;
+  job_id: string;
+  status: 'QUEUED' | 'FAILED';
+  note?: string;
+  error?: string;
 }
