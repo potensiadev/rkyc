@@ -1041,6 +1041,8 @@ class CorpProfilingPipeline:
         citations = parsed_response.get("citations", [])
         source_quality = parsed_response.get("source_quality", "LOW")
 
+        logger.info(f"[Profile Extraction] corp={corp_name}, has_llm={self._llm_service is not None}, content_len={len(content)}")
+
         # Try LLM extraction if service available
         if self._llm_service and content:
             try:
