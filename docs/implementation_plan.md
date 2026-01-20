@@ -288,17 +288,17 @@ class LLMService:
     # Model configuration - 3단계 fallback
     MODELS = [
         {
-            "model": "claude-sonnet-4-20250514",
+            "model": "claude-opus-4-5-20251101",
             "provider": "anthropic",
             "max_tokens": 4096,
         },
         {
-            "model": "gpt-4o",
+            "model": "gpt-5.2-pro-2025-12-11",
             "provider": "openai",
             "max_tokens": 4096,
         },
         {
-            "model": "gemini/gemini-1.5-pro",  # 추가
+            "model": "gemini/gemini-3-pro-preview",
             "provider": "google",
             "max_tokens": 4096,
         },
@@ -380,9 +380,9 @@ from app.core.config import settings
 
 class EmbeddingService:
     """OpenAI Embedding Service"""
-    
-    MODEL = "text-embedding-3-small"
-    DIMENSIONS = 1536
+
+    MODEL = "text-embedding-3-large"
+    DIMENSIONS = 2000
     
     def __init__(self):
         self.client = OpenAI(api_key=settings.OPENAI_API_KEY)

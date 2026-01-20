@@ -176,16 +176,16 @@ class MVPInternalLLM(InternalLLMBase):
     - 대회 시연용으로만 활용
     """
 
-    # MVP 모델 설정 (저비용 + 빠른 응답)
+    # MVP 모델 설정 (최신 모델 사용)
     TEXT_MODELS = [
-        {"model": "gpt-3.5-turbo", "provider": "openai"},
-        {"model": "claude-3-haiku-20240307", "provider": "anthropic"},
+        {"model": "claude-opus-4-5-20251101", "provider": "anthropic"},
+        {"model": "gpt-5.2-pro-2025-12-11", "provider": "openai"},
     ]
 
     # Vision 모델 (문서 OCR)
     VISION_MODELS = [
-        {"model": "gpt-4o-mini", "provider": "openai"},
-        {"model": "claude-sonnet-4-20250514", "provider": "anthropic"},
+        {"model": "claude-opus-4-5-20251101", "provider": "anthropic"},
+        {"model": "gpt-5.2-pro-2025-12-11", "provider": "openai"},
     ]
 
     MAX_RETRIES = 3
@@ -195,7 +195,7 @@ class MVPInternalLLM(InternalLLMBase):
 
     def __init__(self):
         self._provider = InternalLLMProvider.MVP_OPENAI
-        self._model_name = "gpt-3.5-turbo"
+        self._model_name = "claude-opus-4-5-20251101"
         self._configure_api_keys()
 
     @property

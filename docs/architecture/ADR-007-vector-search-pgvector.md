@@ -15,11 +15,11 @@ rKYC 시스템의 INDEX(7단계) 및 INSIGHT(8단계) 파이프라인에서 시�
 ## 결정
 
 ### Embedding 모델 선택
-**OpenAI text-embedding-3-small**
-- Dimension: 1536
-- 비용 효율적 ($0.00002/1K tokens)
+**OpenAI text-embedding-3-large**
+- Dimension: 2000 (pgvector 최대 지원)
+- 품질 우선 ($0.00013/1K tokens)
 - 한국어 지원
-- 높은 품질/비용 비율
+- 최고 수준의 의미 표현
 
 ### Vector Database 선택
 **pgvector (Supabase 내장)**

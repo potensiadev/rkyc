@@ -44,8 +44,8 @@
 ### Worker (구현 완료 ✅)
 - Queue: Celery + Redis
 - LLM: litellm (multi-provider routing)
-- Primary: Claude 3.5 Sonnet (claude-3-5-sonnet-20241022)
-- Fallback: GPT-4o, Gemini 1.5 Pro
+- Primary: Claude Opus 4.5 (claude-opus-4-5-20251101)
+- Fallback: GPT-5.2 Pro, Gemini 3 Pro Preview
 - External: Perplexity sonar-pro (외부 검색)
 
 ### Database
@@ -894,7 +894,7 @@ backend/app/worker/pipelines/doc_ingest.py
 | 역할 | 변경 전 | 변경 후 |
 |------|---------|---------|
 | **Primary** | `claude-sonnet-4-20250514` | `claude-opus-4-5-20251101` |
-| **Fallback 1** | `gpt-4o` | `gpt-5` |
+| **Fallback 1** | `gpt-4o` | `gpt-5.2-pro-2025-12-11` |
 | **Fallback 2** | `gemini/gemini-1.5-pro` | `gemini/gemini-3-pro-preview` |
 
 #### 2. Embedding 모델 업그레이드

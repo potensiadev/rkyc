@@ -15,7 +15,7 @@ Celery Worker 및 LLM 연동 전문 에이전트
 - Redis 7.0+
 - litellm
 - anthropic (Claude)
-- openai (GPT-4o, Embedding)
+- openai (GPT-5.2 Pro, Embedding)
 
 ## 파이프라인 단계
 
@@ -35,17 +35,17 @@ SNAPSHOT → DOC_INGEST → EXTERNAL → CONTEXT → SIGNAL → VALIDATION → I
 
 ## LLM 설정
 
-### Primary: Claude Sonnet 4
+### Primary: Claude Opus 4.5
 ```python
-model = "claude-sonnet-4-20250514"
+model = "claude-opus-4-5-20251101"
 ```
 
 ### Fallback Chain
 ```python
 FALLBACK_MODELS = [
-    "claude-sonnet-4-20250514",
-    "gpt-4o",
-    "gemini-1.5-pro"
+    "claude-opus-4-5-20251101",
+    "gpt-5.2-pro-2025-12-11",
+    "gemini/gemini-3-pro-preview"
 ]
 ```
 
@@ -57,8 +57,8 @@ model = "perplexity/sonar-pro"
 
 ### Embedding
 ```python
-model = "text-embedding-3-small"
-dimensions = 1536
+model = "text-embedding-3-large"
+dimensions = 2000
 ```
 
 ## Guardrails 구현
@@ -89,7 +89,7 @@ def extract_signals(self, context: dict) -> list[dict]:
     """LLM으로 시그널 추출"""
     try:
         response = completion(
-            model="claude-sonnet-4-20250514",
+            model="claude-opus-4-5-20251101",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": json.dumps(context)}

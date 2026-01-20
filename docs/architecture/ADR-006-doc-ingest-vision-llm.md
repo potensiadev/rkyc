@@ -20,12 +20,12 @@ rKYC 시스템의 2단계 파이프라인(DOC_INGEST)에서 기업이 제출한 
 ## 결정
 
 ### Vision LLM 선택
-**Primary: Claude Sonnet 4 (claude-sonnet-4-20250514)**
+**Primary: Claude Opus 4.5 (claude-opus-4-5-20251101)**
 - Vision 기능 지원
 - 한국어 문서 인식 우수
 - 구조화된 JSON 출력 안정성
 
-**Fallback: GPT-4o**
+**Fallback: GPT-5.2 Pro (gpt-5.2-pro-2025-12-11)**
 - Vision 기능 지원
 - 대체 옵션으로 안정성 확보
 

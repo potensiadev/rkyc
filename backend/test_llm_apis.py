@@ -20,18 +20,18 @@ print('='*60)
 
 results = []
 
-# 1. Test Anthropic (Claude 3.5 Sonnet)
-print('\n[1/5] Testing Anthropic (Claude 3.5 Sonnet)...')
+# 1. Test Anthropic (Claude 4.5 Opus)
+print('\n[1/5] Testing Anthropic (Claude 4.5 Opus)...')
 try:
     import anthropic
     client = anthropic.Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
     response = client.messages.create(
-        model='claude-3-5-sonnet-20241022',
+        model='claude-opus-4-5-20251101',
         max_tokens=50,
         messages=[{'role': 'user', 'content': 'Say hello in one word'}]
     )
     print(f'  [OK] SUCCESS: {response.content[0].text[:50]}')
-    results.append(('Anthropic Claude 3.5 Sonnet', 'SUCCESS', None))
+    results.append(('Anthropic Claude 4.5 Opus', 'SUCCESS', None))
 except Exception as e:
     error_str = str(e)
     if 'credit' in error_str.lower() or 'billing' in error_str.lower():
@@ -43,20 +43,21 @@ except Exception as e:
     else:
         status = 'ERROR'
     print(f'  [FAIL] {status}')
-    results.append(('Anthropic Claude 3.5 Sonnet', status, error_str[:300]))
+    results.append(('Anthropic Claude 4.5 Opus', status, error_str[:300]))
 
-# 2. Test OpenAI (GPT-4o)
-print('\n[2/5] Testing OpenAI (GPT-4o)...')
+# 2. Test OpenAI (GPT-5.2 Pro) - Uses Responses API (not Chat Completions)
+print('\n[2/5] Testing OpenAI (GPT-5.2 Pro)...')
 try:
     from openai import OpenAI
     oai_client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
-    response = oai_client.chat.completions.create(
-        model='gpt-4o',
-        max_tokens=50,
-        messages=[{'role': 'user', 'content': 'Say hello in one word'}]
+    # GPT-5.2 Pro uses the Responses API, not Chat Completions
+    response = oai_client.responses.create(
+        model='gpt-5.2-pro-2025-12-11',
+        input='Say hello in one word'
     )
-    print(f'  [OK] SUCCESS: {response.choices[0].message.content[:50]}')
-    results.append(('OpenAI GPT-4o', 'SUCCESS', None))
+    text = response.output_text
+    print(f'  [OK] SUCCESS: {text[:50]}')
+    results.append(('OpenAI GPT-5.2 Pro', 'SUCCESS', None))
 except Exception as e:
     error_str = str(e)
     if 'credit' in error_str.lower() or 'billing' in error_str.lower() or 'quota' in error_str.lower():
@@ -68,20 +69,22 @@ except Exception as e:
     else:
         status = 'ERROR'
     print(f'  [FAIL] {status}')
-    results.append(('OpenAI GPT-4o', status, error_str[:300]))
+    results.append(('OpenAI GPT-5.2 Pro', status, error_str[:300]))
 
-# 3. Test Google (Gemini 1.5 Pro)
-print('\n[3/5] Testing Google (Gemini 1.5 Pro)...')
+# 3. Test Google (gemini-3-pro-preview) - Uses new google.genai SDK
+print('\n[3/5] Testing Google (gemini-3-pro-preview)...')
 try:
-    import google.generativeai as genai
-    genai.configure(api_key=os.getenv('GOOGLE_API_KEY'))
-    model = genai.GenerativeModel('gemini-1.5-pro')
-    response = model.generate_content('Say hello in one word')
+    from google import genai
+    gemini_client = genai.Client(api_key=os.getenv('GOOGLE_API_KEY'))
+    response = gemini_client.models.generate_content(
+        model='gemini-3-pro-preview',
+        contents='Say hello in one word'
+    )
     print(f'  [OK] SUCCESS: {response.text[:50]}')
-    results.append(('Gemini 1.5 Pro', 'SUCCESS', None))
+    results.append(('gemini-3-pro-preview', 'SUCCESS', None))
 except ImportError:
-    print('  [FAIL] PACKAGE_NOT_INSTALLED (google-generativeai)')
-    results.append(('Gemini 1.5 Pro', 'PACKAGE_NOT_INSTALLED', 'pip install google-generativeai'))
+    print('  [FAIL] PACKAGE_NOT_INSTALLED (google-genai)')
+    results.append(('gemini-3-pro-preview', 'PACKAGE_NOT_INSTALLED', 'pip install google-genai'))
 except Exception as e:
     error_str = str(e)
     if 'not found' in error_str.lower() or '404' in error_str:
@@ -90,10 +93,12 @@ except Exception as e:
         status = 'INVALID_KEY'
     elif 'api key' in error_str.lower():
         status = 'INVALID_KEY'
+    elif '429' in error_str or 'quota' in error_str.lower():
+        status = 'QUOTA_EXCEEDED'
     else:
         status = 'ERROR'
     print(f'  [FAIL] {status}')
-    results.append(('Gemini 1.5 Pro', status, error_str[:300]))
+    results.append(('gemini-3-pro-preview', status, error_str[:300]))
 
 # 4. Test Perplexity (sonar-pro)
 print('\n[4/5] Testing Perplexity (sonar-pro)...')
@@ -173,10 +178,12 @@ for name, status, error in results:
         print(f'  - {name}: Set valid API key in .env file')
     elif status == 'CREDIT_ISSUE':
         print(f'  - {name}: Top up credits or check billing')
+    elif status == 'QUOTA_EXCEEDED':
+        print(f'  - {name}: Quota exceeded - check billing or wait for reset')
     elif status == 'MODEL_NOT_FOUND':
         print(f'  - {name}: Model not available, check model name')
     elif status == 'PACKAGE_NOT_INSTALLED':
-        print(f'  - {name}: Run "pip install google-generativeai"')
+        print(f'  - {name}: Run "pip install google-genai"')
     elif status == 'ERROR':
         print(f'  - {name}: Check error details above')
 

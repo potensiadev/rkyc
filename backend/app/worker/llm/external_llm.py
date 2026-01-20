@@ -50,8 +50,8 @@ class ExternalLLMService:
 
     # External LLM 모델 설정
     ANALYSIS_MODELS = [
-        {"model": "claude-sonnet-4-20250514", "provider": "anthropic"},
-        {"model": "gpt-4o", "provider": "openai"},
+        {"model": "claude-opus-4-5-20251101", "provider": "anthropic"},
+        {"model": "gpt-5.2-pro-2025-12-11", "provider": "openai"},
     ]
 
     PERPLEXITY_API_URL = "https://api.perplexity.ai/chat/completions"

@@ -136,10 +136,10 @@ INSIGHT    → 최종 인사이트 생성
 
 ### 4.3 LLM 연동
 - [ ] litellm 설정
-- [ ] Claude Sonnet 4 (Primary)
-- [ ] Fallback 체인 (GPT-4o → Gemini)
+- [ ] Claude Opus 4.5 (Primary)
+- [ ] Fallback 체인 (GPT-5.2 Pro → Gemini 3 Pro)
 - [ ] Perplexity (외부 검색)
-- [ ] Embedding (text-embedding-3-small)
+- [ ] Embedding (text-embedding-3-large)
 
 ---
 

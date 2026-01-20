@@ -38,9 +38,9 @@ class LLMService:
     """
     LLM Service with automatic fallback chain.
 
-    Primary: Claude 3.5 Sonnet (claude-3-5-sonnet-20241022)
-    Fallback 1: GPT-4o
-    Fallback 2: Gemini 1.5 Pro
+    Primary: Claude Opus 4.5 (claude-opus-4-5-20251101)
+    Fallback 1: GPT-5.2 Pro
+    Fallback 2: Gemini 3 Pro Preview
 
     Features:
     - Automatic fallback on failure
@@ -53,17 +53,17 @@ class LLMService:
     # Updated to use actually existing models (2025-01)
     MODELS = [
         {
-            "model": "claude-3-5-sonnet-20241022",  # Claude 3.5 Sonnet (latest)
+            "model": "claude-opus-4-5-20251101",  # Claude Opus 4.5 (primary)
             "provider": "anthropic",
             "max_tokens": 4096,
         },
         {
-            "model": "gpt-4o",  # GPT-4o (most capable)
+            "model": "gpt-5.2-pro-2025-12-11",  # GPT-5.2 Pro (fallback 1)
             "provider": "openai",
             "max_tokens": 4096,
         },
         {
-            "model": "gemini/gemini-1.5-pro",  # Gemini 1.5 Pro
+            "model": "gemini/gemini-3-pro-preview",  # Gemini 3 Pro Preview (fallback 2)
             "provider": "google",
             "max_tokens": 4096,
         },
@@ -443,20 +443,20 @@ class LLMService:
         errors = []
 
         # Vision-capable models only (3-stage fallback)
-        # Using actually existing models with vision support
+        # Using latest models with vision support
         vision_models = [
             {
-                "model": "claude-3-5-sonnet-20241022",  # Claude 3.5 Sonnet (vision capable)
+                "model": "claude-opus-4-5-20251101",  # Claude Opus 4.5 (vision capable)
                 "provider": "anthropic",
                 "max_tokens": 4096,
             },
             {
-                "model": "gpt-4o",  # GPT-4o (vision capable)
+                "model": "gpt-5.2-pro-2025-12-11",  # GPT-5.2 Pro (vision capable)
                 "provider": "openai",
                 "max_tokens": 4096,
             },
             {
-                "model": "gemini/gemini-1.5-pro",  # Gemini 1.5 Pro (vision capable)
+                "model": "gemini/gemini-3-pro-preview",  # Gemini 3 Pro Preview (vision capable)
                 "provider": "google",
                 "max_tokens": 4096,
             },

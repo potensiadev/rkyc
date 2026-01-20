@@ -21,9 +21,9 @@ rKYC 시스템은 기업 리스크 시그널 추출을 위해 LLM을 사용한�
 ## 결정
 **Multi-Provider 전략을 채택하고, litellm을 통해 통합 인터페이스를 구현한다.**
 
-### Primary Provider: Claude Sonnet 4
+### Primary Provider: Claude Opus 4.5
 ```python
-model = "claude-sonnet-4-20250514"
+model = "claude-opus-4-5-20251101"
 ```
 - 역할: 시그널 추출, 인사이트 생성
 - 선택 이유:
@@ -33,14 +33,14 @@ model = "claude-sonnet-4-20250514"
 
 ### Fallback Chain
 ```
-Claude Sonnet 4 → GPT-4o → Gemini 1.5 Pro
+Claude Opus 4.5 → GPT-5.2 Pro → Gemini 3 Pro Preview
 ```
 
 | 순서 | Provider | Model ID | 역할 |
 |-----|----------|----------|------|
-| 1 | Anthropic | claude-sonnet-4-20250514 | Primary |
-| 2 | OpenAI | gpt-4o | 1st Fallback |
-| 3 | Google | gemini-1.5-pro | 2nd Fallback |
+| 1 | Anthropic | claude-opus-4-5-20251101 | Primary |
+| 2 | OpenAI | gpt-5.2-pro-2025-12-11 | 1st Fallback |
+| 3 | Google | gemini/gemini-3-pro-preview | 2nd Fallback |
 
 ### External Search: Perplexity
 ```python
@@ -52,10 +52,10 @@ model = "perplexity/sonar-pro"
 
 ### Embedding: OpenAI
 ```python
-model = "text-embedding-3-small"
+model = "text-embedding-3-large"
 ```
 - 역할: 인사이트 메모리 벡터화
-- 차원: 1536
+- 차원: 2000 (pgvector 최대 지원)
 - 용도: 유사 케이스 검색
 
 ## 결과
@@ -116,9 +116,9 @@ from litellm import completion
 
 async def call_llm_with_fallback(prompt: str, context: str) -> str:
     models = [
-        "claude-sonnet-4-20250514",
-        "gpt-4o",
-        "gemini-1.5-pro"
+        "claude-opus-4-5-20251101",
+        "gpt-5.2-pro-2025-12-11",
+        "gemini/gemini-3-pro-preview"
     ]
 
     for model in models:
@@ -143,11 +143,11 @@ async def call_llm_with_fallback(prompt: str, context: str) -> str:
 
 | Provider | 예상 호출 | 단가 | 월 비용 |
 |----------|----------|------|---------|
-| Claude Sonnet 4 | 10,000 | $3/1M input | ~$50 |
-| GPT-4o (Fallback) | 500 | $5/1M input | ~$5 |
+| Claude Opus 4.5 | 10,000 | $15/1M input | ~$200 |
+| GPT-5.2 Pro (Fallback) | 500 | $10/1M input | ~$10 |
 | Perplexity | 5,000 | $5/1K req | ~$25 |
-| Embedding | 20,000 | $0.02/1M | ~$1 |
-| **Total** | | | **~$81** |
+| Embedding | 20,000 | $0.13/1M | ~$3 |
+| **Total** | | | **~$238** |
 
 ## 참조
 - PRD LLM Integration Guide - Section 3.1 Provider 설정
