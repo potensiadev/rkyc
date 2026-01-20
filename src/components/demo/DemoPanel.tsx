@@ -28,7 +28,7 @@ export function DemoPanel() {
     enabled: !!currentJobId,
   });
 
-  const isDemoMode = import.meta.env.VITE_DEMO_MODE === 'true';
+  const isDemoMode = import.meta.env.VITE_DEMO_MODE?.toLowerCase() === 'true';
 
   // Demo 모드가 아니면 렌더링하지 않음
   if (!isDemoMode) return null;
