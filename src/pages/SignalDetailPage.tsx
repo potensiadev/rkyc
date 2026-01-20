@@ -47,9 +47,14 @@ import {
   AlertCircle,
 } from "lucide-react";
 import {
+  useSignalDetail,
   useSignalEnrichedDetail,
   useUpdateSignalStatus,
   useDismissSignal,
+  useCorpProfile,
+  useSignals,
+  ApiSignalDetail,
+  ApiEvidence,
   ApiEnrichedEvidence,
   ApiSimilarCase,
   ApiRelatedSignal,
@@ -94,10 +99,41 @@ export default function SignalDetailPage() {
   const [dismissDialogOpen, setDismissDialogOpen] = useState(false);
   const [dismissReason, setDismissReason] = useState("");
 
-  // Enriched Detail API 훅
-  const { data: signal, isLoading, error } = useSignalEnrichedDetail(signalId || "");
+  // 기본 Signal Detail API (안정적)
+  const { data: basicSignal, isLoading: basicLoading, error: basicError } = useSignalDetail(signalId || "");
+
+  // Enriched Detail API (선택적 - 실패해도 OK)
+  const { data: enrichedData } = useSignalEnrichedDetail(signalId || "");
+
+  // Corp Profile (선택적) - corp_id가 있을 때만 쿼리
+  const { data: corpProfile } = useCorpProfile(basicSignal?.corp_id ?? "");
+
+  // 관련 시그널 (같은 기업) - corp_id가 있을 때만 쿼리
+  const { data: relatedSignals } = useSignals(
+    basicSignal?.corp_id
+      ? { corp_id: basicSignal.corp_id, limit: 6 } // 현재 시그널 제외용으로 1개 더
+      : undefined
+  );
+
   const updateStatus = useUpdateSignalStatus();
   const dismissMutation = useDismissSignal();
+
+  // 기본 API 기준으로 로딩/에러 처리
+  const isLoading = basicLoading;
+  const error = basicError;
+
+  // 데이터 병합: enriched가 있으면 사용, 없으면 basic 사용
+  const signal = enrichedData || (basicSignal ? {
+    ...basicSignal,
+    analysis_reasoning: null,
+    llm_model: null,
+    corp_context: null,
+    similar_cases: [],
+    verifications: [],
+    impact_analysis: [],
+    related_signals: [],
+    insight_excerpt: null,
+  } : null);
 
   // 로딩 상태
   if (isLoading) {
@@ -362,14 +398,18 @@ export default function SignalDetailPage() {
 
             {/* Right Column - Context (1/3) */}
             <div className="space-y-4">
-              {/* 기업 컨텍스트 */}
-              {signal.corp_context && (
+              {/* 기업 컨텍스트 - Corp Profile API에서 가져온 데이터 사용 */}
+              {(signal.corp_context || corpProfile) && (
                 <Card className="p-4">
                   <h3 className="font-semibold mb-3 flex items-center gap-2 text-sm">
                     <Building2 className="w-4 h-4" />
                     기업 프로필
                   </h3>
-                  <CorpContextCard context={signal.corp_context} />
+                  {signal.corp_context ? (
+                    <CorpContextCard context={signal.corp_context} />
+                  ) : corpProfile ? (
+                    <CorpProfileCard profile={corpProfile} corpId={signal.corp_id} />
+                  ) : null}
                 </Card>
               )}
 
@@ -388,17 +428,27 @@ export default function SignalDetailPage() {
                 </Card>
               )}
 
-              {/* 관련 시그널 */}
-              {signal.related_signals && signal.related_signals.length > 0 && (
+              {/* 관련 시그널 - API 또는 직접 조회한 데이터 */}
+              {((signal.related_signals && signal.related_signals.length > 0) ||
+                (relatedSignals && relatedSignals.filter(s => s.id !== signalId).length > 0)) && (
                 <Card className="p-4">
                   <h3 className="font-semibold mb-3 flex items-center gap-2 text-sm">
                     <LinkIcon className="w-4 h-4" />
                     관련 시그널
                   </h3>
                   <div className="space-y-2">
-                    {signal.related_signals.slice(0, 5).map((rel) => (
-                      <RelatedSignalItem key={rel.signal_id} signal={rel} />
-                    ))}
+                    {signal.related_signals && signal.related_signals.length > 0 ? (
+                      signal.related_signals.slice(0, 5).map((rel) => (
+                        <RelatedSignalItem key={rel.signal_id} signal={rel} />
+                      ))
+                    ) : relatedSignals ? (
+                      relatedSignals
+                        .filter(s => s.id !== signalId)
+                        .slice(0, 5)
+                        .map((s) => (
+                          <SimpleRelatedSignalItem key={s.id} signal={s} />
+                        ))
+                    ) : null}
                   </div>
                 </Card>
               )}
@@ -688,6 +738,108 @@ function RelatedSignalItem({ signal }: { signal: ApiRelatedSignal }) {
         <span className="text-[10px] text-muted-foreground">{relationLabel}</span>
         <span className="text-[10px] text-muted-foreground">·</span>
         <span className="text-[10px] text-muted-foreground">{signal.corp_name}</span>
+      </div>
+    </Link>
+  );
+}
+
+// 기업 프로필 카드 (Corp Profile API에서 가져온 데이터용)
+function CorpProfileCard({ profile, corpId }: { profile: {
+  corp_id: string;
+  business_summary?: string | null;
+  revenue_krw?: number | null;
+  export_ratio_pct?: number | null;
+  employee_count?: number | null;
+  country_exposure?: string[] | null;
+  confidence?: string | null;
+}; corpId: string }) {
+  return (
+    <div className="space-y-3">
+      {/* 사업 요약 */}
+      {profile.business_summary && (
+        <div>
+          <p className="text-xs text-muted-foreground mb-1">사업 개요</p>
+          <p className="text-sm line-clamp-3">{profile.business_summary}</p>
+        </div>
+      )}
+
+      {/* 기본 정보 */}
+      <div className="grid grid-cols-2 gap-2 text-sm">
+        <div>
+          <p className="text-xs text-muted-foreground">매출</p>
+          <p className="font-medium">{formatNumber(profile.revenue_krw)}</p>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground">수출 비중</p>
+          <p className="font-medium">{profile.export_ratio_pct ? `${profile.export_ratio_pct}%` : "-"}</p>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground">임직원</p>
+          <p className="font-medium">{profile.employee_count?.toLocaleString() || "-"}명</p>
+        </div>
+        {profile.confidence && (
+          <div>
+            <p className="text-xs text-muted-foreground">신뢰도</p>
+            <Badge variant={profile.confidence === "HIGH" ? "default" : profile.confidence === "MED" ? "secondary" : "outline"} className="text-[10px]">
+              {profile.confidence}
+            </Badge>
+          </div>
+        )}
+      </div>
+
+      {/* 국가 노출 */}
+      {profile.country_exposure && profile.country_exposure.length > 0 && (
+        <div className="pt-2 border-t">
+          <p className="text-xs text-muted-foreground mb-1">국가별 노출</p>
+          <div className="flex flex-wrap gap-1">
+            {profile.country_exposure.slice(0, 5).map((country) => (
+              <Badge key={country} variant="outline" className="text-[10px] py-0">
+                <Globe className="w-3 h-3 mr-1" />
+                {country}
+              </Badge>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 프로필 링크 */}
+      <Link
+        to={`/corporations/${corpId}`}
+        className="flex items-center justify-between p-2 bg-muted/50 rounded text-sm hover:bg-muted transition-colors"
+      >
+        <span>기업 상세 보기</span>
+        <ChevronRight className="w-4 h-4" />
+      </Link>
+    </div>
+  );
+}
+
+// 단순 관련 시그널 아이템 (기본 Signal API에서 가져온 데이터용 - Signal 타입 사용)
+function SimpleRelatedSignalItem({ signal }: { signal: {
+  id: string;
+  title: string;
+  signalCategory: string;
+  detailCategory: string;
+  impact: string;
+  impactStrength: string;
+  detectedAt: string;
+  corporationName: string;
+} }) {
+  return (
+    <Link
+      to={`/signals/${signal.id}`}
+      className="block p-2 bg-muted/30 rounded text-sm hover:bg-muted transition-colors"
+    >
+      <div className="flex items-center justify-between mb-1">
+        <span className="font-medium truncate">{signal.title}</span>
+        <Badge variant={signal.impact === "risk" ? "destructive" : signal.impact === "opportunity" ? "default" : "secondary"} className="text-[10px] py-0">
+          {signal.impact === "risk" ? "리스크" : signal.impact === "opportunity" ? "기회" : "중립"}
+        </Badge>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] text-muted-foreground">{signal.detailCategory}</span>
+        <span className="text-[10px] text-muted-foreground">·</span>
+        <span className="text-[10px] text-muted-foreground">{new Date(signal.detectedAt).toLocaleDateString("ko-KR")}</span>
       </div>
     </Link>
   );

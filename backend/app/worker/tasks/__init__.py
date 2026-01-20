@@ -13,6 +13,11 @@ from app.worker.tasks.scheduled import (
     scan_high_risk_corporations,
     cleanup_old_jobs,
 )
+from app.worker.tasks.dynamic_scheduler import (
+    get_scheduler,
+    start_dynamic_scheduler,
+    stop_dynamic_scheduler,
+)
 
 __all__ = [
     "run_analysis_pipeline",
@@ -27,4 +32,8 @@ __all__ = [
     "scan_single_corporation",
     "scan_high_risk_corporations",
     "cleanup_old_jobs",
+    # Dynamic Scheduler (Demo Mode)
+    "get_scheduler",
+    "start_dynamic_scheduler",
+    "stop_dynamic_scheduler",
 ]

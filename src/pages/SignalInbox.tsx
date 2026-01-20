@@ -141,6 +141,11 @@ export default function SignalInbox() {
   return (
     <MainLayout>
       <div className="max-w-[1600px] mx-auto p-6">
+        {/* Scheduler Panel (실시간 자동 탐지 제어) */}
+        <div className="mb-6">
+          <SchedulerPanel />
+        </div>
+
         {/* Demo Panel (Demo Mode에서만 표시) */}
         <DemoPanel />
 
