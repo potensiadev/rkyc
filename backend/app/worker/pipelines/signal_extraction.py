@@ -53,7 +53,7 @@ class SignalExtractionPipeline:
         corp_id = context.get("corp_id", "")
         logger.info(f"SIGNAL stage starting for corp_id={corp_id}")
 
-        # Format prompt with context data
+        # Format prompt with context data (3-track events)
         user_prompt = format_signal_extraction_prompt(
             corp_name=context.get("corp_name", ""),
             corp_reg_no=context.get("corp_reg_no", ""),
@@ -69,6 +69,29 @@ class SignalExtractionPipeline:
                 ensure_ascii=False,
                 indent=2,
             ),
+            # New 3-track events
+            direct_events=json.dumps(
+                context.get("direct_events", []),
+                ensure_ascii=False,
+                indent=2,
+            ),
+            industry_events=json.dumps(
+                context.get("industry_events", []),
+                ensure_ascii=False,
+                indent=2,
+            ),
+            environment_events=json.dumps(
+                context.get("environment_events", []),
+                ensure_ascii=False,
+                indent=2,
+            ),
+        )
+
+        logger.info(
+            f"SIGNAL extraction with 3-track events: "
+            f"direct={len(context.get('direct_events', []))}, "
+            f"industry={len(context.get('industry_events', []))}, "
+            f"environment={len(context.get('environment_events', []))}"
         )
 
         try:

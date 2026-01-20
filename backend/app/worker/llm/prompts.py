@@ -110,11 +110,34 @@ SIGNAL_EXTRACTION_USER_TEMPLATE = """## 분석 대상 기업
 ## 내부 스냅샷 데이터
 {snapshot_json}
 
-## 관련 외부 이벤트
-{external_events}
+## 외부 이벤트 (3가지 카테고리)
 
-위 정보를 분석하여 리스크(RISK)와 기회(OPPORTUNITY) 시그널을 균형있게 JSON 형식으로 추출하세요.
-특히 실적 개선, 신제품/신기술 개발, 공장 증설, 대형 계약 수주 등 긍정적 이벤트는 OPPORTUNITY로 분류하세요.
+### 1. 기업 직접 관련 이벤트 (DIRECT 시그널용)
+{direct_events}
+
+### 2. 산업 전반 이벤트 (INDUSTRY 시그널용 - INDUSTRY_SHOCK)
+{industry_events}
+
+### 3. 정책/규제/거시환경 이벤트 (ENVIRONMENT 시그널용 - POLICY_REGULATION_CHANGE)
+{environment_events}
+
+## 시그널 추출 지침
+
+### DIRECT 시그널
+- 내부 스냅샷 데이터와 기업 직접 관련 이벤트를 분석
+- event_type: 8가지 중 선택 (KYC_REFRESH ~ FINANCIAL_STATEMENT_UPDATE)
+
+### INDUSTRY 시그널 (반드시 산업 이벤트가 있으면 생성)
+- 산업 전반 이벤트를 분석하여 이 기업에 미치는 영향 평가
+- event_type: INDUSTRY_SHOCK만 사용
+- 산업 이벤트가 있으면 해당 기업에 미치는 영향을 INDUSTRY 시그널로 생성
+
+### ENVIRONMENT 시그널 (반드시 정책/규제 이벤트가 있으면 생성)
+- 정책/규제/거시환경 이벤트를 분석하여 이 기업에 미치는 영향 평가
+- event_type: POLICY_REGULATION_CHANGE만 사용
+- 정책/규제 이벤트가 있으면 해당 기업에 미치는 영향을 ENVIRONMENT 시그널로 생성
+
+리스크(RISK)와 기회(OPPORTUNITY) 시그널을 균형있게 JSON 형식으로 추출하세요.
 시그널이 없으면 {{"signals": []}}를 반환하세요.
 """
 
@@ -278,11 +301,25 @@ def format_signal_extraction_prompt(
     industry_name: str,
     snapshot_json: str,
     external_events: str,
+    direct_events: str = None,
+    industry_events: str = None,
+    environment_events: str = None,
 ) -> str:
     """
     Format the signal extraction user prompt with context data.
 
     P0-005 fix: 모든 입력값 sanitization 적용
+
+    Args:
+        corp_name: Corporation name
+        corp_reg_no: Corporation registration number
+        industry_code: Industry code (e.g., C26)
+        industry_name: Industry name
+        snapshot_json: Internal snapshot JSON string
+        external_events: All external events (for backward compatibility)
+        direct_events: Company-specific events (3-track search)
+        industry_events: Industry-wide events (3-track search)
+        environment_events: Policy/regulation events (3-track search)
     """
     # Sanitize all inputs
     safe_corp_name = sanitize_input(corp_name, "corp_name", max_length=200)
@@ -290,7 +327,19 @@ def format_signal_extraction_prompt(
     safe_industry_code = sanitize_input(industry_code, "industry_code", max_length=20)
     safe_industry_name = sanitize_input(industry_name, "industry_name", max_length=100)
     safe_snapshot = sanitize_json_string(snapshot_json, "snapshot_json")
-    safe_events = sanitize_json_string(external_events, "external_events")
+
+    # Handle 3-track events (new) vs combined events (legacy)
+    if direct_events is not None or industry_events is not None or environment_events is not None:
+        # New 3-track format
+        safe_direct = sanitize_json_string(direct_events or "[]", "direct_events")
+        safe_industry = sanitize_json_string(industry_events or "[]", "industry_events")
+        safe_environment = sanitize_json_string(environment_events or "[]", "environment_events")
+    else:
+        # Legacy format - use external_events for all categories
+        safe_events = sanitize_json_string(external_events, "external_events")
+        safe_direct = safe_events
+        safe_industry = "[]"
+        safe_environment = "[]"
 
     return SIGNAL_EXTRACTION_USER_TEMPLATE.format(
         corp_name=safe_corp_name,
@@ -298,7 +347,9 @@ def format_signal_extraction_prompt(
         industry_code=safe_industry_code,
         industry_name=safe_industry_name,
         snapshot_json=safe_snapshot,
-        external_events=safe_events,
+        direct_events=safe_direct,
+        industry_events=safe_industry,
+        environment_events=safe_environment,
     )
 
 

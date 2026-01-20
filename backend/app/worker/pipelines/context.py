@@ -67,9 +67,17 @@ class ContextPipeline:
             # Document facts (Phase 2+ - currently empty)
             "document_facts": doc_data.get("facts", []),
 
-            # External events
+            # External events (all combined for backward compatibility)
             "external_events": external_data.get("events", []),
             "external_source": external_data.get("source", "none"),
+
+            # Categorized external events (new 3-track search)
+            "direct_events": external_data.get("direct_events", []),
+            "industry_events": external_data.get("industry_events", []),
+            "environment_events": external_data.get("environment_events", []),
+
+            # Profile data for ENVIRONMENT signal grounding
+            "profile_data": external_data.get("profile_data", {}),
 
             # Derived hints from snapshot
             "derived_hints": self._extract_derived_hints(snapshot_json),
@@ -77,7 +85,10 @@ class ContextPipeline:
 
         logger.info(
             f"CONTEXT stage completed: corp_name={context['corp_name']}, "
-            f"external_events={len(context['external_events'])}"
+            f"external_events={len(context['external_events'])} "
+            f"(direct={len(context['direct_events'])}, "
+            f"industry={len(context['industry_events'])}, "
+            f"environment={len(context['environment_events'])})"
         )
 
         return context

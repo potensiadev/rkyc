@@ -81,6 +81,44 @@ def update_job_progress(
         logger.info(f"Job {job_id} updated: status={status.value}, step={step}, percent={percent}")
 
 
+def _strip_markdown(text: str) -> str:
+    """
+    Remove markdown formatting from text.
+    Removes: #, ##, ###, **, *, __, _, ```, `
+    """
+    import re
+    if not text:
+        return text
+
+    # Remove code blocks first (``` ... ```)
+    text = re.sub(r'```[\s\S]*?```', '', text)
+
+    # Remove inline code (` ... `)
+    text = re.sub(r'`[^`]+`', lambda m: m.group(0)[1:-1], text)
+
+    # Remove headers (# ## ### etc.)
+    text = re.sub(r'^#{1,6}\s*', '', text, flags=re.MULTILINE)
+
+    # Remove bold (**text** or __text__)
+    text = re.sub(r'\*\*([^*]+)\*\*', r'\1', text)
+    text = re.sub(r'__([^_]+)__', r'\1', text)
+
+    # Remove italic (*text* or _text_) - be careful not to remove list items
+    text = re.sub(r'(?<!\*)\*([^*]+)\*(?!\*)', r'\1', text)
+    text = re.sub(r'(?<!_)_([^_]+)_(?!_)', r'\1', text)
+
+    # Remove link syntax [text](url) -> text
+    text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
+
+    # Remove citation brackets [1], [2], etc.
+    text = re.sub(r'\[\d+\]', '', text)
+
+    # Clean up multiple newlines
+    text = re.sub(r'\n{3,}', '\n\n', text)
+
+    return text.strip()
+
+
 def _save_profile_sync(profile: dict) -> None:
     """
     Save corp profile to database using sync session.
@@ -92,6 +130,11 @@ def _save_profile_sync(profile: dict) -> None:
     from sqlalchemy import text
 
     try:
+        # Clean business_summary - remove markdown formatting
+        business_summary = profile.get("business_summary")
+        if business_summary:
+            business_summary = _strip_markdown(business_summary)
+
         with get_sync_db() as db:
             # Upsert (insert or update) - using CAST instead of :: for SQLAlchemy compatibility
             query = text("""
@@ -137,7 +180,7 @@ def _save_profile_sync(profile: dict) -> None:
             db.execute(query, {
                 "profile_id": str(profile.get("profile_id", "")),
                 "corp_id": profile.get("corp_id", ""),
-                "business_summary": profile.get("business_summary"),
+                "business_summary": business_summary,
                 "revenue_krw": profile.get("revenue_krw"),
                 "export_ratio_pct": profile.get("export_ratio_pct"),
                 "country_exposure": json.dumps(profile.get("country_exposure", {})),
@@ -304,8 +347,14 @@ def run_analysis_pipeline(self, job_id: str, corp_id: str):
         update_job_progress(job_id, JobStatus.RUNNING, ProgressStep.PROFILING, 32)
 
         # Stage 4: EXTERNAL (Perplexity search if API key configured)
+        # Now uses 3-track search: DIRECT, INDUSTRY, ENVIRONMENT
         update_job_progress(job_id, JobStatus.RUNNING, ProgressStep.EXTERNAL, 35)
-        external_data = external_pipeline.execute(corp_name, industry_code, corp_id)
+        external_data = external_pipeline.execute(
+            corp_name=corp_name,
+            industry_code=industry_code,
+            corp_id=corp_id,
+            profile_data=profile_data,  # Pass profile for ENVIRONMENT query selection
+        )
         # Attach profile data to external_data for context pipeline
         external_data["profile_data"] = profile_data
         update_job_progress(job_id, JobStatus.RUNNING, ProgressStep.EXTERNAL, 42)
