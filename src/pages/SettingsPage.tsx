@@ -81,35 +81,6 @@ export default function SettingsPage() {
                         </div>
                     </div>
                 </section>
-
-                {/* Environment Info */}
-                <section className="space-y-4 pt-4 border-t">
-                    <div className="flex items-center gap-2">
-                        <Database className="w-5 h-5 text-muted-foreground" />
-                        <h2 className="text-lg font-semibold">환경 변수 정보</h2>
-                    </div>
-
-                    <Card>
-                        <CardContent className="pt-6">
-                            <div className="space-y-4">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div className="p-3 bg-muted/50 rounded-lg">
-                                        <span className="text-xs text-muted-foreground block mb-1">VITE_ENABLE_SCHEDULER</span>
-                                        <code className="text-sm font-mono font-medium">{String(enableScheduler)}</code>
-                                    </div>
-                                    <div className="p-3 bg-muted/50 rounded-lg">
-                                        <span className="text-xs text-muted-foreground block mb-1">VITE_DEMO_MODE</span>
-                                        <code className="text-sm font-mono font-medium">{String(demoMode)}</code>
-                                    </div>
-                                    <div className="p-3 bg-muted/50 rounded-lg md:col-span-2">
-                                        <span className="text-xs text-muted-foreground block mb-1">VITE_API_URL</span>
-                                        <code className="text-sm font-mono text-muted-foreground break-all">{apiUrl || '(Not Set)'}</code>
-                                    </div>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-                </section>
             </div>
         </MainLayout>
     );
