@@ -80,14 +80,19 @@ const navigationItems: NavigationItem[] = [
   },
   {
     id: "new-kyc",
-    label: "신규 법인 KYC",
+    label: "신규 법인 PRE-KYC",
     icon: UserPlus,
     path: "/new-kyc",
   },
 ];
 
 const bottomItems: NavigationItem[] = [
-  // 알림 설정, 설정 페이지는 미노출 처리
+  {
+    id: "settings",
+    label: "설정",
+    icon: Settings,
+    path: "/settings",
+  },
 ];
 
 export function Sidebar() {
@@ -191,10 +196,9 @@ export function Sidebar() {
                           to={subItem.path}
                           className={`
                             flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors
-                            ${
-                              isSubActive
-                                ? "bg-sidebar-accent text-sidebar-foreground font-medium"
-                                : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
+                            ${isSubActive
+                              ? "bg-sidebar-accent text-sidebar-foreground font-medium"
+                              : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
                             }
                           `}
                         >

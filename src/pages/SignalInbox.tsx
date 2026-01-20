@@ -141,13 +141,9 @@ export default function SignalInbox() {
   return (
     <MainLayout>
       <div className="max-w-[1600px] mx-auto p-6">
-        {/* Scheduler Panel (실시간 자동 탐지 제어) */}
-        <div className="mb-6">
-          <SchedulerPanel />
-        </div>
 
-        {/* Demo Panel (Demo Mode에서만 표시) */}
-        <DemoPanel />
+
+        {/* Demo Panel (Settings 페이지로 이동됨) */}
 
         {/* KPI Cards - Kept as "Satellites" */}
         <div className="grid grid-cols-4 gap-4 mb-10">
