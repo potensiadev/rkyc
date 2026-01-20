@@ -94,7 +94,7 @@ class GeminiAdapter:
             response = completion(
                 model=self.MODEL,
                 messages=messages,
-                temperature=0.1,
+                temperature=1.0,  # Gemini 3 requires temperature=1.0 to avoid infinite loops
                 max_tokens=2048,
                 response_format={"type": "json_object"},
             )
@@ -205,7 +205,7 @@ null 필드만 포함하세요. 기존 값이 있는 필드는 수정하지 마�
             response = completion(
                 model=self.MODEL,
                 messages=messages,
-                temperature=0.2,
+                temperature=1.0,  # Gemini 3 requires temperature=1.0 to avoid infinite loops
                 max_tokens=1024,
                 response_format={"type": "json_object"},
             )
