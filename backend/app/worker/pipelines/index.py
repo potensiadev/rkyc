@@ -167,10 +167,11 @@ Summary: {sig.get('summary', '')}
                 try:
                     # Insert into rkyc_signal_embedding
                     # Using raw SQL for vector type
+                    # Note: Use CAST() instead of :: to avoid SQLAlchemy parameter binding conflicts
                     embedding_str = "[" + ",".join(str(x) for x in embedding) + "]"
                     stmt = text("""
                         INSERT INTO rkyc_signal_embedding (embedding_id, signal_id, embedding, model_name)
-                        VALUES (:embedding_id, :signal_id, :embedding::vector, :model_name)
+                        VALUES (:embedding_id, :signal_id, CAST(:embedding AS vector), :model_name)
                         ON CONFLICT (signal_id) DO UPDATE SET
                             embedding = EXCLUDED.embedding,
                             model_name = EXCLUDED.model_name

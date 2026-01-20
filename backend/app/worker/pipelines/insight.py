@@ -176,6 +176,7 @@ Summary: {target_signal.get('summary', '')}
 
             with get_sync_db() as db:
                 # Use the helper function from migration
+                # Note: Use CAST() instead of :: to avoid SQLAlchemy parameter binding conflicts
                 result = db.execute(
                     text("""
                         SELECT
@@ -185,11 +186,11 @@ Summary: {target_signal.get('summary', '')}
                             signal_type,
                             event_type,
                             summary,
-                            1 - (embedding <=> :embedding::vector) AS similarity
+                            1 - (embedding <=> CAST(:embedding AS vector)) AS similarity
                         FROM rkyc_case_index
                         WHERE embedding IS NOT NULL
-                          AND 1 - (embedding <=> :embedding::vector) >= :threshold
-                        ORDER BY embedding <=> :embedding::vector
+                          AND 1 - (embedding <=> CAST(:embedding AS vector)) >= :threshold
+                        ORDER BY embedding <=> CAST(:embedding AS vector)
                         LIMIT :limit
                     """),
                     {
