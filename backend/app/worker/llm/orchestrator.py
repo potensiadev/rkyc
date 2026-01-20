@@ -157,6 +157,7 @@ class MultiAgentOrchestrator:
         industry_name: str,
         industry_code: str,
         existing_profile: Optional[dict] = None,
+        skip_cache: bool = False,
     ) -> OrchestratorResult:
         """
         4-Layer Fallback 실행
@@ -166,6 +167,7 @@ class MultiAgentOrchestrator:
             industry_name: 업종명
             industry_code: 업종코드
             existing_profile: 기존 프로필 (있으면 보완용)
+            skip_cache: True면 캐시 무시하고 항상 새로 검색
 
         Returns:
             OrchestratorResult: 실행 결과 (프로필, fallback layer, 메타데이터)
@@ -178,10 +180,16 @@ class MultiAgentOrchestrator:
             "corp_name": corp_name,
             "industry_code": industry_code,
             "layers_attempted": [],
+            "skip_cache": skip_cache,
         }
 
-        # Layer 0: Cache
-        cached_profile = self._try_cache(corp_name, industry_code, provenance)
+        # Layer 0: Cache (skip if force refresh)
+        if skip_cache:
+            logger.info(f"[Orchestrator] Cache skipped (force refresh) for {corp_name}")
+            provenance["cache_skipped"] = True
+            cached_profile = None
+        else:
+            cached_profile = self._try_cache(corp_name, industry_code, provenance)
         if cached_profile:
             return OrchestratorResult(
                 profile=cached_profile,

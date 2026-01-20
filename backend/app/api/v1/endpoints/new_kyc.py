@@ -111,10 +111,12 @@ async def validate_upload_file(
 def get_safe_job_dir(job_id: uuid.UUID) -> str:
     """
     안전한 Job 디렉토리 경로 생성 (P0-2)
+
+    UUID 객체를 사용하므로 Path Traversal 불가능
     """
-    # UUID.hex로 변환하여 Path Traversal 방지
-    safe_id = job_id.hex
-    return os.path.join(UPLOAD_DIR, safe_id)
+    # str(uuid.UUID)는 하이픈 포함 표준 형식 반환
+    # UUID 객체로 검증되었으므로 안전함
+    return os.path.join(UPLOAD_DIR, str(job_id))
 
 
 # ============================================================

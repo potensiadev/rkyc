@@ -341,13 +341,14 @@ async def refresh_corp_profile(
     await db.commit()
     await db.refresh(new_job)
 
-    # Dispatch Celery task
+    # Dispatch Celery task with skip_cache=True for force refresh
     celery_dispatch_failed = False
     celery_error_message = None
     try:
         from app.worker.tasks.analysis import run_analysis_pipeline
-        task = run_analysis_pipeline.delay(str(new_job.job_id), corp_id)
-        logger.info(f"Profile refresh: Celery task dispatched for job_id={new_job.job_id}, corp_id={corp_id}")
+        # force=True일 때 skip_cache=True로 전달하여 캐시 무시
+        task = run_analysis_pipeline.delay(str(new_job.job_id), corp_id, skip_cache=request.force)
+        logger.info(f"Profile refresh: Celery task dispatched for job_id={new_job.job_id}, corp_id={corp_id}, skip_cache={request.force}")
     except Exception as e:
         celery_dispatch_failed = True
         celery_error_message = str(e)

@@ -259,7 +259,7 @@ def _save_profile_sync(profile: dict) -> None:
     retry_backoff=True,
     retry_backoff_max=300,
 )
-def run_analysis_pipeline(self, job_id: str, corp_id: str):
+def run_analysis_pipeline(self, job_id: str, corp_id: str, skip_cache: bool = False):
     """
     Main analysis pipeline orchestrator.
 
@@ -273,8 +273,13 @@ def run_analysis_pipeline(self, job_id: str, corp_id: str):
     7. VALIDATION - Apply guardrails
     8. INDEX - Save to database
     9. INSIGHT - Generate final briefing
+
+    Args:
+        job_id: Job ID
+        corp_id: 기업 ID
+        skip_cache: True면 프로필 캐시 무시하고 새로 검색
     """
-    logger.info(f"Starting analysis pipeline for job={job_id}, corp_id={corp_id}")
+    logger.info(f"Starting analysis pipeline for job={job_id}, corp_id={corp_id}, skip_cache={skip_cache}")
 
     # Initialize pipelines
     snapshot_pipeline = SnapshotPipeline()
@@ -341,6 +346,7 @@ def run_analysis_pipeline(self, job_id: str, corp_id: str):
                             industry_code=industry_code,
                             db_session=None,
                             llm_service=signal_pipeline.llm if hasattr(signal_pipeline, 'llm') else None,
+                            skip_cache=skip_cache,
                         )
                     )
                     profile_result = future.result(timeout=120)  # 2 min timeout
@@ -356,6 +362,7 @@ def run_analysis_pipeline(self, job_id: str, corp_id: str):
                             industry_code=industry_code,
                             db_session=None,
                             llm_service=signal_pipeline.llm if hasattr(signal_pipeline, 'llm') else None,
+                            skip_cache=skip_cache,
                         )
                     )
                 finally:

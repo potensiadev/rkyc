@@ -829,12 +829,22 @@ class CorpProfilingPipeline:
         db_session=None,
         llm_service=None,
         perplexity_api_key: Optional[str] = None,
+        skip_cache: bool = False,
     ) -> CorpProfileResult:
         """
         Execute corp profiling with full anti-hallucination pipeline
         using the MultiAgentOrchestrator for 4-layer fallback.
+
+        Args:
+            corp_id: 기업 ID
+            corp_name: 기업명
+            industry_code: 업종코드
+            db_session: DB 세션 (옵션)
+            llm_service: LLM 서비스 (옵션)
+            perplexity_api_key: Perplexity API 키 (옵션)
+            skip_cache: True면 캐시 무시하고 항상 새로 검색
         """
-        logger.info(f"PROFILING stage starting for corp_id={corp_id}")
+        logger.info(f"PROFILING stage starting for corp_id={corp_id}, skip_cache={skip_cache}")
 
         industry_name = get_industry_name(industry_code)
         self._llm_service = llm_service
@@ -854,8 +864,8 @@ class CorpProfilingPipeline:
             )
         )
 
-        # Get existing profile for potential enrichment
-        existing_profile = await self._get_cached_profile(corp_id, db_session)
+        # Get existing profile for potential enrichment (but don't use as cache if skip_cache)
+        existing_profile = None if skip_cache else await self._get_cached_profile(corp_id, db_session)
 
         # Execute orchestrator (4-layer fallback)
         orchestrator_result = self.orchestrator.execute(
@@ -863,6 +873,7 @@ class CorpProfilingPipeline:
             industry_name=industry_name,
             industry_code=industry_code,
             existing_profile=existing_profile,
+            skip_cache=skip_cache,
         )
 
         # Build final profile with orchestrator result
