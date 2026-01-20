@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -12,20 +12,51 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, CheckCircle, XCircle, Loader2, FileText, ExternalLink, AlertTriangle, TrendingUp, TrendingDown, Minus, Building2, Calendar, Tag, Check } from "lucide-react";
 import {
-  useSignalDetail,
+  ArrowLeft,
+  CheckCircle,
+  XCircle,
+  Loader2,
+  FileText,
+  ExternalLink,
+  AlertTriangle,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  Building2,
+  Calendar,
+  Tag,
+  Check,
+  Shield,
+  ShieldCheck,
+  ShieldAlert,
+  ShieldQuestion,
+  Users,
+  Globe,
+  Factory,
+  Briefcase,
+  ChevronRight,
+  Sparkles,
+  History,
+  Link as LinkIcon,
+  BarChart3,
+  Percent,
+  Info,
+  Brain,
+  Target,
+  AlertCircle,
+} from "lucide-react";
+import {
+  useSignalEnrichedDetail,
   useUpdateSignalStatus,
   useDismissSignal,
-  ApiEvidence,
+  ApiEnrichedEvidence,
+  ApiSimilarCase,
+  ApiRelatedSignal,
+  ApiCorpContext,
+  ApiVerification,
+  ApiImpactAnalysis,
 } from "@/hooks/useApi";
-
-// Evidence 타입별 아이콘/색상
-const EVIDENCE_TYPE_CONFIG: Record<string, { label: string; color: string }> = {
-  INTERNAL_FIELD: { label: "내부 데이터", color: "bg-blue-100 text-blue-700" },
-  DOC: { label: "문서", color: "bg-green-100 text-green-700" },
-  EXTERNAL: { label: "외부 소스", color: "bg-purple-100 text-purple-700" },
-};
 
 // Signal Status 뱃지 설정
 const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secondary" | "outline" }> = {
@@ -34,14 +65,37 @@ const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secon
   DISMISSED: { label: "기각", variant: "outline" },
 };
 
+// 소스 신뢰도 아이콘
+const CredibilityIcon = ({ credibility }: { credibility: string | null }) => {
+  switch (credibility) {
+    case "OFFICIAL":
+      return <ShieldCheck className="w-4 h-4 text-green-600" />;
+    case "MAJOR_MEDIA":
+      return <Shield className="w-4 h-4 text-blue-500" />;
+    case "MINOR_MEDIA":
+      return <ShieldAlert className="w-4 h-4 text-yellow-500" />;
+    default:
+      return <ShieldQuestion className="w-4 h-4 text-gray-400" />;
+  }
+};
+
+// 숫자 포맷팅
+const formatNumber = (num: number | null | undefined): string => {
+  if (num === null || num === undefined) return "-";
+  if (num >= 1e12) return `${(num / 1e12).toFixed(1)}조`;
+  if (num >= 1e8) return `${(num / 1e8).toFixed(1)}억`;
+  if (num >= 1e4) return `${(num / 1e4).toFixed(0)}만`;
+  return num.toLocaleString();
+};
+
 export default function SignalDetailPage() {
   const { signalId } = useParams();
   const navigate = useNavigate();
   const [dismissDialogOpen, setDismissDialogOpen] = useState(false);
   const [dismissReason, setDismissReason] = useState("");
 
-  // API 훅
-  const { data: signal, isLoading, error } = useSignalDetail(signalId || "");
+  // Enriched Detail API 훅
+  const { data: signal, isLoading, error } = useSignalEnrichedDetail(signalId || "");
   const updateStatus = useUpdateSignalStatus();
   const dismissMutation = useDismissSignal();
 
@@ -98,7 +152,6 @@ export default function SignalDetailPage() {
     );
   };
 
-  // 현재 상태
   const currentStatus = signal.signal_status || "NEW";
   const statusConfig = STATUS_CONFIG[currentStatus];
 
@@ -106,7 +159,7 @@ export default function SignalDetailPage() {
     <MainLayout>
       <div className="h-[calc(100vh-100px)] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-4">
             <Button variant="ghost" className="gap-2" onClick={() => navigate(-1)}>
               <ArrowLeft className="w-4 h-4" /> 뒤로가기
@@ -117,7 +170,10 @@ export default function SignalDetailPage() {
                 <Badge variant={statusConfig.variant}>{statusConfig.label}</Badge>
               </div>
               <p className="text-sm text-muted-foreground">
-                {signal.corp_name} · 감지일시: {new Date(signal.detected_at).toLocaleString("ko-KR")}
+                <Link to={`/corporations/${signal.corp_id}`} className="hover:underline">
+                  {signal.corp_name}
+                </Link>
+                {" · "}감지일시: {new Date(signal.detected_at).toLocaleString("ko-KR")}
               </p>
             </div>
           </div>
@@ -150,139 +206,204 @@ export default function SignalDetailPage() {
           )}
         </div>
 
-        {/* Full Page Content */}
+        {/* Full Page Content - 2 Column Layout */}
         <div className="flex-1 overflow-auto">
-          <Card className="p-8">
-            {/* 기업 정보 헤더 */}
-            <div className="flex items-start justify-between mb-8 pb-6 border-b">
-              <div>
-                <div className="flex items-center gap-3 mb-2">
-                  <h2 className="text-2xl font-bold">{signal.corp_name}</h2>
-                  <span className="px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-xs font-bold">
-                    Active
-                  </span>
-                </div>
-                <p className="text-muted-foreground max-w-2xl">
-                  {signal.summary}
-                </p>
-              </div>
-              {/* Score */}
-              <div className="relative w-24 h-24 flex items-center justify-center shrink-0">
-                <svg className="w-full h-full -rotate-90">
-                  <circle cx="48" cy="48" r="40" stroke="currentColor" strokeWidth="8" fill="transparent" className="text-muted" />
-                  <circle cx="48" cy="48" r="40" stroke="currentColor" strokeWidth="8" fill="transparent" className="text-primary"
-                    strokeDasharray="251.2" strokeDashoffset={251.2 - (251.2 * matchingScore) / 100} strokeLinecap="round" />
-                </svg>
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-xl font-bold">{matchingScore}</span>
-                  <span className="text-[10px] text-muted-foreground font-bold">SCORE</span>
-                </div>
-              </div>
-            </div>
-
-            {/* 시그널 상세 정보 */}
-            <div className="mb-8">
-              <h3 className="font-semibold mb-4 text-lg">시그널 상세</h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
-                  <Building2 className="w-5 h-5 text-muted-foreground" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">대상 기업</p>
-                    <p className="font-medium">{signal.corp_name}</p>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {/* Left Column - Main Content (2/3) */}
+            <div className="lg:col-span-2 space-y-4">
+              {/* 기업 정보 헤더 + 요약 */}
+              <Card className="p-6">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-2">
+                      <h2 className="text-xl font-bold">{signal.corp_name}</h2>
+                      <Badge variant={signal.impact_direction === "RISK" ? "destructive" : signal.impact_direction === "OPPORTUNITY" ? "default" : "secondary"}>
+                        {signal.impact_direction === "RISK" ? "리스크" : signal.impact_direction === "OPPORTUNITY" ? "기회" : "중립"}
+                      </Badge>
+                      <Badge variant="outline">{signal.impact_strength}</Badge>
+                    </div>
+                    <p className="text-muted-foreground">{signal.summary}</p>
                   </div>
-                </div>
-                <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
-                  <Calendar className="w-5 h-5 text-muted-foreground" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">감지 일시</p>
-                    <p className="font-medium">{new Date(signal.detected_at).toLocaleDateString("ko-KR")}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
-                  <Tag className="w-5 h-5 text-muted-foreground" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">시그널 유형</p>
-                    <p className="font-medium">{signal.signal_type}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
-                  {signal.impact_direction === "RISK" ? (
-                    <TrendingDown className="w-5 h-5 text-red-500" />
-                  ) : signal.impact_direction === "OPPORTUNITY" ? (
-                    <TrendingUp className="w-5 h-5 text-green-500" />
-                  ) : (
-                    <Minus className="w-5 h-5 text-gray-500" />
-                  )}
-                  <div>
-                    <p className="text-xs text-muted-foreground">영향</p>
-                    <p className={`font-medium ${signal.impact_direction === "RISK" ? "text-red-500" : signal.impact_direction === "OPPORTUNITY" ? "text-green-500" : ""}`}>
-                      {signal.impact_direction === "RISK" ? "리스크" : signal.impact_direction === "OPPORTUNITY" ? "기회" : "중립"} ({signal.impact_strength})
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 mb-4">
-                <Badge variant="outline">{signal.signal_type}</Badge>
-                <Badge variant="secondary">{signal.event_type}</Badge>
-              </div>
-            </div>
-
-            {/* 검증 항목 */}
-            <div className="mb-8">
-              <h3 className="text-sm font-bold text-muted-foreground mb-4 uppercase tracking-wider">검증 항목 (Verification)</h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <VerificationCard label="기업 상태" isValid={true} value="정상" />
-                <VerificationCard label="세금 납부" isValid={true} value="완납" />
-                <VerificationCard label="신용 등급" isValid={false} value="검토 필요" />
-                <VerificationCard label="주소지 확인" isValid={true} value="일치" />
-              </div>
-            </div>
-
-            {/* 근거 자료 */}
-            {signal.evidences && signal.evidences.length > 0 && (
-              <div className="mb-8">
-                <h3 className="font-semibold mb-4 flex items-center gap-2">
-                  <FileText className="w-4 h-4" />
-                  근거 자료 ({signal.evidences.length}건)
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {signal.evidences.map((evidence: ApiEvidence) => (
-                    <EvidenceItem key={evidence.evidence_id} evidence={evidence} />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* 히스토리 타임라인 */}
-            <div>
-              <h3 className="text-sm font-bold text-muted-foreground mb-4 uppercase tracking-wider">히스토리 타임라인</h3>
-              <div className="space-y-4 pl-4 border-l border-border ml-2">
-                {[2024, 2023, 2022].map((year) => (
-                  <div key={year} className="relative group">
-                    <div className="absolute -left-[21px] top-1 w-3 h-3 rounded-full bg-background border-2 border-muted-foreground group-hover:border-primary transition-colors" />
-                    <div className="bg-muted/30 border border-border p-4 rounded-lg hover:bg-muted/50 transition-colors">
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="text-sm font-bold">{year} 주요 이벤트</span>
-                        <span className="text-xs text-green-600 font-mono">Verified</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground leading-relaxed">
-                        {year}년도 회계연도 주요 기업 공시 및 뉴스 검토 완료. 특이 위험 시그널 감지되지 않음.
-                      </p>
-                      <div className="flex gap-2 mt-3">
-                        <span className="text-[10px] px-2 py-1 bg-muted text-muted-foreground rounded border border-border flex items-center gap-1">
-                          <Tag className="w-3 h-3" /> 감사
-                        </span>
-                        <span className="text-[10px] px-2 py-1 bg-muted text-muted-foreground rounded border border-border flex items-center gap-1">
-                          <Calendar className="w-3 h-3" /> 4분기
-                        </span>
-                      </div>
+                  {/* Score Ring */}
+                  <div className="relative w-20 h-20 flex items-center justify-center shrink-0 ml-4">
+                    <svg className="w-full h-full -rotate-90">
+                      <circle cx="40" cy="40" r="32" stroke="currentColor" strokeWidth="6" fill="transparent" className="text-muted" />
+                      <circle
+                        cx="40" cy="40" r="32"
+                        stroke="currentColor"
+                        strokeWidth="6"
+                        fill="transparent"
+                        className={signal.impact_direction === "RISK" ? "text-red-500" : signal.impact_direction === "OPPORTUNITY" ? "text-green-500" : "text-blue-500"}
+                        strokeDasharray="201"
+                        strokeDashoffset={201 - (201 * matchingScore) / 100}
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <span className="text-lg font-bold">{matchingScore}</span>
+                      <span className="text-[9px] text-muted-foreground font-medium">SCORE</span>
                     </div>
                   </div>
-                ))}
-              </div>
+                </div>
+
+                {/* Signal Meta Grid */}
+                <div className="grid grid-cols-4 gap-3">
+                  <div className="flex items-center gap-2 p-2 bg-muted/50 rounded-lg">
+                    <Building2 className="w-4 h-4 text-muted-foreground" />
+                    <div>
+                      <p className="text-[10px] text-muted-foreground">기업</p>
+                      <p className="text-sm font-medium truncate">{signal.corp_name}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 p-2 bg-muted/50 rounded-lg">
+                    <Tag className="w-4 h-4 text-muted-foreground" />
+                    <div>
+                      <p className="text-[10px] text-muted-foreground">유형</p>
+                      <p className="text-sm font-medium">{signal.signal_type}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 p-2 bg-muted/50 rounded-lg">
+                    <Calendar className="w-4 h-4 text-muted-foreground" />
+                    <div>
+                      <p className="text-[10px] text-muted-foreground">감지일</p>
+                      <p className="text-sm font-medium">{new Date(signal.detected_at).toLocaleDateString("ko-KR")}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 p-2 bg-muted/50 rounded-lg">
+                    {signal.impact_direction === "RISK" ? (
+                      <TrendingDown className="w-4 h-4 text-red-500" />
+                    ) : signal.impact_direction === "OPPORTUNITY" ? (
+                      <TrendingUp className="w-4 h-4 text-green-500" />
+                    ) : (
+                      <Minus className="w-4 h-4 text-gray-500" />
+                    )}
+                    <div>
+                      <p className="text-[10px] text-muted-foreground">영향</p>
+                      <p className={`text-sm font-medium ${signal.impact_direction === "RISK" ? "text-red-500" : signal.impact_direction === "OPPORTUNITY" ? "text-green-500" : ""}`}>
+                        {signal.impact_direction === "RISK" ? "리스크" : signal.impact_direction === "OPPORTUNITY" ? "기회" : "중립"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </Card>
+
+              {/* 분석 근거 (LLM Reasoning) */}
+              {signal.analysis_reasoning && (
+                <Card className="p-6">
+                  <h3 className="font-semibold mb-3 flex items-center gap-2">
+                    <Brain className="w-4 h-4 text-purple-500" />
+                    AI 분석 근거
+                    {signal.llm_model && (
+                      <span className="text-xs text-muted-foreground font-normal">({signal.llm_model})</span>
+                    )}
+                  </h3>
+                  <div className="p-4 bg-purple-50 dark:bg-purple-950/20 rounded-lg border border-purple-100 dark:border-purple-900">
+                    <p className="text-sm leading-relaxed">{signal.analysis_reasoning}</p>
+                  </div>
+                </Card>
+              )}
+
+              {/* 근거 자료 (Evidence) */}
+              {signal.evidences && signal.evidences.length > 0 && (
+                <Card className="p-6">
+                  <h3 className="font-semibold mb-3 flex items-center gap-2">
+                    <FileText className="w-4 h-4" />
+                    근거 자료 ({signal.evidences.length}건)
+                  </h3>
+                  <div className="space-y-3">
+                    {signal.evidences.map((evidence) => (
+                      <EvidenceCard key={evidence.evidence_id} evidence={evidence} />
+                    ))}
+                  </div>
+                </Card>
+              )}
+
+              {/* 소스 검증 결과 */}
+              {signal.verifications && signal.verifications.length > 0 && (
+                <Card className="p-6">
+                  <h3 className="font-semibold mb-3 flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-green-600" />
+                    소스 검증 결과
+                  </h3>
+                  <div className="space-y-2">
+                    {signal.verifications.map((v) => (
+                      <VerificationItem key={v.id} verification={v} />
+                    ))}
+                  </div>
+                </Card>
+              )}
+
+              {/* 영향도 분석 */}
+              {signal.impact_analysis && signal.impact_analysis.length > 0 && (
+                <Card className="p-6">
+                  <h3 className="font-semibold mb-3 flex items-center gap-2">
+                    <BarChart3 className="w-4 h-4 text-blue-500" />
+                    영향도 분석
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {signal.impact_analysis.map((impact) => (
+                      <ImpactCard key={impact.id} impact={impact} />
+                    ))}
+                  </div>
+                </Card>
+              )}
+
+              {/* 인사이트 발췌 */}
+              {signal.insight_excerpt && (
+                <Card className="p-6">
+                  <h3 className="font-semibold mb-3 flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-yellow-500" />
+                    인사이트
+                  </h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{signal.insight_excerpt}</p>
+                </Card>
+              )}
             </div>
-          </Card>
+
+            {/* Right Column - Context (1/3) */}
+            <div className="space-y-4">
+              {/* 기업 컨텍스트 */}
+              {signal.corp_context && (
+                <Card className="p-4">
+                  <h3 className="font-semibold mb-3 flex items-center gap-2 text-sm">
+                    <Building2 className="w-4 h-4" />
+                    기업 프로필
+                  </h3>
+                  <CorpContextCard context={signal.corp_context} />
+                </Card>
+              )}
+
+              {/* 유사 과거 케이스 */}
+              {signal.similar_cases && signal.similar_cases.length > 0 && (
+                <Card className="p-4">
+                  <h3 className="font-semibold mb-3 flex items-center gap-2 text-sm">
+                    <History className="w-4 h-4" />
+                    유사 과거 케이스
+                  </h3>
+                  <div className="space-y-2">
+                    {signal.similar_cases.map((c) => (
+                      <SimilarCaseItem key={c.id} caseData={c} />
+                    ))}
+                  </div>
+                </Card>
+              )}
+
+              {/* 관련 시그널 */}
+              {signal.related_signals && signal.related_signals.length > 0 && (
+                <Card className="p-4">
+                  <h3 className="font-semibold mb-3 flex items-center gap-2 text-sm">
+                    <LinkIcon className="w-4 h-4" />
+                    관련 시그널
+                  </h3>
+                  <div className="space-y-2">
+                    {signal.related_signals.slice(0, 5).map((rel) => (
+                      <RelatedSignalItem key={rel.signal_id} signal={rel} />
+                    ))}
+                  </div>
+                </Card>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -312,9 +433,7 @@ export default function SignalDetailPage() {
               onClick={handleDismiss}
               disabled={!dismissReason.trim() || dismissMutation.isPending}
             >
-              {dismissMutation.isPending ? (
-                <Loader2 className="w-4 h-4 animate-spin mr-2" />
-              ) : null}
+              {dismissMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
               기각 처리
             </Button>
           </DialogFooter>
@@ -324,53 +443,252 @@ export default function SignalDetailPage() {
   );
 }
 
-// Evidence 아이템 컴포넌트
-function EvidenceItem({ evidence }: { evidence: ApiEvidence }) {
-  const typeConfig = EVIDENCE_TYPE_CONFIG[evidence.evidence_type] || {
-    label: evidence.evidence_type,
-    color: "bg-gray-100 text-gray-700",
-  };
+// ============================================================
+// Sub Components
+// ============================================================
+
+// Evidence 카드
+function EvidenceCard({ evidence }: { evidence: ApiEnrichedEvidence }) {
+  const credibilityLabel = {
+    OFFICIAL: "공식 출처",
+    MAJOR_MEDIA: "주요 언론",
+    MINOR_MEDIA: "일반 뉴스",
+    UNKNOWN: "미확인",
+  }[evidence.source_credibility || "UNKNOWN"];
+
+  const typeLabel = {
+    INTERNAL_FIELD: "내부 데이터",
+    DOC: "문서",
+    EXTERNAL: "외부 소스",
+  }[evidence.evidence_type];
 
   return (
-    <div className="p-3 bg-muted/50 rounded-lg">
-      <div className="flex items-center gap-2 mb-1">
-        <span className={`text-xs px-2 py-0.5 rounded ${typeConfig.color}`}>
-          {typeConfig.label}
-        </span>
-        <span className="text-xs text-muted-foreground">
-          {evidence.ref_type === "URL" ? "외부 링크" : evidence.ref_type}
-        </span>
+    <div className="p-3 bg-muted/50 rounded-lg border border-border">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <CredibilityIcon credibility={evidence.source_credibility} />
+          <span className="text-xs font-medium">{credibilityLabel}</span>
+          <span className="text-xs text-muted-foreground">·</span>
+          <span className="text-xs text-muted-foreground">{typeLabel}</span>
+          {evidence.is_primary_source && (
+            <Badge variant="outline" className="text-[10px] py-0 px-1">1차 출처</Badge>
+          )}
+        </div>
+        {evidence.verification_status === "VERIFIED" && (
+          <Badge variant="secondary" className="text-[10px] py-0">
+            <Check className="w-3 h-3 mr-1" /> 검증됨
+          </Badge>
+        )}
       </div>
-      <p className="text-sm font-medium">{evidence.ref_value}</p>
+
       {evidence.snippet && (
-        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{evidence.snippet}</p>
+        <p className="text-sm text-muted-foreground mb-2 line-clamp-2">{evidence.snippet}</p>
       )}
-      {evidence.ref_type === "URL" && (
+
+      {evidence.ref_type === "URL" && evidence.ref_value && (
         <a
           href={evidence.ref_value}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-xs text-primary flex items-center gap-1 mt-1 hover:underline"
+          className="text-xs text-primary flex items-center gap-1 hover:underline"
         >
           <ExternalLink className="w-3 h-3" />
-          원문 보기
+          {evidence.source_domain || "원문 보기"}
         </a>
+      )}
+
+      {evidence.ref_type === "SNAPSHOT_KEYPATH" && (
+        <div className="text-xs text-muted-foreground flex items-center gap-1">
+          <Info className="w-3 h-3" />
+          내부 데이터: {evidence.ref_value}
+        </div>
       )}
     </div>
   );
 }
 
-// 검증 카드 컴포넌트
-function VerificationCard({ label, isValid, value }: { label: string; isValid: boolean; value: string }) {
+// 검증 결과 아이템
+function VerificationItem({ verification }: { verification: ApiVerification }) {
+  const statusConfig = {
+    VERIFIED: { icon: <ShieldCheck className="w-4 h-4 text-green-600" />, label: "검증됨", color: "text-green-600" },
+    PARTIAL: { icon: <Shield className="w-4 h-4 text-yellow-500" />, label: "부분 검증", color: "text-yellow-600" },
+    UNVERIFIED: { icon: <ShieldQuestion className="w-4 h-4 text-gray-400" />, label: "미검증", color: "text-gray-500" },
+    CONFLICTING: { icon: <ShieldAlert className="w-4 h-4 text-red-500" />, label: "불일치", color: "text-red-500" },
+  }[verification.verification_status];
+
   return (
-    <div className="bg-card border border-border rounded-lg p-4 flex items-center justify-between hover:border-primary/50 transition-colors">
-      <div>
-        <p className="text-xs text-muted-foreground mb-1">{label}</p>
-        <p className="font-bold text-sm">{value}</p>
+    <div className="flex items-center justify-between p-2 bg-muted/30 rounded">
+      <div className="flex items-center gap-2">
+        {statusConfig.icon}
+        <span className="text-sm">{verification.source_name || "출처"}</span>
       </div>
-      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${isValid ? "bg-green-100 text-green-600" : "bg-yellow-100 text-yellow-600"}`}>
-        {isValid ? <Check className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
+      <span className={`text-xs font-medium ${statusConfig.color}`}>{statusConfig.label}</span>
+    </div>
+  );
+}
+
+// 영향도 분석 카드
+function ImpactCard({ impact }: { impact: ApiImpactAnalysis }) {
+  const typeLabel = {
+    FINANCIAL: "재무 영향",
+    CREDIT: "신용 영향",
+    OPERATIONAL: "운영 영향",
+    REGULATORY: "규제 영향",
+  }[impact.analysis_type];
+
+  const directionIcon = {
+    INCREASE: <TrendingUp className="w-4 h-4 text-green-500" />,
+    DECREASE: <TrendingDown className="w-4 h-4 text-red-500" />,
+    STABLE: <Minus className="w-4 h-4 text-gray-500" />,
+  }[impact.impact_direction || "STABLE"];
+
+  return (
+    <div className="p-3 bg-muted/50 rounded-lg">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs font-medium text-muted-foreground">{typeLabel}</span>
+        {directionIcon}
+      </div>
+      <p className="text-sm font-medium mb-1">{impact.metric_name}</p>
+      {impact.impact_percentage !== null && (
+        <div className="flex items-center gap-1">
+          <Percent className="w-3 h-3 text-muted-foreground" />
+          <span className={`text-sm ${impact.impact_direction === "INCREASE" ? "text-green-600" : impact.impact_direction === "DECREASE" ? "text-red-600" : ""}`}>
+            {impact.impact_percentage > 0 ? "+" : ""}{impact.impact_percentage}%
+          </span>
+        </div>
+      )}
+      {impact.industry_percentile && (
+        <p className="text-xs text-muted-foreground mt-1">
+          업종 내 상위 {100 - impact.industry_percentile}%
+        </p>
+      )}
+      {impact.reasoning && (
+        <p className="text-xs text-muted-foreground mt-2 line-clamp-2">{impact.reasoning}</p>
+      )}
+    </div>
+  );
+}
+
+// 기업 컨텍스트 카드
+function CorpContextCard({ context }: { context: ApiCorpContext }) {
+  return (
+    <div className="space-y-3">
+      {/* 기본 정보 */}
+      <div className="grid grid-cols-2 gap-2 text-sm">
+        <div>
+          <p className="text-xs text-muted-foreground">업종</p>
+          <p className="font-medium">{context.industry_name || context.industry_code}</p>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground">매출</p>
+          <p className="font-medium">{formatNumber(context.revenue_krw)}</p>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground">수출 비중</p>
+          <p className="font-medium">{context.export_ratio_pct ? `${context.export_ratio_pct}%` : "-"}</p>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground">임직원</p>
+          <p className="font-medium">{context.employee_count?.toLocaleString() || "-"}명</p>
+        </div>
+      </div>
+
+      {/* 리스크 지표 */}
+      <div className="pt-2 border-t">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs text-muted-foreground">내부 등급</span>
+          <Badge variant={context.internal_risk_grade === "HIGH" ? "destructive" : context.internal_risk_grade === "MED" ? "default" : "secondary"}>
+            {context.internal_risk_grade || "-"}
+          </Badge>
+        </div>
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs text-muted-foreground">공급망 리스크</span>
+          <Badge variant={context.supply_chain_risk === "HIGH" ? "destructive" : context.supply_chain_risk === "MED" ? "default" : "secondary"}>
+            {context.supply_chain_risk || "-"}
+          </Badge>
+        </div>
+        {context.overdue_flag && (
+          <div className="flex items-center gap-1 text-red-500 text-xs">
+            <AlertCircle className="w-3 h-3" />
+            연체 이력 있음
+          </div>
+        )}
+      </div>
+
+      {/* 국가 노출 */}
+      {context.country_exposure && context.country_exposure.length > 0 && (
+        <div className="pt-2 border-t">
+          <p className="text-xs text-muted-foreground mb-1">국가별 노출</p>
+          <div className="flex flex-wrap gap-1">
+            {context.country_exposure.slice(0, 5).map((country) => (
+              <Badge key={country} variant="outline" className="text-[10px] py-0">
+                <Globe className="w-3 h-3 mr-1" />
+                {country}
+              </Badge>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 프로필 링크 */}
+      <Link
+        to={`/corporations/${context.corp_id}`}
+        className="flex items-center justify-between p-2 bg-muted/50 rounded text-sm hover:bg-muted transition-colors"
+      >
+        <span>기업 상세 보기</span>
+        <ChevronRight className="w-4 h-4" />
+      </Link>
+    </div>
+  );
+}
+
+// 유사 케이스 아이템
+function SimilarCaseItem({ caseData }: { caseData: ApiSimilarCase }) {
+  const similarityPercent = Math.round(caseData.similarity_score * 100);
+
+  return (
+    <div className="p-2 bg-muted/30 rounded text-sm">
+      <div className="flex items-center justify-between mb-1">
+        <span className="font-medium truncate">{caseData.corp_name || "Unknown"}</span>
+        <Badge variant="outline" className="text-[10px] py-0">
+          {similarityPercent}% 유사
+        </Badge>
+      </div>
+      <p className="text-xs text-muted-foreground line-clamp-2">{caseData.summary || "-"}</p>
+      <div className="flex items-center gap-2 mt-1">
+        <span className="text-[10px] text-muted-foreground">{caseData.signal_type}</span>
+        <span className="text-[10px] text-muted-foreground">·</span>
+        <span className="text-[10px] text-muted-foreground">{caseData.event_type}</span>
       </div>
     </div>
+  );
+}
+
+// 관련 시그널 아이템
+function RelatedSignalItem({ signal }: { signal: ApiRelatedSignal }) {
+  const relationLabel = {
+    SAME_CORP: "동일 기업",
+    SAME_INDUSTRY: "동일 업종",
+    CAUSAL: "인과관계",
+    TEMPORAL: "시간적 연관",
+  }[signal.relation_type];
+
+  return (
+    <Link
+      to={`/signals/${signal.signal_id}`}
+      className="block p-2 bg-muted/30 rounded text-sm hover:bg-muted transition-colors"
+    >
+      <div className="flex items-center justify-between mb-1">
+        <span className="font-medium truncate">{signal.title}</span>
+        <Badge variant={signal.impact_direction === "RISK" ? "destructive" : signal.impact_direction === "OPPORTUNITY" ? "default" : "secondary"} className="text-[10px] py-0">
+          {signal.impact_direction === "RISK" ? "리스크" : signal.impact_direction === "OPPORTUNITY" ? "기회" : "중립"}
+        </Badge>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] text-muted-foreground">{relationLabel}</span>
+        <span className="text-[10px] text-muted-foreground">·</span>
+        <span className="text-[10px] text-muted-foreground">{signal.corp_name}</span>
+      </div>
+    </Link>
   );
 }

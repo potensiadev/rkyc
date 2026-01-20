@@ -300,7 +300,7 @@ def run_analysis_pipeline(self, job_id: str, corp_id: str):
                             corp_name=corp_name,
                             industry_code=industry_code,
                             db_session=None,
-                            llm_service=signal_pipeline.llm_service if hasattr(signal_pipeline, 'llm_service') else None,
+                            llm_service=signal_pipeline.llm if hasattr(signal_pipeline, 'llm') else None,
                         )
                     )
                     profile_result = future.result(timeout=120)  # 2 min timeout
@@ -315,7 +315,7 @@ def run_analysis_pipeline(self, job_id: str, corp_id: str):
                             corp_name=corp_name,
                             industry_code=industry_code,
                             db_session=None,
-                            llm_service=signal_pipeline.llm_service if hasattr(signal_pipeline, 'llm_service') else None,
+                            llm_service=signal_pipeline.llm if hasattr(signal_pipeline, 'llm') else None,
                         )
                     )
                 finally:
