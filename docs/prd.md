@@ -779,7 +779,14 @@ if (isLoading) return <LoadingSpinner />; if (error || !signal) return <NotFound
 ``` VITE_API_URL=http://localhost:8000 VITE_DEMO_MODE=true VITE_DEMO_TOKEN=your-demo-token-here ```
 5.4.2 src/components/demo/DemoPanel.tsx
 ```typescript import { useState } from 'react'; import { useAnalyzeJob, useJobStatus, useDashboardSignals } from '@/hooks/useApi'; import { Button } from '@/components/ui/button'; import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'; import { Progress } from '@/components/ui/progress'; import { AlertCircle, CheckCircle, Loader2, Play, RefreshCw } from 'lucide-react';
-const DEMO_CORPORATIONS = [ { id: '1', name: '전북식품' }, { id: '2', name: '광주정밀기계' }, { id: '3', name: '익산바이오텍' }, { id: '4', name: '나주태양에너지' }, { id: '5', name: '군산조선기자재' }, { id: '6', name: '무안물류' }, ];
+// DemoPanel now uses useCorporations() hook to fetch from corp table
+// Corp table data:
+// - 엠케이전자 (8001-3719240)
+// - 동부건설 (8000-7647330)
+// - 전북식품 (4028-1234567)
+// - 광주정밀기계 (6201-2345678)
+// - 삼성전자 (4301-3456789)
+// - 휴림로봇 (6701-4567890)
 export function DemoPanel() { const [selectedCorpId, setSelectedCorpId] = useState<string>(''); const [currentJobId, setCurrentJobId] = useState<string | null>(null);
 const analyzeJob = useAnalyzeJob(); const { data: jobStatus } = useJobStatus(currentJobId || '', { enabled: !!currentJobId }); const { refetch: refetchSignals } = useDashboardSignals({});
 const isDemoMode = import.meta.env.VITE_DEMO_MODE === 'true'; if (!isDemoMode) return null;
@@ -1071,15 +1078,16 @@ backend/
 └── requirements.txt
 
 
-PART 8: SEED DATA (Demo용 6개 법인)
--- Corporations
+PART 8: SEED DATA (Demo용 6개 법인) - 실제 corp 테이블 참조
+-- Corporations (실제 Supabase corp 테이블 데이터)
+-- 아래 목록은 실제 데이터베이스와 동기화되어 있음. 최신 데이터는 corp 테이블 직접 조회 필요.
 INSERT INTO corp VALUES
-('1', '134511-0004412', '전북식품', '402-81-12345', '10790', '김정호', 245, 1987, '전북 전주시', '김치, 젓갈 전통 발효식품'),
-('2', '134511-0005523', '광주정밀기계', '410-81-23456', '29199', '이상훈', 178, 1995, '광주 광산구', '자동차 정밀 금형'),
-('3', '134511-0006634', '익산바이오텍', '403-81-34567', '21210', '박성민', 312, 2003, '전북 익산시', '동물용 의약품'),
-('4', '134511-0007745', '나주태양에너지', '411-81-45678', '28420', '정태양', 156, 2010, '전남 나주시', '태양광 모듈'),
-('5', '134511-0008856', '군산조선기자재', '404-81-56789', '31114', '최해양', 423, 1982, '전북 군산시', '선박 엔진 부품'),
-('6', '134511-0009967', '무안물류', '412-81-67890', '52102', '홍물류', 89, 1998, '전남 무안군', '항만 물류');
+('8001-3719240', '...', '엠케이전자', '135-81-06406', 'C26', '현기진', ...),
+('8000-7647330', '...', '동부건설', '824-87-03495', 'F41', '윤진오', ...),
+('4028-1234567', '...', '전북식품', '418-01-55362', 'C10', '강동구', ...),
+('6201-2345678', '...', '광주정밀기계', '415-02-96323', 'C29', '강성우', ...),
+('4301-3456789', '...', '삼성전자', '124-81-00998', 'C21', '전영현', ...),
+('6701-4567890', '...', '휴림로봇', '109-81-60401', 'D35', '김봉관', ...);
 
 -- Bank Relationships
 INSERT INTO corp_bank_relationship (corp_id, deposit_balance, loan_balance) VALUES

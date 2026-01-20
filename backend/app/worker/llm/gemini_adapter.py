@@ -35,7 +35,7 @@ class GeminiAdapter:
     - 검증/보완만 수행
     """
 
-    MODEL = "gemini/gemini-3-pro-preview"
+    MODEL = "gemini/gemini-1.5-pro"
     MAX_RETRIES = 2
     TIMEOUT = 30.0
 

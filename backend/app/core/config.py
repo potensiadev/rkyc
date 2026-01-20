@@ -89,12 +89,7 @@ class Settings(BaseSettings):
     # CORS (comma-separated string, parsed in main.py)
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000,https://rkyc.vercel.app"
 
-    # Security
-    SECRET_KEY: str = Field(..., min_length=32, description="Secret key for JWT")
-    ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-
-    # Rate Limiting
+    # Rate Limiting (for future implementation)
     RATE_LIMIT_PER_MINUTE: int = 60
 
     class Config:
