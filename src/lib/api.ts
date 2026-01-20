@@ -3,6 +3,12 @@
  * Backend API와 통신하는 클라이언트
  */
 
+import type {
+  ApiCorpProfileResponse,
+  ApiCorpProfileDetailResponse,
+  ApiProfileRefreshResponse,
+} from '@/types/profile';
+
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://rkyc-production.up.railway.app';
 
 // API 응답 타입 (Backend 스키마)
@@ -285,4 +291,29 @@ export interface SnapshotJson {
 // Corporation Snapshot 조회
 export async function getCorporationSnapshot(corpId: string): Promise<ApiSnapshot> {
   return fetchApi<ApiSnapshot>(`/api/v1/corporations/${corpId}/snapshot`);
+}
+
+// ============================================================
+// Session 14: Corp Profile API (PRD v1.2)
+// ============================================================
+
+// Corp Profile 조회 (기본)
+export async function getCorpProfile(corpId: string): Promise<ApiCorpProfileResponse> {
+  return fetchApi<ApiCorpProfileResponse>(`/api/v1/corporations/${corpId}/profile`);
+}
+
+// Corp Profile 상세 조회 (Audit Trail 포함)
+export async function getCorpProfileDetail(corpId: string): Promise<ApiCorpProfileDetailResponse> {
+  return fetchApi<ApiCorpProfileDetailResponse>(`/api/v1/corporations/${corpId}/profile/detail`);
+}
+
+// Corp Profile 갱신 트리거
+export async function refreshCorpProfile(corpId: string): Promise<ApiProfileRefreshResponse> {
+  const demoToken = import.meta.env.VITE_DEMO_TOKEN || 'demo';
+  return fetchApi<ApiProfileRefreshResponse>(`/api/v1/corporations/${corpId}/profile/refresh`, {
+    method: 'POST',
+    headers: {
+      'X-DEMO-TOKEN': demoToken,
+    },
+  });
 }

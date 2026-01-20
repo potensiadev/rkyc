@@ -9,99 +9,141 @@ body {
   display: flex; flex-direction: column;
 }
 .header {
-  background: #1C2833; padding: 18pt 30pt;
+  background: #E33737; padding: 14pt 25pt;
 }
 .header h1 {
-  color: #FFFFFF; font-size: 24pt; font-weight: bold; margin: 0;
+  color: #FFFFFF; font-size: 22pt; font-weight: bold; margin: 0;
+}
+.header-sub {
+  color: rgba(255,255,255,0.9); font-size: 10pt; margin: 2pt 0 0 0;
 }
 .content {
-  flex: 1; padding: 15pt 25pt;
-  display: flex; gap: 12pt;
+  flex: 1; padding: 12pt 25pt;
+  display: flex; gap: 15pt;
 }
-.signal-col {
-  flex: 1; border-radius: 6pt; padding: 12pt;
+.defense-layers {
+  flex: 1.2;
+  display: flex; flex-direction: column; gap: 8pt;
 }
-.direct { background: #FDEDEC; }
-.industry { background: #FEF5E7; }
-.environment { background: #E8F8F5; }
-.signal-title-direct { color: #E33737; font-size: 15pt; font-weight: bold; margin: 0 0 8pt 0; }
-.signal-title-industry { color: #F39C12; font-size: 15pt; font-weight: bold; margin: 0 0 8pt 0; }
-.signal-title-env { color: #27AE60; font-size: 15pt; font-weight: bold; margin: 0 0 8pt 0; }
-.signal-desc {
-  color: #2E4053; font-size: 10pt; margin: 0 0 8pt 0;
+.layer {
+  display: flex; align-items: center; gap: 10pt;
+  padding: 10pt 12pt; border-radius: 5pt;
 }
-.event-list {
-  background: #FFFFFF; padding: 8pt; border-radius: 4pt;
+.layer-1 { background: #E8F8F5; }
+.layer-2 { background: #FEF9E7; }
+.layer-3 { background: #EBF5FB; }
+.layer-4 { background: #F5EEF8; }
+.layer-num {
+  width: 36pt; height: 36pt; background: #0D1117; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
 }
-.event-item {
-  color: #1C2833; font-size: 9pt; margin: 3pt 0;
+.layer-num p {
+  color: #FFFFFF; font-size: 12pt; font-weight: bold; margin: 0;
 }
-.impact-row {
-  display: flex; gap: 5pt; margin-top: 8pt;
+.layer-content h3 {
+  color: #1C2833; font-size: 12pt; font-weight: bold; margin: 0;
 }
-.impact-badge {
-  flex: 1; padding: 5pt; text-align: center; border-radius: 3pt;
+.layer-content p {
+  color: #2E4053; font-size: 9pt; margin: 3pt 0 0 0;
 }
-.risk { background: #E33737; }
-.opp { background: #27AE60; }
-.neutral { background: #95A5A6; }
-.impact-badge p {
-  color: #FFFFFF; font-size: 9pt; font-weight: bold; margin: 0;
+.provenance {
+  flex: 0.8; background: #0D1117; padding: 12pt; border-radius: 6pt;
+}
+.prov-title {
+  color: #E33737; font-size: 12pt; font-weight: bold; margin: 0 0 10pt 0;
+}
+.prov-item {
+  background: #1C2833; padding: 6pt 10pt; margin-bottom: 5pt; border-radius: 4pt;
+}
+.prov-item p {
+  color: #FFFFFF; font-size: 9pt; margin: 0;
+}
+.prov-item span {
+  color: #AAB7B8; font-size: 8pt; display: block; margin-top: 2pt;
+}
+.confidence {
+  margin-top: 10pt; padding-top: 10pt; border-top: 1pt solid #2E4053;
+}
+.conf-title {
+  color: #F39C12; font-size: 10pt; font-weight: bold; margin: 0 0 6pt 0;
+}
+.conf-row {
+  display: flex; gap: 5pt; margin-bottom: 4pt;
+}
+.conf-badge {
+  padding: 3pt 8pt; border-radius: 3pt; text-align: center;
+}
+.conf-high { background: #27AE60; }
+.conf-med { background: #F39C12; }
+.conf-low { background: #E33737; }
+.conf-badge p {
+  color: #FFFFFF; font-size: 8pt; margin: 0;
 }
 </style>
 </head>
 <body>
 <div class="header">
-  <h1>Signal Types and Event Classification</h1>
+  <h1>Anti-Hallucination Defense</h1>
+  <p class="header-sub">4-Layer Fact Verification System</p>
 </div>
 <div class="content">
-  <div class="signal-col direct">
-    <p class="signal-title-direct">DIRECT</p>
-    <p class="signal-desc">기업 내부 직접 변동 시그널</p>
-    <div class="event-list">
-      <p class="event-item">KYC_REFRESH</p>
-      <p class="event-item">INTERNAL_RISK_GRADE_CHANGE</p>
-      <p class="event-item">OVERDUE_FLAG_ON</p>
-      <p class="event-item">LOAN_EXPOSURE_CHANGE</p>
-      <p class="event-item">COLLATERAL_CHANGE</p>
-      <p class="event-item">OWNERSHIP_CHANGE</p>
-      <p class="event-item">GOVERNANCE_CHANGE</p>
-      <p class="event-item">FINANCIAL_STATEMENT_UPDATE</p>
+  <div class="defense-layers">
+    <div class="layer layer-1">
+      <div class="layer-num"><p>L1</p></div>
+      <div class="layer-content">
+        <h3>Source Verification</h3>
+        <p>Domain Credibility Scorer (T1: 공시/IR → T4: 블로그)</p>
+      </div>
     </div>
-    <div class="impact-row">
-      <div class="impact-badge risk"><p>RISK</p></div>
-      <div class="impact-badge opp"><p>OPP</p></div>
+    <div class="layer layer-2">
+      <div class="layer-num"><p>L2</p></div>
+      <div class="layer-content">
+        <h3>Extraction Guardrails</h3>
+        <p>"Return null if uncertain" Policy, Schema Compliance</p>
+      </div>
     </div>
-  </div>
-  <div class="signal-col industry">
-    <p class="signal-title-industry">INDUSTRY</p>
-    <p class="signal-desc">업종/산업 전반 영향 시그널</p>
-    <div class="event-list">
-      <p class="event-item">INDUSTRY_SHOCK</p>
-      <p class="event-item">산업 규제 변화</p>
-      <p class="event-item">경쟁사 동향</p>
-      <p class="event-item">원자재 가격 변동</p>
-      <p class="event-item">수요/공급 변화</p>
+    <div class="layer layer-3">
+      <div class="layer-num"><p>L3</p></div>
+      <div class="layer-content">
+        <h3>Cross-Validation</h3>
+        <p>Gemini Validator, Jaccard Similarity >= 0.7, Discrepancy Flag</p>
+      </div>
     </div>
-    <div class="impact-row">
-      <div class="impact-badge risk"><p>HIGH</p></div>
-      <div class="impact-badge neutral"><p>MED</p></div>
-      <div class="impact-badge opp"><p>LOW</p></div>
+    <div class="layer layer-4">
+      <div class="layer-num"><p>L4</p></div>
+      <div class="layer-content">
+        <h3>Audit Trail</h3>
+        <p>field_provenance JSON, LLM Audit Log, Trace ID</p>
+      </div>
     </div>
   </div>
-  <div class="signal-col environment">
-    <p class="signal-title-env">ENVIRONMENT</p>
-    <p class="signal-desc">거시환경/정책 시그널</p>
-    <div class="event-list">
-      <p class="event-item">POLICY_REGULATION_CHANGE</p>
-      <p class="event-item">지정학적 리스크</p>
-      <p class="event-item">환율/금리 변동</p>
-      <p class="event-item">무역 규제</p>
-      <p class="event-item">기후/에너지 정책</p>
+  <div class="provenance">
+    <p class="prov-title">Provenance Tracking</p>
+    <div class="prov-item">
+      <p>source_url</p>
+      <span>출처 URL (필수)</span>
     </div>
-    <div class="impact-row">
-      <div class="impact-badge risk"><p>RISK</p></div>
-      <div class="impact-badge neutral"><p>NEUTRAL</p></div>
+    <div class="prov-item">
+      <p>excerpt</p>
+      <span>원문 발췌 (50자 이내)</span>
+    </div>
+    <div class="prov-item">
+      <p>confidence</p>
+      <span>HIGH / MED / LOW</span>
+    </div>
+    <div class="prov-item">
+      <p>retrieved_at</p>
+      <span>검색 시점 타임스탬프</span>
+    </div>
+    <div class="confidence">
+      <p class="conf-title">Confidence Level</p>
+      <div class="conf-row">
+        <div class="conf-badge conf-high"><p>HIGH</p></div>
+        <div class="conf-badge conf-med"><p>MED</p></div>
+        <div class="conf-badge conf-low"><p>LOW</p></div>
+      </div>
+      <p style="color:#AAB7B8;font-size:8pt;margin-top:5pt;">공시/IR > 뉴스 > 추정</p>
     </div>
   </div>
 </div>

@@ -1,9 +1,15 @@
 """
 Embedding Service
-OpenAI text-embedding-3-small based vector generation
+OpenAI text-embedding-3-large based vector generation
+
+v1.1 변경사항:
+- Thread-safe singleton 패턴 적용 (P0-001)
+- 임베딩 차원 검증 추가 (P0-002)
+- 배치 실패 상세 로깅 추가
 """
 
 import logging
+import threading
 import time
 from typing import Optional
 
@@ -12,6 +18,9 @@ import openai
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+# Thread-safe singleton lock (P0-001 fix)
+_embedding_service_lock = threading.Lock()
 
 
 class EmbeddingError(Exception):
@@ -180,11 +189,33 @@ class EmbeddingService:
                 elapsed_ms = int((time.time() - start_time) * 1000)
                 logger.info(f"Generated {len(valid_texts)} embeddings in {elapsed_ms}ms")
 
-                # Map results back to original indices
+                # Map results back to original indices with dimension validation (P0-002 fix)
                 results = [None] * len(texts)
+                failed_indices = []
+
                 for idx, embedding_data in enumerate(response.data):
                     original_idx = valid_indices[idx]
-                    results[original_idx] = embedding_data.embedding
+                    embedding = embedding_data.embedding
+
+                    # Validate embedding dimension (P0-002)
+                    if embedding and len(embedding) != self.DIMENSION:
+                        logger.error(
+                            f"Embedding dimension mismatch at index {original_idx}: "
+                            f"expected {self.DIMENSION}, got {len(embedding)}"
+                        )
+                        failed_indices.append(original_idx)
+                        continue
+
+                    results[original_idx] = embedding
+
+                # Log failed embeddings for debugging (P0-002)
+                none_count = sum(1 for r in results if r is None)
+                if none_count > 0:
+                    logger.warning(
+                        f"Batch embedding: {none_count}/{len(texts)} items returned None "
+                        f"(empty inputs: {len(texts) - len(valid_texts)}, "
+                        f"dimension errors: {len(failed_indices)})"
+                    )
 
                 return results
 
@@ -274,8 +305,33 @@ _embedding_service: Optional[EmbeddingService] = None
 
 
 def get_embedding_service() -> EmbeddingService:
-    """Get singleton embedding service instance"""
+    """
+    Get singleton embedding service instance (thread-safe).
+
+    P0-001 fix: Double-checked locking pattern for thread safety
+    in Celery multi-worker environment.
+    """
     global _embedding_service
-    if _embedding_service is None:
-        _embedding_service = EmbeddingService()
+
+    # First check without lock (fast path)
+    if _embedding_service is not None:
+        return _embedding_service
+
+    # Acquire lock for initialization
+    with _embedding_service_lock:
+        # Double-check after acquiring lock
+        if _embedding_service is None:
+            _embedding_service = EmbeddingService()
+            logger.info("EmbeddingService singleton initialized")
+
     return _embedding_service
+
+
+def reset_embedding_service() -> None:
+    """
+    Reset singleton instance (for testing purposes).
+    """
+    global _embedding_service
+    with _embedding_service_lock:
+        _embedding_service = None
+        logger.info("EmbeddingService singleton reset")

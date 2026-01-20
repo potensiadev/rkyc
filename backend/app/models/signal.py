@@ -69,8 +69,13 @@ class SignalStatus(str, enum.Enum):
 
 class SignalIndex(Base):
     """
-    시그널 인덱스 테이블 (Dashboard 전용, 조인 금지!)
+    시그널 인덱스 테이블 (Dashboard 전용)
     PRD 14.7.3 - rkyc_signal_index
+
+    Migration v11 변경:
+    - 상태 필드(signal_status, reviewed_at, dismissed_at, dismiss_reason) 제거
+    - 이 테이블은 생성 후 불변(immutable)
+    - 상태 정보는 rkyc_signal 테이블에서 JOIN으로 조회
     """
 
     __tablename__ = "rkyc_signal_index"
@@ -78,7 +83,7 @@ class SignalIndex(Base):
     # Primary Key
     index_id = Column(PGUUID(as_uuid=True), primary_key=True)
 
-    # Denormalized fields (조인 금지!)
+    # Denormalized fields
     corp_id = Column(String(20), nullable=False)
     corp_name = Column(String(200), nullable=False)
     industry_code = Column(String(10), nullable=False)
@@ -100,18 +105,10 @@ class SignalIndex(Base):
     last_updated_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
     created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
 
-    # Foreign key reference (for detail lookup only)
+    # Foreign key reference (for detail lookup and status join)
     signal_id = Column(PGUUID(as_uuid=True), nullable=False)
 
-    # Status fields (Session 5)
-    signal_status = Column(
-        SQLEnum(SignalStatus, name="signal_status_enum"),
-        default=SignalStatus.NEW,
-        nullable=True,
-    )
-    reviewed_at = Column(TIMESTAMP(timezone=True), nullable=True)
-    dismissed_at = Column(TIMESTAMP(timezone=True), nullable=True)
-    dismiss_reason = Column(Text, nullable=True)
+    # v11: 상태 필드 제거됨 - 상태는 rkyc_signal 테이블에서 JOIN으로 조회
 
     def __repr__(self):
         return f"<SignalIndex(corp_name='{self.corp_name}', event_type='{self.event_type}')>"

@@ -1,6 +1,12 @@
 """
 LLM Service with Fallback Chain
 Multi-provider LLM integration using litellm
+
+v1.1 변경사항:
+- P0-004 fix: 예외 처리 강화
+  - response.choices 검증 추가
+  - API 키 누락 시 명확한 에러
+  - timeout 예외 분류 추가
 """
 
 import json
@@ -18,12 +24,14 @@ from app.worker.llm.exceptions import (
     ContentPolicyError,
     RateLimitError,
     InvalidResponseError,
+    TimeoutError as LLMTimeoutError,
+    NoAPIKeyConfiguredError,
 )
 
 logger = logging.getLogger(__name__)
 
-# Configure litellm
-litellm.set_verbose = False  # Set to True for debugging
+# Configure litellm from settings
+litellm.set_verbose = settings.LLM_VERBOSE
 
 
 class LLMService:
@@ -107,13 +115,22 @@ class LLMService:
         return True
 
     def _classify_error(self, error: Exception, provider: str) -> LLMError:
-        """Classify exception into specific LLM error type"""
+        """
+        Classify exception into specific LLM error type.
+
+        P0-004 fix: Added timeout and connection error classification.
+        """
         error_str = str(error).lower()
+        error_type = type(error).__name__.lower()
 
         if "content_policy" in error_str or "safety" in error_str:
             return ContentPolicyError(str(error), provider)
         elif "rate_limit" in error_str or "429" in error_str:
             return RateLimitError(str(error), provider)
+        elif "timeout" in error_str or "timeout" in error_type:
+            return LLMTimeoutError(str(error), provider)
+        elif "connection" in error_str or "network" in error_str:
+            return LLMError(f"Connection error: {error}", provider)
         else:
             return LLMError(str(error), provider)
 
@@ -140,6 +157,8 @@ class LLMService:
             AllProvidersFailedError: When all providers fail
         """
         errors = []
+        models_tried = 0
+        models_skipped_no_key = 0
 
         for model_config in self.MODELS:
             model = model_config["model"]
@@ -149,7 +168,10 @@ class LLMService:
             api_key = self._get_api_key(provider)
             if not api_key:
                 logger.warning(f"Skipping {provider}: No API key configured")
+                models_skipped_no_key += 1
                 continue
+
+            models_tried += 1
 
             # Try this model with retries
             for attempt in range(self.MAX_RETRIES):
@@ -174,19 +196,51 @@ class LLMService:
                     # Make the call
                     response = completion(**kwargs)
 
+                    # P0-004 fix: Validate response structure before accessing
+                    if not response or not hasattr(response, 'choices'):
+                        raise InvalidResponseError(
+                            message="LLM response missing 'choices' attribute",
+                            raw_response=str(response)[:200] if response else "None",
+                        )
+
+                    if not response.choices or len(response.choices) == 0:
+                        raise InvalidResponseError(
+                            message="LLM response has empty 'choices' array",
+                            raw_response=str(response)[:200],
+                        )
+
+                    if not hasattr(response.choices[0], 'message'):
+                        raise InvalidResponseError(
+                            message="LLM response choice missing 'message' attribute",
+                            raw_response=str(response.choices[0])[:200],
+                        )
+
                     content = response.choices[0].message.content
 
                     # Check for empty response
                     if not content or not content.strip():
-                        raise ValueError("Empty response from LLM")
+                        raise InvalidResponseError(
+                            message="Empty content in LLM response",
+                            raw_response="[empty]",
+                        )
 
                     logger.info(f"Successfully got response from {model}")
 
                     return content
 
+                except (AllProvidersFailedError, ContentPolicyError, NoAPIKeyConfiguredError):
+                    # Re-raise intentional exceptions without classification
+                    raise
+
                 except Exception as e:
                     classified_error = self._classify_error(e, provider)
-                    errors.append({"model": model, "error": str(e)})
+                    errors.append({
+                        "model": model,
+                        "provider": provider,
+                        "attempt": attempt + 1,
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                    })
 
                     logger.warning(f"{model} failed (attempt {attempt + 1}): {e}")
 
@@ -207,9 +261,16 @@ class LLMService:
                     logger.info(f"Retrying in {delay:.1f}s...")
                     time.sleep(delay)
 
+        # P0-004 fix: Check if all models were skipped due to missing API keys
+        if models_tried == 0 and models_skipped_no_key > 0:
+            raise NoAPIKeyConfiguredError(
+                message=f"No API keys configured for any of {models_skipped_no_key} LLM providers",
+                providers=[m["provider"] for m in self.MODELS],
+            )
+
         # All models exhausted
         raise AllProvidersFailedError(
-            message=f"All LLM providers failed after {len(errors)} attempts",
+            message=f"All LLM providers failed after {len(errors)} attempts across {models_tried} models",
             errors=errors,
         )
 
@@ -427,7 +488,35 @@ class LLMService:
                     # Make the call
                     response = completion(**kwargs)
 
+                    # P0-006 fix: Validate response structure before accessing
+                    # (Same validation as call_with_fallback for consistency)
+                    if not response or not hasattr(response, 'choices'):
+                        raise InvalidResponseError(
+                            message="Vision LLM response missing 'choices' attribute",
+                            raw_response=str(response)[:200] if response else "None",
+                        )
+
+                    if not response.choices or len(response.choices) == 0:
+                        raise InvalidResponseError(
+                            message="Vision LLM response has empty 'choices' array",
+                            raw_response=str(response)[:200],
+                        )
+
+                    if not hasattr(response.choices[0], 'message'):
+                        raise InvalidResponseError(
+                            message="Vision LLM response choice missing 'message' attribute",
+                            raw_response=str(response.choices[0])[:200],
+                        )
+
                     content = response.choices[0].message.content
+
+                    # Check for empty response
+                    if not content or not content.strip():
+                        raise InvalidResponseError(
+                            message="Empty content in Vision LLM response",
+                            raw_response="[empty]",
+                        )
+
                     logger.info(f"Successfully got vision response from {model}")
 
                     return content

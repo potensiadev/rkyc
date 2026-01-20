@@ -25,10 +25,70 @@ from app.schemas.profile import (
     FieldProvenanceResponse,
     ConfidenceLevelEnum,
     ProfileStatusEnum,
+    ExecutiveSchema,
+    FinancialSnapshotSchema,
+    CompetitorSchema,
+    MacroFactorSchema,
+    SupplyChainSchema,
+    OverseasBusinessSchema,
+    OverseasSubsidiarySchema,
+    ShareholderSchema,
+    ConsensusMetadataSchema,
 )
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+def _parse_supply_chain(data: dict | None) -> SupplyChainSchema:
+    """Parse supply_chain JSONB to schema."""
+    if not data:
+        return SupplyChainSchema()
+    return SupplyChainSchema(
+        key_suppliers=data.get("key_suppliers", []),
+        supplier_countries=data.get("supplier_countries", {}),
+        single_source_risk=data.get("single_source_risk", []),
+        material_import_ratio_pct=data.get("material_import_ratio_pct"),
+    )
+
+
+def _parse_overseas_business(data: dict | None) -> OverseasBusinessSchema:
+    """Parse overseas_business JSONB to schema."""
+    if not data:
+        return OverseasBusinessSchema()
+    subsidiaries = [
+        OverseasSubsidiarySchema(
+            name=s.get("name", ""),
+            country=s.get("country", ""),
+            business_type=s.get("business_type"),
+            ownership_pct=s.get("ownership_pct"),
+        )
+        for s in data.get("subsidiaries", [])
+    ]
+    return OverseasBusinessSchema(
+        subsidiaries=subsidiaries,
+        manufacturing_countries=data.get("manufacturing_countries", []),
+    )
+
+
+def _parse_consensus_metadata(data: dict | None) -> ConsensusMetadataSchema:
+    """Parse consensus_metadata JSONB to schema."""
+    if not data:
+        return ConsensusMetadataSchema()
+    return ConsensusMetadataSchema(
+        consensus_at=datetime.fromisoformat(data["consensus_at"]) if data.get("consensus_at") else None,
+        perplexity_success=data.get("perplexity_success", False),
+        gemini_success=data.get("gemini_success", False),
+        claude_success=data.get("claude_success", False),
+        total_fields=data.get("total_fields", 0),
+        matched_fields=data.get("matched_fields", 0),
+        discrepancy_fields=data.get("discrepancy_fields", 0),
+        enriched_fields=data.get("enriched_fields", 0),
+        overall_confidence=data.get("overall_confidence", "LOW"),
+        fallback_layer=data.get("fallback_layer", 0),
+        retry_count=data.get("retry_count", 0),
+        error_messages=data.get("error_messages", []),
+    )
 
 
 @router.get(
@@ -36,10 +96,15 @@ router = APIRouter()
     response_model=CorpProfileResponse,
     summary="기업 프로파일 조회",
     description="""
-    기업의 비즈니스 프로파일을 조회합니다.
+    기업의 비즈니스 프로파일을 조회합니다. (PRD v1.2)
 
     - 캐시된 프로파일이 있고 TTL 내이면 캐시 반환
     - TTL 만료 또는 없으면 is_expired=true 반환
+
+    PRD v1.2 확장 필드:
+    - supply_chain: 공급망 정보 (key_suppliers, supplier_countries, single_source_risk)
+    - overseas_business: 해외 사업 (subsidiaries, manufacturing_countries)
+    - consensus_metadata: Consensus 처리 메타데이터
 
     Anti-Hallucination 정보:
     - profile_confidence: 전체 신뢰도
@@ -56,8 +121,11 @@ async def get_corp_profile(
     query = text("""
         SELECT
             profile_id, corp_id, business_summary, revenue_krw, export_ratio_pct,
+            ceo_name, employee_count, founded_year, headquarters, executives,
+            industry_overview, business_model, financial_history,
             country_exposure, key_materials, key_customers, overseas_operations,
-            profile_confidence, field_confidences, source_urls,
+            competitors, macro_factors, supply_chain, overseas_business, shareholders,
+            consensus_metadata, profile_confidence, field_confidences, source_urls,
             is_fallback, search_failed, validation_warnings, status,
             fetched_at, expires_at,
             CASE WHEN expires_at < NOW() THEN true ELSE false END as is_expired
@@ -75,21 +143,45 @@ async def get_corp_profile(
             detail=f"Profile not found for corp_id: {corp_id}. Run analysis to generate profile.",
         )
 
+    # Parse JSONB fields to schemas
+    executives = [ExecutiveSchema(**e) for e in (row.executives or [])]
+    financial_history = [FinancialSnapshotSchema(**f) for f in (row.financial_history or [])]
+    competitors = [CompetitorSchema(**c) for c in (row.competitors or [])]
+    macro_factors = [MacroFactorSchema(**m) for m in (row.macro_factors or [])]
+    shareholders = [ShareholderSchema(**s) for s in (row.shareholders or [])]
+    supply_chain = _parse_supply_chain(row.supply_chain)
+    overseas_business = _parse_overseas_business(row.overseas_business)
+    consensus_metadata = _parse_consensus_metadata(row.consensus_metadata)
+
     return CorpProfileResponse(
         profile_id=row.profile_id,
         corp_id=row.corp_id,
         business_summary=row.business_summary,
+        ceo_name=row.ceo_name,
+        employee_count=row.employee_count,
+        founded_year=row.founded_year,
+        headquarters=row.headquarters,
+        executives=executives,
+        industry_overview=row.industry_overview,
+        business_model=row.business_model,
         revenue_krw=row.revenue_krw,
         export_ratio_pct=row.export_ratio_pct,
+        financial_history=financial_history,
         country_exposure=row.country_exposure or {},
         key_materials=list(row.key_materials or []),
         key_customers=list(row.key_customers or []),
         overseas_operations=list(row.overseas_operations or []),
-        profile_confidence=ConfidenceLevelEnum(row.profile_confidence),
+        competitors=competitors,
+        macro_factors=macro_factors,
+        supply_chain=supply_chain,
+        overseas_business=overseas_business,
+        shareholders=shareholders,
+        consensus_metadata=consensus_metadata,
+        profile_confidence=ConfidenceLevelEnum(row.profile_confidence or "LOW"),
         field_confidences=row.field_confidences or {},
         source_urls=list(row.source_urls or []),
-        is_fallback=row.is_fallback,
-        search_failed=row.search_failed,
+        is_fallback=row.is_fallback or False,
+        search_failed=row.search_failed or False,
         validation_warnings=list(row.validation_warnings or []),
         status=ProfileStatusEnum(row.status) if row.status else ProfileStatusEnum.ACTIVE,
         fetched_at=row.fetched_at,
@@ -135,6 +227,16 @@ async def get_corp_profile_detail(
             detail=f"Profile not found for corp_id: {corp_id}",
         )
 
+    # Parse JSONB fields to schemas
+    executives = [ExecutiveSchema(**e) for e in (row.executives or [])]
+    financial_history = [FinancialSnapshotSchema(**f) for f in (row.financial_history or [])]
+    competitors = [CompetitorSchema(**c) for c in (row.competitors or [])]
+    macro_factors = [MacroFactorSchema(**m) for m in (row.macro_factors or [])]
+    shareholders = [ShareholderSchema(**s) for s in (row.shareholders or [])]
+    supply_chain = _parse_supply_chain(row.supply_chain)
+    overseas_business = _parse_overseas_business(row.overseas_business)
+    consensus_metadata = _parse_consensus_metadata(row.consensus_metadata)
+
     # Parse field_provenance into response schema
     field_provenance = {}
     raw_provenance = row.field_provenance or {}
@@ -150,17 +252,31 @@ async def get_corp_profile_detail(
         profile_id=row.profile_id,
         corp_id=row.corp_id,
         business_summary=row.business_summary,
+        ceo_name=row.ceo_name,
+        employee_count=row.employee_count,
+        founded_year=row.founded_year,
+        headquarters=row.headquarters,
+        executives=executives,
+        industry_overview=row.industry_overview,
+        business_model=row.business_model,
         revenue_krw=row.revenue_krw,
         export_ratio_pct=row.export_ratio_pct,
+        financial_history=financial_history,
         country_exposure=row.country_exposure or {},
         key_materials=list(row.key_materials or []),
         key_customers=list(row.key_customers or []),
         overseas_operations=list(row.overseas_operations or []),
-        profile_confidence=ConfidenceLevelEnum(row.profile_confidence),
+        competitors=competitors,
+        macro_factors=macro_factors,
+        supply_chain=supply_chain,
+        overseas_business=overseas_business,
+        shareholders=shareholders,
+        consensus_metadata=consensus_metadata,
+        profile_confidence=ConfidenceLevelEnum(row.profile_confidence or "LOW"),
         field_confidences=row.field_confidences or {},
         source_urls=list(row.source_urls or []),
-        is_fallback=row.is_fallback,
-        search_failed=row.search_failed,
+        is_fallback=row.is_fallback or False,
+        search_failed=row.search_failed or False,
         validation_warnings=list(row.validation_warnings or []),
         status=ProfileStatusEnum(row.status) if row.status else ProfileStatusEnum.ACTIVE,
         fetched_at=row.fetched_at,

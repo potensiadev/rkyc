@@ -1272,6 +1272,97 @@ execute()
       └── 최소 프로필 + 경고 플래그
 ```
 
+### 세션 14 (2026-01-20) - Frontend Corp Profile UI 구현 ✅
+**목표**: Corp Profile Frontend 구현 (Option B: Full Frontend)
+
+**PM 결정 사항**: Frontend Gap이 Production 블로커로 확인됨 → Full 구현 선택
+
+**완료 항목**:
+
+#### 1. TypeScript 타입 정의
+- `src/types/profile.ts` 신규 생성
+- 19개 주요 타입 정의:
+  - `CorpProfile`: 메인 인터페이스
+  - `SupplyChainSchema`: 공급망 정보
+  - `OverseasBusinessSchema`: 해외 사업
+  - `ConsensusMetadataSchema`: Consensus 메타데이터
+  - `ShareholderSchema`, `CompetitorSchema`, `MacroFactorSchema` 등
+
+#### 2. API 클라이언트 확장
+- `src/lib/api.ts` 업데이트
+- 신규 함수:
+  - `getCorpProfile(corpId)` - 기본 프로필 조회
+  - `getCorpProfileDetail(corpId)` - 상세 조회 (Audit Trail 포함)
+  - `refreshCorpProfile(corpId)` - 갱신 트리거
+
+#### 3. TanStack Query Hooks
+- `src/hooks/useApi.ts` 업데이트
+- 신규 훅:
+  - `useCorpProfile(corpId)` - 프로필 조회
+  - `useCorpProfileDetail(corpId)` - 상세 조회
+  - `useRefreshCorpProfile()` - 갱신 mutation
+
+#### 4. CorporateDetailPage Profile 섹션 UI
+- 전체적인 "외부 정보 프로필" 섹션 추가
+- 표시 항목:
+  - 사업 개요 (business_summary)
+  - 기본 정보 (매출, 수출비중, 임직원수)
+  - 국가별 노출 (country_exposure)
+  - 공급망 정보 (supply_chain)
+  - 해외 사업 (overseas_business)
+  - 주요 원자재/고객사 (key_materials, key_customers)
+  - 경쟁사/거시 요인 (competitors, macro_factors)
+  - 주주 정보 (shareholders)
+  - 출처 URL 및 메타데이터
+- **정보 갱신 버튼**: RefreshCw 아이콘 + 로딩 상태
+- **Confidence 배지**: HIGH/MED/LOW/NONE/CACHED/STALE 색상 구분
+
+#### 5. Backend API 스키마 확장 (PRD v1.2)
+- `backend/app/schemas/profile.py` 업데이트
+- 신규 스키마:
+  - `ExecutiveSchema`, `FinancialSnapshotSchema`
+  - `CompetitorSchema`, `MacroFactorSchema`
+  - `SupplyChainSchema`, `OverseasBusinessSchema`, `OverseasSubsidiarySchema`
+  - `ShareholderSchema`, `ConsensusMetadataSchema`
+- `ConfidenceLevelEnum`에 NONE, CACHED, STALE 추가
+
+#### 6. Backend API 엔드포인트 확장
+- `backend/app/api/v1/endpoints/profiles.py` 업데이트
+- 신규 헬퍼 함수:
+  - `_parse_supply_chain()` - JSONB → Schema 변환
+  - `_parse_overseas_business()` - JSONB → Schema 변환
+  - `_parse_consensus_metadata()` - JSONB → Schema 변환
+- SQL 쿼리 확장: 19개 PRD v1.2 필드 조회
+
+**신규 파일**:
+```
+src/types/profile.ts
+```
+
+**수정된 파일**:
+```
+src/lib/api.ts
+src/hooks/useApi.ts
+src/pages/CorporateDetailPage.tsx
+backend/app/schemas/profile.py
+backend/app/api/v1/endpoints/profiles.py
+```
+
+**UI 구성**:
+```
+외부 정보 프로필 섹션
+├── 헤더 (신뢰도 배지 + 정보 갱신 버튼)
+├── 사업 개요 (business_summary)
+├── 기본 정보 그리드 (매출, 수출비중, 임직원수, 비즈니스 모델)
+├── 국가별 노출 (칩 형태)
+├── 공급망 정보 (공급사, 국가 비중, 단일 조달처 위험)
+├── 해외 사업 (해외 법인, 생산 국가)
+├── 주요 원자재/고객사 (2컬럼 그리드)
+├── 경쟁사/거시 요인 (2컬럼 그리드, 영향별 색상)
+├── 주주 정보 (칩 형태)
+└── 출처 & 메타데이터 (URL 링크, 갱신일, 만료일, Fallback 플래그)
+```
+
 ---
 
 ## 참고 사항
@@ -1295,4 +1386,4 @@ execute()
 - **Circuit Breaker**: Perplexity/Gemini 3회/5분, Claude 2회/10분
 
 ---
-*Last Updated: 2026-01-19 (세션 13 완료 - MultiAgentOrchestrator 구현 및 Pipeline 통합)*
+*Last Updated: 2026-01-20 (세션 14 완료 - Frontend Corp Profile UI 구현)*

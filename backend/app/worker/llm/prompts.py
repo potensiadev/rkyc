@@ -165,6 +165,112 @@ INSIGHT_GENERATION_PROMPT = """## 경영진 브리핑 요약 생성
 # Helper Functions
 # =============================================================================
 
+import re
+import logging
+
+_prompt_logger = logging.getLogger(__name__)
+
+# P0-005 fix: 프롬프트 인젝션 방어를 위한 위험 패턴
+DANGEROUS_PATTERNS = [
+    # 시스템 명령 우회 시도
+    r'(?i)\b(ignore|forget|disregard)\s+(all\s+)?(previous|above|prior)',
+    r'(?i)\b(new\s+)?(system|instructions?|rules?)\s*:',
+    r'(?i)\byou\s+are\s+(now|a)\b',
+    r'(?i)\bpretend\s+(to\s+be|you\s+are)\b',
+    r'(?i)\bact\s+as\s+(if|a)\b',
+    r'(?i)\brole\s*:\s*',
+    # JSON 조작 시도
+    r'(?i)"\s*:\s*"[^"]*ignore',
+    r'(?i)```\s*(python|javascript|bash|sh|cmd)',
+    # 출력 조작 시도
+    r'(?i)\balways\s+(output|return|respond)',
+    r'(?i)\b(high|critical)\s+risk\s+regardless',
+    r'(?i)\bconfidence\s*:\s*["\']?high',
+]
+
+COMPILED_PATTERNS = [re.compile(p) for p in DANGEROUS_PATTERNS]
+
+
+def sanitize_input(text: str, field_name: str = "input", max_length: int = 10000) -> str:
+    """
+    Sanitize user input to prevent prompt injection attacks.
+
+    P0-005 fix: 프롬프트 인젝션 방어
+
+    Args:
+        text: Input text to sanitize
+        field_name: Name of the field for logging
+        max_length: Maximum allowed length
+
+    Returns:
+        Sanitized text
+    """
+    if not text:
+        return ""
+
+    # Convert to string and strip
+    text = str(text).strip()
+
+    # Truncate if too long
+    if len(text) > max_length:
+        _prompt_logger.warning(
+            f"[Sanitize] {field_name} truncated from {len(text)} to {max_length} chars"
+        )
+        text = text[:max_length]
+
+    # Check for dangerous patterns
+    for i, pattern in enumerate(COMPILED_PATTERNS):
+        if pattern.search(text):
+            _prompt_logger.warning(
+                f"[Sanitize] Suspicious pattern detected in {field_name}: pattern #{i}"
+            )
+            # Replace the matched pattern with [REDACTED]
+            text = pattern.sub('[REDACTED]', text)
+
+    return text
+
+
+def sanitize_json_string(json_str: str, field_name: str = "json") -> str:
+    """
+    Sanitize JSON string for prompt injection.
+
+    P0-005 fix: JSON 데이터 내 인젝션 방어
+
+    Args:
+        json_str: JSON string to sanitize
+        field_name: Name of the field for logging
+
+    Returns:
+        Sanitized JSON string
+    """
+    if not json_str:
+        return "{}"
+
+    # Limit total length
+    max_json_length = 50000
+    if len(json_str) > max_json_length:
+        _prompt_logger.warning(
+            f"[Sanitize] {field_name} JSON truncated from {len(json_str)} to {max_json_length} chars"
+        )
+        # Try to truncate at a reasonable point
+        json_str = json_str[:max_json_length]
+        # Find last complete object/array
+        last_brace = max(json_str.rfind('}'), json_str.rfind(']'))
+        if last_brace > 0:
+            json_str = json_str[:last_brace + 1]
+
+    # Check for dangerous patterns in JSON
+    for i, pattern in enumerate(COMPILED_PATTERNS):
+        if pattern.search(json_str):
+            _prompt_logger.warning(
+                f"[Sanitize] Suspicious pattern in {field_name} JSON: pattern #{i}"
+            )
+            # For JSON, we log but don't modify (might break structure)
+            # The validation happens at signal output level
+
+    return json_str
+
+
 def format_signal_extraction_prompt(
     corp_name: str,
     corp_reg_no: str,
@@ -173,14 +279,26 @@ def format_signal_extraction_prompt(
     snapshot_json: str,
     external_events: str,
 ) -> str:
-    """Format the signal extraction user prompt with context data"""
+    """
+    Format the signal extraction user prompt with context data.
+
+    P0-005 fix: 모든 입력값 sanitization 적용
+    """
+    # Sanitize all inputs
+    safe_corp_name = sanitize_input(corp_name, "corp_name", max_length=200)
+    safe_corp_reg_no = sanitize_input(corp_reg_no, "corp_reg_no", max_length=50)
+    safe_industry_code = sanitize_input(industry_code, "industry_code", max_length=20)
+    safe_industry_name = sanitize_input(industry_name, "industry_name", max_length=100)
+    safe_snapshot = sanitize_json_string(snapshot_json, "snapshot_json")
+    safe_events = sanitize_json_string(external_events, "external_events")
+
     return SIGNAL_EXTRACTION_USER_TEMPLATE.format(
-        corp_name=corp_name,
-        corp_reg_no=corp_reg_no or "N/A",
-        industry_code=industry_code,
-        industry_name=industry_name,
-        snapshot_json=snapshot_json,
-        external_events=external_events,
+        corp_name=safe_corp_name,
+        corp_reg_no=safe_corp_reg_no or "N/A",
+        industry_code=safe_industry_code,
+        industry_name=safe_industry_name,
+        snapshot_json=safe_snapshot,
+        external_events=safe_events,
     )
 
 

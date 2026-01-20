@@ -9,105 +9,140 @@ body {
   display: flex; flex-direction: column;
 }
 .header {
-  background: #1C2833; padding: 16pt 30pt;
+  background: #0D1117; padding: 14pt 25pt;
 }
 .header h1 {
-  color: #FFFFFF; font-size: 24pt; font-weight: bold; margin: 0;
+  color: #FFFFFF; font-size: 22pt; font-weight: bold; margin: 0;
+}
+.header-sub {
+  color: #E33737; font-size: 10pt; margin: 2pt 0 0 0;
 }
 .content {
-  flex: 1; padding: 12pt 25pt;
-  display: flex; gap: 15pt;
+  flex: 1; padding: 12pt 20pt;
 }
-.tables {
-  flex: 1.3;
+.pipeline {
+  display: flex; flex-wrap: wrap; gap: 5pt; align-items: center;
 }
-.table-group {
-  margin-bottom: 8pt;
+.stage {
+  width: 72pt; background: #F4F6F6; border-radius: 4pt; padding: 8pt 6pt;
+  border-left: 2pt solid #E33737; text-align: center;
 }
-.group-title {
-  color: #E33737; font-size: 11pt; font-weight: bold; margin: 0 0 4pt 0;
+.stage-num {
+  color: #E33737; font-size: 8pt; font-weight: bold; margin: 0;
 }
-.table-row {
-  display: flex; gap: 4pt; flex-wrap: wrap;
+.stage-name {
+  color: #1C2833; font-size: 9pt; font-weight: bold; margin: 2pt 0;
 }
-.table-box {
-  background: #F4F6F6; padding: 4pt 8pt; border-radius: 3pt;
+.stage-desc {
+  color: #566573; font-size: 7pt; margin: 0;
 }
-.table-box p {
-  color: #1C2833; font-size: 9pt; margin: 0; font-family: Courier New, monospace;
+.stage-key {
+  border-left-color: #27AE60;
+  background: #E8F8F5;
 }
-.features {
-  flex: 0.7; background: #1C2833; padding: 12pt; border-radius: 6pt;
+.stage-key .stage-num {
+  color: #27AE60;
 }
-.feat-title {
-  color: #E33737; font-size: 12pt; font-weight: bold; margin: 0 0 10pt 0;
+.arrow {
+  color: #AAB7B8; font-size: 10pt;
 }
-.feat-item {
-  background: #2E4053; padding: 6pt 8pt; margin-bottom: 4pt; border-radius: 3pt;
+.bottom-section {
+  margin-top: 12pt; display: flex; gap: 12pt;
 }
-.feat-item p {
-  color: #FFFFFF; font-size: 9pt; margin: 0;
+.info-box {
+  flex: 1; background: #0D1117; padding: 10pt; border-radius: 5pt;
+}
+.info-title {
+  color: #E33737; font-size: 10pt; font-weight: bold; margin: 0 0 6pt 0;
+}
+.info-item {
+  background: #1C2833; padding: 4pt 8pt; margin-bottom: 3pt; border-radius: 3pt;
+}
+.info-item p {
+  color: #FFFFFF; font-size: 8pt; margin: 0;
 }
 </style>
 </head>
 <body>
 <div class="header">
-  <h1>Database Schema (PostgreSQL + pgvector)</h1>
+  <h1>9-Stage Analysis Pipeline</h1>
+  <p class="header-sub">Automated Risk Signal Detection | ~22.7s Complete</p>
 </div>
 <div class="content">
-  <div class="tables">
-    <div class="table-group">
-      <p class="group-title">Core Master</p>
-      <div class="table-row">
-        <div class="table-box"><p>corp</p></div>
-        <div class="table-box"><p>industry_master</p></div>
-      </div>
+  <div class="pipeline">
+    <div class="stage">
+      <p class="stage-num">1</p>
+      <p class="stage-name">SNAPSHOT</p>
+      <p class="stage-desc">Internal Load</p>
     </div>
-    <div class="table-group">
-      <p class="group-title">Signal System</p>
-      <div class="table-row">
-        <div class="table-box"><p>rkyc_signal</p></div>
-        <div class="table-box"><p>rkyc_signal_index</p></div>
-        <div class="table-box"><p>rkyc_evidence</p></div>
-        <div class="table-box"><p>rkyc_signal_embedding</p></div>
-      </div>
+    <span class="arrow">→</span>
+    <div class="stage">
+      <p class="stage-num">2</p>
+      <p class="stage-name">DOC</p>
+      <p class="stage-desc">PDF Parser</p>
     </div>
-    <div class="table-group">
-      <p class="group-title">Internal Data</p>
-      <div class="table-row">
-        <div class="table-box"><p>rkyc_internal_snapshot</p></div>
-        <div class="table-box"><p>rkyc_document</p></div>
-        <div class="table-box"><p>rkyc_fact</p></div>
-      </div>
+    <span class="arrow">→</span>
+    <div class="stage stage-key">
+      <p class="stage-num">3 ★</p>
+      <p class="stage-name">PROFILE</p>
+      <p class="stage-desc">Multi-Agent</p>
     </div>
-    <div class="table-group">
-      <p class="group-title">Corp Profiling</p>
-      <div class="table-row">
-        <div class="table-box"><p>rkyc_corp_profile</p></div>
-      </div>
+    <span class="arrow">→</span>
+    <div class="stage">
+      <p class="stage-num">4</p>
+      <p class="stage-name">EXTERNAL</p>
+      <p class="stage-desc">Perplexity</p>
     </div>
-    <div class="table-group">
-      <p class="group-title">External Intelligence</p>
-      <div class="table-row">
-        <div class="table-box"><p>rkyc_external_news</p></div>
-        <div class="table-box"><p>rkyc_llm_audit_log</p></div>
-      </div>
+    <span class="arrow">→</span>
+    <div class="stage">
+      <p class="stage-num">5</p>
+      <p class="stage-name">CONTEXT</p>
+      <p class="stage-desc">Synthesis</p>
     </div>
-    <div class="table-group">
-      <p class="group-title">Jobs</p>
-      <div class="table-row">
-        <div class="table-box"><p>rkyc_job</p></div>
-      </div>
+    <span class="arrow">→</span>
+    <div class="stage">
+      <p class="stage-num">6</p>
+      <p class="stage-name">SIGNAL</p>
+      <p class="stage-desc">LLM Extract</p>
+    </div>
+    <span class="arrow">→</span>
+    <div class="stage stage-key">
+      <p class="stage-num">7 ★</p>
+      <p class="stage-name">VALIDATE</p>
+      <p class="stage-desc">Anti-Hallu</p>
+    </div>
+    <span class="arrow">→</span>
+    <div class="stage">
+      <p class="stage-num">8</p>
+      <p class="stage-name">INDEX</p>
+      <p class="stage-desc">Vector 2000d</p>
+    </div>
+    <span class="arrow">→</span>
+    <div class="stage">
+      <p class="stage-num">9</p>
+      <p class="stage-name">INSIGHT</p>
+      <p class="stage-desc">Briefing</p>
     </div>
   </div>
-  <div class="features">
-    <p class="feat-title">Key Features</p>
-    <div class="feat-item"><p>pgvector HNSW 2000d 벡터 인덱스</p></div>
-    <div class="feat-item"><p>Denormalized signal_index</p></div>
-    <div class="feat-item"><p>JSON Pointer Evidence ref_value</p></div>
-    <div class="feat-item"><p>Provenance 필드별 출처 추적</p></div>
-    <div class="feat-item"><p>10 Enums 타입 안전성</p></div>
-    <div class="feat-item"><p>pgbouncer Transaction mode</p></div>
+  <div class="bottom-section">
+    <div class="info-box">
+      <p class="info-title">LLM Ensemble</p>
+      <div class="info-item"><p>Claude Opus 4.5 (Primary)</p></div>
+      <div class="info-item"><p>GPT-5 (Fallback 1)</p></div>
+      <div class="info-item"><p>Gemini 3 Pro (Fallback 2)</p></div>
+    </div>
+    <div class="info-box">
+      <p class="info-title">Resilience</p>
+      <div class="info-item"><p>Circuit Breaker (3 fail / 5min)</p></div>
+      <div class="info-item"><p>Rate Limiter (10/min)</p></div>
+      <div class="info-item"><p>Auto Recovery</p></div>
+    </div>
+    <div class="info-box">
+      <p class="info-title">Vector Search</p>
+      <div class="info-item"><p>pgvector HNSW 2000d</p></div>
+      <div class="info-item"><p>Cosine Similarity</p></div>
+      <div class="info-item"><p>Case-Based Reasoning</p></div>
+    </div>
   </div>
 </div>
 </body>

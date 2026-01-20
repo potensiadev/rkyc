@@ -9,78 +9,92 @@ body {
   display: flex; flex-direction: column;
 }
 .header {
-  background: #1C2833; padding: 18pt 30pt;
+  background: #0D1117; padding: 16pt 30pt;
 }
 .header h1 {
-  color: #FFFFFF; font-size: 26pt; font-weight: bold; margin: 0;
+  color: #FFFFFF; font-size: 24pt; font-weight: bold; margin: 0;
 }
 .content {
-  display: flex; flex: 1; padding: 20pt 30pt;
+  flex: 1; padding: 20pt 30pt;
+  display: flex; gap: 20pt;
 }
-.left {
-  flex: 1; padding-right: 20pt;
+.problem-col {
+  flex: 1;
 }
-.right {
-  flex: 1; padding-left: 20pt;
-}
-.right-border {
-  width: 3pt; background: #E33737;
-}
-h2 {
-  color: #1C2833; font-size: 16pt; font-weight: bold; margin: 0 0 12pt 0;
+.problem-title {
+  color: #E33737; font-size: 14pt; font-weight: bold;
+  margin: 0 0 12pt 0;
 }
 .problem-item {
-  background: #F4F6F6; padding: 10pt 12pt; margin-bottom: 8pt; border-radius: 4pt;
+  background: #F4F6F6; padding: 10pt 12pt; margin-bottom: 8pt;
+  border-left: 3pt solid #E33737; border-radius: 0 4pt 4pt 0;
 }
 .problem-item p {
-  color: #2E4053; font-size: 11pt; margin: 0;
+  color: #1C2833; font-size: 11pt; margin: 0;
 }
-.stat-box {
-  background: #1C2833; padding: 12pt; margin-bottom: 8pt; border-radius: 4pt;
-  text-align: center;
+.problem-item span {
+  color: #566573; font-size: 9pt; display: block; margin-top: 4pt;
 }
-.stat-number {
-  color: #E33737; font-size: 28pt; font-weight: bold; margin: 0;
+.solution-col {
+  flex: 1;
 }
-.stat-label {
-  color: #FFFFFF; font-size: 10pt; margin: 4pt 0 0 0;
+.solution-title {
+  color: #27AE60; font-size: 14pt; font-weight: bold;
+  margin: 0 0 12pt 0;
+}
+.solution-item {
+  background: #E8F8F5; padding: 10pt 12pt; margin-bottom: 8pt;
+  border-left: 3pt solid #27AE60; border-radius: 0 4pt 4pt 0;
+}
+.solution-item p {
+  color: #1C2833; font-size: 11pt; margin: 0;
+}
+.solution-item span {
+  color: #566573; font-size: 9pt; display: block; margin-top: 4pt;
 }
 </style>
 </head>
 <body>
 <div class="header">
-  <h1>Problem Statement</h1>
+  <h1>Why AI Engine for KYC?</h1>
 </div>
 <div class="content">
-  <div class="left">
-    <h2>기업심사 담당자의 Pain Points</h2>
+  <div class="problem-col">
+    <p class="problem-title">Current Challenges</p>
     <div class="problem-item">
-      <p>수동 모니터링: 뉴스, 공시, 재무제표를 일일이 확인</p>
+      <p>Manual Risk Monitoring</p>
+      <span>1,000+ 기업 수동 모니터링 한계</span>
     </div>
     <div class="problem-item">
-      <p>리스크 탐지 지연: 조기 경고 시그널 놓침</p>
+      <p>Fragmented Data Sources</p>
+      <span>내부 데이터 + 외부 뉴스 + 규제 변화</span>
     </div>
     <div class="problem-item">
-      <p>정보 과부하: 하루 수백 건 뉴스 중 중요 정보 선별 어려움</p>
+      <p>Delayed Signal Detection</p>
+      <span>리스크 시그널 조기 탐지 어려움</span>
     </div>
     <div class="problem-item">
-      <p>근거 추적 부재: 의사결정 시 출처 확인에 시간 소요</p>
+      <p>LLM Hallucination Risk</p>
+      <span>금융 도메인에서 허위 정보 생성 위험</span>
     </div>
   </div>
-  <div class="right-border"></div>
-  <div class="right">
-    <h2>현재 시장 상황</h2>
-    <div class="stat-box">
-      <p class="stat-number">73%</p>
-      <p class="stat-label">수동 리스크 모니터링 비율</p>
+  <div class="solution-col">
+    <p class="solution-title">rKYC AI Engine Solution</p>
+    <div class="solution-item">
+      <p>Multi-Agent Orchestration</p>
+      <span>4-Layer Fallback으로 자동화된 분석</span>
     </div>
-    <div class="stat-box">
-      <p class="stat-number">2-3일</p>
-      <p class="stat-label">평균 리스크 인지 지연</p>
+    <div class="solution-item">
+      <p>Unified Context Synthesis</p>
+      <span>내부/외부 데이터 통합 컨텍스트</span>
     </div>
-    <div class="stat-box">
-      <p class="stat-number">40%</p>
-      <p class="stat-label">외부 환경 변화 탐지 누락률</p>
+    <div class="solution-item">
+      <p>Real-time Signal Detection</p>
+      <span>9-Stage Pipeline, ~22.7초 분석</span>
+    </div>
+    <div class="solution-item">
+      <p>Anti-Hallucination Defense</p>
+      <span>4-Layer 팩트 검증 시스템</span>
     </div>
   </div>
 </div>

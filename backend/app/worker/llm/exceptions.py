@@ -58,5 +58,22 @@ class LLMTimeoutError(LLMError):
         super().__init__(message, provider)
 
 
+class NoAPIKeyConfiguredError(LLMError):
+    """
+    Raised when no API keys are configured for any LLM provider.
+
+    P0-004 fix: Added to clearly distinguish configuration errors
+    from runtime failures.
+    """
+
+    def __init__(
+        self,
+        message: str = "No API keys configured for LLM providers",
+        providers: list[str] = None,
+    ):
+        super().__init__(message)
+        self.providers = providers or []
+
+
 # Backwards compatibility alias (deprecated)
 TimeoutError = LLMTimeoutError

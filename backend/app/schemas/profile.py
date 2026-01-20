@@ -20,6 +20,9 @@ class ConfidenceLevelEnum(str, Enum):
     HIGH = "HIGH"
     MED = "MED"
     LOW = "LOW"
+    NONE = "NONE"
+    CACHED = "CACHED"
+    STALE = "STALE"
 
 
 class ProfileStatusEnum(str, Enum):
@@ -27,6 +30,89 @@ class ProfileStatusEnum(str, Enum):
     ACTIVE = "ACTIVE"
     INACTIVE = "INACTIVE"
     UNKNOWN = "UNKNOWN"
+
+
+# ============================================================================
+# Nested Types (PRD v1.2)
+# ============================================================================
+
+
+class ExecutiveSchema(BaseModel):
+    """임원 정보"""
+    name: str
+    position: str
+    tenure_years: Optional[int] = None
+
+
+class FinancialSnapshotSchema(BaseModel):
+    """연도별 재무 스냅샷"""
+    year: int
+    revenue_krw: Optional[int] = None
+    operating_profit_krw: Optional[int] = None
+    net_profit_krw: Optional[int] = None
+    total_assets_krw: Optional[int] = None
+    total_liabilities_krw: Optional[int] = None
+    export_ratio_pct: Optional[int] = None
+
+
+class CompetitorSchema(BaseModel):
+    """경쟁사 정보"""
+    name: str
+    market_share_pct: Optional[float] = None
+    relationship: Optional[str] = None  # DIRECT, INDIRECT
+
+
+class MacroFactorSchema(BaseModel):
+    """거시 요인"""
+    factor: str
+    impact: str  # POSITIVE, NEGATIVE, NEUTRAL
+    description: Optional[str] = None
+
+
+class SupplyChainSchema(BaseModel):
+    """공급망 정보 (PRD v1.2)"""
+    key_suppliers: list[str] = Field(default_factory=list)
+    supplier_countries: dict[str, int] = Field(default_factory=dict)  # {"중국": 60, "일본": 30}
+    single_source_risk: list[str] = Field(default_factory=list)
+    material_import_ratio_pct: Optional[int] = None
+
+
+class OverseasSubsidiarySchema(BaseModel):
+    """해외 법인"""
+    name: str
+    country: str
+    business_type: Optional[str] = None
+    ownership_pct: Optional[float] = None
+
+
+class OverseasBusinessSchema(BaseModel):
+    """해외 사업 (PRD v1.2)"""
+    subsidiaries: list[OverseasSubsidiarySchema] = Field(default_factory=list)
+    manufacturing_countries: list[str] = Field(default_factory=list)
+
+
+class ShareholderSchema(BaseModel):
+    """주주 정보"""
+    name: str
+    ownership_pct: float
+    is_largest: Optional[bool] = None
+    relationship: Optional[str] = None  # FOUNDER, INSTITUTION, FOREIGN, OTHER
+
+
+class ConsensusMetadataSchema(BaseModel):
+    """Consensus 메타데이터 (PRD v1.2)"""
+    consensus_at: Optional[datetime] = None
+    perplexity_success: bool = False
+    gemini_success: bool = False
+    claude_success: bool = False
+    total_fields: int = 0
+    matched_fields: int = 0
+    discrepancy_fields: int = 0
+    enriched_fields: int = 0
+    overall_confidence: str = "LOW"
+    fallback_layer: int = 0
+    retry_count: int = 0
+    error_messages: list[str] = Field(default_factory=list)
 
 
 # ============================================================================
@@ -52,45 +138,97 @@ class FieldProvenanceResponse(BaseModel):
 
 class CorpProfileResponse(BaseModel):
     """
-    기업 프로파일 응답 (API)
+    기업 프로파일 응답 (API) - PRD v1.2
 
     Includes:
-    - Business profile data
+    - Business profile data (expanded)
+    - Supply chain & overseas business
     - Confidence levels (overall and per-field)
     - Source URLs for traceability
     - Fallback/validation status
+    - Consensus metadata
     """
     profile_id: UUID
     corp_id: str
 
-    # Business Profile Fields
-    business_summary: str = Field(..., description="주요 사업 요약")
+    # ========================================================================
+    # Basic Info (PRD v1.2 확장)
+    # ========================================================================
+    business_summary: Optional[str] = Field(None, description="주요 사업 요약")
+    ceo_name: Optional[str] = Field(None, description="대표이사 이름")
+    employee_count: Optional[int] = Field(None, description="임직원 수")
+    founded_year: Optional[int] = Field(None, description="설립 연도")
+    headquarters: Optional[str] = Field(None, description="본사 소재지")
+    executives: list[ExecutiveSchema] = Field(default_factory=list, description="주요 임원")
+
+    # ========================================================================
+    # Business Overview
+    # ========================================================================
+    industry_overview: Optional[str] = Field(None, description="업종 개요")
+    business_model: Optional[str] = Field(None, description="비즈니스 모델")
+
+    # ========================================================================
+    # Financial
+    # ========================================================================
     revenue_krw: Optional[int] = Field(None, description="연 매출 (원화)")
     export_ratio_pct: Optional[int] = Field(None, ge=0, le=100, description="수출 비중 (%)")
+    financial_history: list[FinancialSnapshotSchema] = Field(default_factory=list, description="3개년 재무 스냅샷")
 
+    # ========================================================================
     # Exposure Information
+    # ========================================================================
     country_exposure: dict = Field(default_factory=dict, description="국가별 노출 비중")
     key_materials: list[str] = Field(default_factory=list, description="주요 원자재 목록")
     key_customers: list[str] = Field(default_factory=list, description="주요 고객사 목록")
-    overseas_operations: list[str] = Field(default_factory=list, description="해외 법인/공장")
+    overseas_operations: list[str] = Field(default_factory=list, description="해외 법인/공장 (레거시)")
 
+    # ========================================================================
+    # Value Chain (PRD v1.2)
+    # ========================================================================
+    competitors: list[CompetitorSchema] = Field(default_factory=list, description="경쟁사")
+    macro_factors: list[MacroFactorSchema] = Field(default_factory=list, description="거시 요인")
+
+    # ========================================================================
+    # Supply Chain (PRD v1.2)
+    # ========================================================================
+    supply_chain: SupplyChainSchema = Field(default_factory=SupplyChainSchema, description="공급망 정보")
+
+    # ========================================================================
+    # Overseas Business (PRD v1.2)
+    # ========================================================================
+    overseas_business: OverseasBusinessSchema = Field(default_factory=OverseasBusinessSchema, description="해외 사업")
+
+    # ========================================================================
+    # Shareholders
+    # ========================================================================
+    shareholders: list[ShareholderSchema] = Field(default_factory=list, description="주주 정보")
+
+    # ========================================================================
+    # Consensus Metadata (PRD v1.2)
+    # ========================================================================
+    consensus_metadata: ConsensusMetadataSchema = Field(default_factory=ConsensusMetadataSchema, description="Consensus 메타데이터")
+
+    # ========================================================================
     # Confidence & Attribution (Anti-Hallucination Layer 2)
-    profile_confidence: ConfidenceLevelEnum
+    # ========================================================================
+    profile_confidence: ConfidenceLevelEnum = ConfidenceLevelEnum.LOW
     field_confidences: dict[str, str] = Field(
         default_factory=dict,
         description="필드별 신뢰도 (예: {'export_ratio_pct': 'HIGH'})"
     )
     source_urls: list[str] = Field(default_factory=list, description="출처 URL 목록")
 
+    # ========================================================================
     # Fallback & Validation Flags
+    # ========================================================================
     is_fallback: bool = Field(False, description="업종 기본 프로파일 사용 여부")
     search_failed: bool = Field(False, description="검색 실패 여부")
     validation_warnings: list[str] = Field(default_factory=list, description="검증 경고")
 
-    # Status
+    # ========================================================================
+    # Status & TTL
+    # ========================================================================
     status: ProfileStatusEnum = ProfileStatusEnum.ACTIVE
-
-    # TTL Information
     fetched_at: datetime
     expires_at: datetime
     is_expired: bool = Field(False, description="TTL 만료 여부")

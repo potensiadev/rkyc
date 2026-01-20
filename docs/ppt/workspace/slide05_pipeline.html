@@ -18,121 +18,112 @@ body {
   color: #E33737; font-size: 10pt; margin: 2pt 0 0 0;
 }
 .content {
-  flex: 1; padding: 12pt 20pt;
+  flex: 1; padding: 15pt 25pt;
+  display: flex; flex-direction: column; gap: 12pt;
 }
-.pipeline {
-  display: flex; flex-wrap: wrap; gap: 6pt;
+.model-row {
+  display: flex; gap: 10pt; align-items: center;
 }
-.stage {
-  width: 105pt; background: #F4F6F6; border-radius: 3pt; padding: 8pt;
-  border-left: 2pt solid #E33737;
+.model-box {
+  flex: 1; padding: 14pt; border-radius: 6pt; text-align: center;
 }
-.stage-num {
-  color: #E33737; font-size: 8pt; font-weight: bold; margin: 0;
+.model-box h3 {
+  font-size: 13pt; font-weight: bold; margin: 0; color: #FFFFFF;
 }
-.stage-name {
-  color: #1C2833; font-size: 10pt; font-weight: bold; margin: 2pt 0;
+.model-box .model-id {
+  font-size: 9pt; margin: 4pt 0; color: rgba(255,255,255,0.8);
+  font-family: monospace;
 }
-.stage-desc {
-  color: #2E4053; font-size: 8pt; margin: 0;
+.model-box .model-spec {
+  font-size: 8pt; color: rgba(255,255,255,0.7);
 }
-.stage-special {
-  border-left-color: #27AE60;
-  background: #E8F8F5;
+.primary { background: #E33737; }
+.secondary { background: #3498DB; }
+.tertiary { background: #27AE60; }
+.arrow {
+  color: #AAB7B8; font-size: 16pt; font-weight: bold;
 }
-.stage-special .stage-num {
-  color: #27AE60;
+.label-row {
+  display: flex; gap: 10pt; align-items: center;
 }
-.arrow-right {
-  display: flex; align-items: center; color: #AAB7B8; font-size: 12pt;
+.label-box {
+  flex: 1; text-align: center;
 }
-.bottom-info {
-  margin-top: 10pt; display: flex; gap: 10pt;
+.label-box p {
+  font-size: 9pt; color: #566573; margin: 0;
 }
-.info-box {
-  flex: 1; background: #0D1117; padding: 10pt; border-radius: 4pt;
+.fallback-info {
+  background: #F4F6F6; padding: 12pt; border-radius: 6pt;
 }
-.info-title {
-  color: #E33737; font-size: 9pt; font-weight: bold; margin: 0 0 4pt 0;
+.fallback-title {
+  color: #0D1117; font-size: 12pt; font-weight: bold; margin: 0 0 8pt 0;
 }
-.info-text {
-  color: #FFFFFF; font-size: 8pt; margin: 0;
+.fallback-items {
+  display: flex; gap: 12pt;
+}
+.fallback-item {
+  flex: 1; background: #FFFFFF; padding: 8pt; border-radius: 4pt;
+  border-left: 3pt solid #E33737;
+}
+.fallback-item p {
+  color: #1C2833; font-size: 9pt; margin: 0;
+}
+.fallback-item span {
+  color: #566573; font-size: 8pt; display: block; margin-top: 3pt;
 }
 </style>
 </head>
 <body>
 <div class="header">
-  <h1>CHRONOS™ 9-Stage Analysis Pipeline</h1>
-  <p class="header-sub">Automated Risk Signal Detection Workflow | ~22.7s Complete</p>
+  <h1>Multi-Model Ensemble</h1>
+  <p class="header-sub">3-Tier LLM Fallback Chain for High Availability</p>
 </div>
 <div class="content">
-  <div class="pipeline">
-    <div class="stage">
-      <p class="stage-num">Stage 1</p>
-      <p class="stage-name">SNAPSHOT</p>
-      <p class="stage-desc">Internal Data Load</p>
+  <div class="label-row">
+    <div class="label-box"><p>PRIMARY</p></div>
+    <div style="width:30pt;"></div>
+    <div class="label-box"><p>FALLBACK 1</p></div>
+    <div style="width:30pt;"></div>
+    <div class="label-box"><p>FALLBACK 2</p></div>
+  </div>
+  <div class="model-row">
+    <div class="model-box primary">
+      <h3>Claude Opus 4.5</h3>
+      <p class="model-id">claude-opus-4-5-20251101</p>
+      <p class="model-spec">200K context | Complex reasoning</p>
     </div>
-    <p class="arrow-right">→</p>
-    <div class="stage">
-      <p class="stage-num">Stage 2</p>
-      <p class="stage-name">DOC_INGEST</p>
-      <p class="stage-desc">ORACLE™ Parser</p>
+    <span class="arrow">→</span>
+    <div class="model-box secondary">
+      <h3>GPT-5</h3>
+      <p class="model-id">gpt-5</p>
+      <p class="model-spec">128K context | Structured output</p>
     </div>
-    <p class="arrow-right">→</p>
-    <div class="stage stage-special">
-      <p class="stage-num">Stage 3 ★</p>
-      <p class="stage-name">PROFILING</p>
-      <p class="stage-desc">PRISM™ 4-Layer</p>
-    </div>
-    <p class="arrow-right">→</p>
-    <div class="stage">
-      <p class="stage-num">Stage 4</p>
-      <p class="stage-name">EXTERNAL</p>
-      <p class="stage-desc">Web Intelligence</p>
-    </div>
-    <p class="arrow-right">→</p>
-    <div class="stage">
-      <p class="stage-num">Stage 5</p>
-      <p class="stage-name">CONTEXT</p>
-      <p class="stage-desc">NEXUS™ Synthesis</p>
-    </div>
-    <p class="arrow-right">→</p>
-    <div class="stage">
-      <p class="stage-num">Stage 6</p>
-      <p class="stage-name">SIGNAL</p>
-      <p class="stage-desc">SENTINEL™ Extract</p>
-    </div>
-    <p class="arrow-right">→</p>
-    <div class="stage stage-special">
-      <p class="stage-num">Stage 7 ★</p>
-      <p class="stage-name">VALIDATION</p>
-      <p class="stage-desc">AEGIS™ Defense</p>
-    </div>
-    <p class="arrow-right">→</p>
-    <div class="stage">
-      <p class="stage-num">Stage 8</p>
-      <p class="stage-name">INDEX</p>
-      <p class="stage-desc">Vector 2000d</p>
-    </div>
-    <p class="arrow-right">→</p>
-    <div class="stage">
-      <p class="stage-num">Stage 9</p>
-      <p class="stage-name">INSIGHT</p>
-      <p class="stage-desc">Briefing Gen</p>
+    <span class="arrow">→</span>
+    <div class="model-box tertiary">
+      <h3>Gemini 3 Pro</h3>
+      <p class="model-id">gemini-3-pro-preview</p>
+      <p class="model-spec">1M context | Cross-validation</p>
     </div>
   </div>
-  <div class="bottom-info">
-    <div class="info-box">
-      <p class="info-title">Neural Ensemble</p>
-      <p class="info-text">Claude Opus 4.5 → GPT-5 → Gemini 3 Pro (3-Tier Fallback)</p>
-    </div>
-    <div class="info-box">
-      <p class="info-title">GUARDIAN™ Resilience</p>
-      <p class="info-text">Circuit Breaker (threshold=3), Rate Limiter, Auto Recovery</p>
-    </div>
-    <div class="info-box">
-      <p class="info-title">Semantic Engine</p>
-      <p class="info-text">pgvector HNSW 2000d, Cosine Similarity, Case-Based Reasoning</p>
+  <div class="fallback-info">
+    <p class="fallback-title">Fallback Trigger Conditions</p>
+    <div class="fallback-items">
+      <div class="fallback-item">
+        <p>API Timeout</p>
+        <span>30초 초과 시 다음 모델로 전환</span>
+      </div>
+      <div class="fallback-item">
+        <p>Rate Limit</p>
+        <span>429 에러 발생 시 자동 전환</span>
+      </div>
+      <div class="fallback-item">
+        <p>Invalid Response</p>
+        <span>JSON 파싱 실패 시 재시도</span>
+      </div>
+      <div class="fallback-item">
+        <p>Circuit Breaker</p>
+        <span>연속 3회 실패 시 5분 cooldown</span>
+      </div>
     </div>
   </div>
 </div>

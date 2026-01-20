@@ -8,6 +8,11 @@ Endpoints:
 - GET    /signals/{signal_id}/detail - 시그널 상세 (Evidence 포함)
 - PATCH  /signals/{signal_id}/status - 상태 변경
 - POST   /signals/{signal_id}/dismiss - 기각
+
+Migration v11 변경사항:
+- rkyc_signal_index에서 상태 필드 제거됨 (immutable)
+- 상태 조회는 rkyc_signal 테이블과 JOIN 필요
+- 상태 업데이트는 rkyc_signal 테이블만 업데이트
 """
 
 from typing import Optional
@@ -16,6 +21,7 @@ from datetime import datetime, UTC
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, text
+from sqlalchemy.orm import selectinload
 from app.core.database import get_db
 from app.models.signal import (
     SignalIndex,
@@ -54,13 +60,24 @@ async def list_signals(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    시그널 목록 조회 (Dashboard용 - rkyc_signal_index 사용)
+    시그널 목록 조회 (Dashboard용)
 
-    IMPORTANT: 조인 금지! rkyc_signal_index는 denormalized 테이블
+    Migration v11 변경:
+    - 항상 Signal 테이블과 JOIN하여 상태 정보 조회
+    - signal_index는 immutable, 상태는 signal에서만 관리
     """
 
-    # Build query
-    query = select(SignalIndex)
+    # 항상 JOIN으로 상태 정보 조회 (v11: signal_index에서 상태 필드 제거)
+    query = (
+        select(
+            SignalIndex,
+            Signal.signal_status,
+            Signal.reviewed_at,
+            Signal.dismissed_at,
+            Signal.dismiss_reason
+        )
+        .join(Signal, Signal.signal_id == SignalIndex.signal_id)
+    )
 
     # Apply filters
     if signal_type:
@@ -81,8 +98,9 @@ async def list_signals(
     if industry_code:
         query = query.where(SignalIndex.industry_code == industry_code)
 
+    # 상태 필터는 Signal 테이블에서 적용
     if signal_status:
-        query = query.where(SignalIndex.signal_status == signal_status)
+        query = query.where(Signal.signal_status == signal_status)
 
     # Count total
     count_query = select(func.count()).select_from(query.subquery())
@@ -92,7 +110,34 @@ async def list_signals(
     # Get items with pagination (sorted by detected_at DESC)
     query = query.limit(limit).offset(offset).order_by(SignalIndex.detected_at.desc())
     result = await db.execute(query)
-    items = result.scalars().all()
+    rows = result.all()
+
+    # 결과 변환: SignalIndex + Signal 상태 정보 병합
+    items = []
+    for row in rows:
+        signal_index = row[0]
+        # SignalIndexResponse 형태로 변환
+        items.append(SignalIndexResponse(
+            index_id=signal_index.index_id,
+            corp_id=signal_index.corp_id,
+            corp_name=signal_index.corp_name,
+            industry_code=signal_index.industry_code,
+            signal_type=signal_index.signal_type,
+            event_type=signal_index.event_type,
+            impact_direction=signal_index.impact_direction,
+            impact_strength=signal_index.impact_strength,
+            confidence=signal_index.confidence,
+            title=signal_index.title,
+            summary_short=signal_index.summary_short,
+            evidence_count=signal_index.evidence_count,
+            detected_at=signal_index.detected_at,
+            signal_id=signal_index.signal_id,
+            # 상태 정보는 Signal 테이블에서 가져옴
+            signal_status=row[1] or SignalStatusEnum.NEW,
+            reviewed_at=row[2],
+            dismissed_at=row[3],
+            dismiss_reason=row[4],
+        ))
 
     return SignalListResponse(total=total, items=items)
 
@@ -102,16 +147,51 @@ async def get_signal(
     signal_id: UUID,
     db: AsyncSession = Depends(get_db),
 ):
-    """시그널 기본 조회"""
+    """
+    시그널 기본 조회
 
-    query = select(SignalIndex).where(SignalIndex.signal_id == signal_id)
+    Migration v11 변경:
+    - Signal 테이블과 JOIN하여 상태 정보 조회
+    """
+
+    query = (
+        select(
+            SignalIndex,
+            Signal.signal_status,
+            Signal.reviewed_at,
+            Signal.dismissed_at,
+            Signal.dismiss_reason
+        )
+        .join(Signal, Signal.signal_id == SignalIndex.signal_id)
+        .where(SignalIndex.signal_id == signal_id)
+    )
     result = await db.execute(query)
-    signal = result.scalar_one_or_none()
+    row = result.one_or_none()
 
-    if not signal:
+    if not row:
         raise HTTPException(status_code=404, detail="Signal not found")
 
-    return signal
+    signal_index = row[0]
+    return SignalIndexResponse(
+        index_id=signal_index.index_id,
+        corp_id=signal_index.corp_id,
+        corp_name=signal_index.corp_name,
+        industry_code=signal_index.industry_code,
+        signal_type=signal_index.signal_type,
+        event_type=signal_index.event_type,
+        impact_direction=signal_index.impact_direction,
+        impact_strength=signal_index.impact_strength,
+        confidence=signal_index.confidence,
+        title=signal_index.title,
+        summary_short=signal_index.summary_short,
+        evidence_count=signal_index.evidence_count,
+        detected_at=signal_index.detected_at,
+        signal_id=signal_index.signal_id,
+        signal_status=row[1] or SignalStatusEnum.NEW,
+        reviewed_at=row[2],
+        dismissed_at=row[3],
+        dismiss_reason=row[4],
+    )
 
 
 @router.get("/{signal_id}/detail", response_model=SignalDetailResponse)
@@ -119,7 +199,13 @@ async def get_signal_detail(
     signal_id: UUID,
     db: AsyncSession = Depends(get_db),
 ):
-    """시그널 상세 조회 (Evidence 포함)"""
+    """
+    시그널 상세 조회 (Evidence 포함)
+
+    Migration v11 변경:
+    - 상태 정보(signal_status, reviewed_at, dismissed_at, dismiss_reason)는
+      Signal 테이블에서만 조회 (signal_index는 상태 필드 없음)
+    """
 
     # SignalIndex에서 기본 정보
     index_query = select(SignalIndex).where(SignalIndex.signal_id == signal_id)
@@ -129,15 +215,21 @@ async def get_signal_detail(
     if not signal_index:
         raise HTTPException(status_code=404, detail="Signal not found")
 
-    # Signal 원본에서 전체 summary
+    # Signal 원본에서 전체 summary + 상태 정보
     signal_query = select(Signal).where(Signal.signal_id == signal_id)
     signal_result = await db.execute(signal_query)
     signal = signal_result.scalar_one_or_none()
 
     # Evidence 조회
-    evidence_query = select(Evidence).where(Evidence.signal_id == signal_id)
+    evidence_query = select(Evidence).where(Evidence.signal_id == signal_id).order_by(Evidence.created_at.desc())
     evidence_result = await db.execute(evidence_query)
     evidences = evidence_result.scalars().all()
+
+    # 상태 정보는 Signal 테이블에서 가져옴 (v11: signal_index에서 제거됨)
+    signal_status = signal.signal_status if signal else SignalStatusEnum.NEW
+    reviewed_at = signal.reviewed_at if signal else None
+    dismissed_at = signal.dismissed_at if signal else None
+    dismiss_reason = signal.dismiss_reason if signal else None
 
     return SignalDetailResponse(
         signal_id=signal_index.signal_id,
@@ -152,12 +244,12 @@ async def get_signal_detail(
         title=signal_index.title,
         summary=signal.summary if signal else signal_index.summary_short or "",
         summary_short=signal_index.summary_short,
-        signal_status=signal_index.signal_status or SignalStatusEnum.NEW,
+        signal_status=signal_status,
         evidence_count=signal_index.evidence_count,
         detected_at=signal_index.detected_at,
-        reviewed_at=signal_index.reviewed_at,
-        dismissed_at=signal_index.dismissed_at,
-        dismiss_reason=signal_index.dismiss_reason,
+        reviewed_at=reviewed_at,
+        dismissed_at=dismissed_at,
+        dismiss_reason=dismiss_reason,
         evidences=[
             EvidenceResponse(
                 evidence_id=e.evidence_id,
@@ -180,46 +272,47 @@ async def update_signal_status(
     status_update: SignalStatusUpdate,
     db: AsyncSession = Depends(get_db),
 ):
-    """시그널 상태 변경 (NEW → REVIEWED)"""
+    """
+    시그널 상태 변경 (NEW → REVIEWED)
+
+    Migration v11 변경:
+    - rkyc_signal 테이블만 업데이트 (signal_index는 상태 필드 없음)
+    - 일관성 문제 해결 (단일 소스)
+    """
 
     now = datetime.now(UTC)
     status_value = status_update.status.value  # "NEW", "REVIEWED", "DISMISSED"
 
-    # 시그널 존재 확인
-    index_query = select(SignalIndex).where(SignalIndex.signal_id == signal_id)
-    index_result = await db.execute(index_query)
-    signal_index = index_result.scalar_one_or_none()
+    # 시그널 존재 확인 (Signal 테이블에서 직접 확인)
+    signal_query = select(Signal).where(Signal.signal_id == signal_id)
+    signal_result = await db.execute(signal_query)
+    signal = signal_result.scalar_one_or_none()
 
-    if not signal_index:
+    if not signal:
         raise HTTPException(status_code=404, detail="Signal not found")
 
     params = {"status": status_value, "now": now, "signal_id": str(signal_id)}
 
-    # 1. rkyc_signal 원본 테이블 업데이트
-    await db.execute(
-        text("""
-            UPDATE rkyc_signal
-            SET signal_status = CAST(:status AS signal_status_enum),
-                reviewed_at = CASE WHEN :status = 'REVIEWED' THEN :now ELSE reviewed_at END,
-                last_updated_at = :now
-            WHERE signal_id = CAST(:signal_id AS uuid)
-        """),
-        params
-    )
+    try:
+        # rkyc_signal 테이블만 업데이트 (v11: signal_index 업데이트 제거)
+        await db.execute(
+            text("""
+                UPDATE rkyc_signal
+                SET signal_status = CAST(:status AS signal_status_enum),
+                    reviewed_at = CASE WHEN :status = 'REVIEWED' THEN :now ELSE reviewed_at END,
+                    last_updated_at = :now
+                WHERE signal_id = CAST(:signal_id AS uuid)
+            """),
+            params
+        )
 
-    # 2. rkyc_signal_index 인덱스 테이블 업데이트 (Dashboard용)
-    await db.execute(
-        text("""
-            UPDATE rkyc_signal_index
-            SET signal_status = CAST(:status AS signal_status_enum),
-                reviewed_at = CASE WHEN :status = 'REVIEWED' THEN :now ELSE reviewed_at END,
-                last_updated_at = :now
-            WHERE signal_id = CAST(:signal_id AS uuid)
-        """),
-        params
-    )
-
-    await db.commit()
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to update signal status: {str(e)[:200]}"
+        )
 
     return {"message": "Status updated", "status": status_value}
 
@@ -230,46 +323,46 @@ async def dismiss_signal(
     dismiss_request: SignalDismissRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    """시그널 기각 (사유 포함)"""
+    """
+    시그널 기각 (사유 포함)
+
+    Migration v11 변경:
+    - rkyc_signal 테이블만 업데이트 (signal_index는 상태 필드 없음)
+    - 일관성 문제 해결 (단일 소스)
+    """
 
     now = datetime.now(UTC)
 
-    # 시그널 존재 확인
-    index_query = select(SignalIndex).where(SignalIndex.signal_id == signal_id)
-    index_result = await db.execute(index_query)
-    signal_index = index_result.scalar_one_or_none()
+    # 시그널 존재 확인 (Signal 테이블에서 직접 확인)
+    signal_query = select(Signal).where(Signal.signal_id == signal_id)
+    signal_result = await db.execute(signal_query)
+    signal = signal_result.scalar_one_or_none()
 
-    if not signal_index:
+    if not signal:
         raise HTTPException(status_code=404, detail="Signal not found")
 
     params = {"now": now, "reason": dismiss_request.reason, "signal_id": str(signal_id)}
 
-    # 1. rkyc_signal 원본 테이블 업데이트
-    await db.execute(
-        text("""
-            UPDATE rkyc_signal
-            SET signal_status = CAST('DISMISSED' AS signal_status_enum),
-                dismissed_at = :now,
-                dismiss_reason = :reason,
-                last_updated_at = :now
-            WHERE signal_id = CAST(:signal_id AS uuid)
-        """),
-        params
-    )
+    try:
+        # rkyc_signal 테이블만 업데이트 (v11: signal_index 업데이트 제거)
+        await db.execute(
+            text("""
+                UPDATE rkyc_signal
+                SET signal_status = CAST('DISMISSED' AS signal_status_enum),
+                    dismissed_at = :now,
+                    dismiss_reason = :reason,
+                    last_updated_at = :now
+                WHERE signal_id = CAST(:signal_id AS uuid)
+            """),
+            params
+        )
 
-    # 2. rkyc_signal_index 인덱스 테이블 업데이트 (Dashboard용)
-    await db.execute(
-        text("""
-            UPDATE rkyc_signal_index
-            SET signal_status = CAST('DISMISSED' AS signal_status_enum),
-                dismissed_at = :now,
-                dismiss_reason = :reason,
-                last_updated_at = :now
-            WHERE signal_id = CAST(:signal_id AS uuid)
-        """),
-        params
-    )
-
-    await db.commit()
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to dismiss signal: {str(e)[:200]}"
+        )
 
     return {"message": "Signal dismissed", "reason": dismiss_request.reason}

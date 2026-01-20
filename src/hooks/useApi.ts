@@ -16,6 +16,9 @@ import {
   getCorporationSnapshot,
   triggerAnalyzeJob,
   getJobStatus,
+  getCorpProfile,
+  getCorpProfileDetail,
+  refreshCorpProfile,
   ApiCorporation,
   ApiSignal,
   ApiSignalDetail,
@@ -27,6 +30,10 @@ import {
   JobStatusResponse,
   SignalStatusType,
 } from '@/lib/api';
+import type {
+  ApiCorpProfileResponse,
+  ApiCorpProfileDetailResponse,
+} from '@/types/profile';
 import { Signal, SignalCategory, SignalStatus, SignalImpact, SignalStrength } from '@/types/signal';
 import { Corporation, getIndustryName } from '@/data/corporations';
 
@@ -286,5 +293,51 @@ export function useCorporationSnapshot(corpId: string) {
   });
 }
 
+// ============================================================
+// Session 14: Corp Profile Hooks (PRD v1.2)
+// ============================================================
+
+// Corp Profile 조회 훅
+export function useCorpProfile(corpId: string) {
+  return useQuery({
+    queryKey: ['corporation', corpId, 'profile'],
+    queryFn: () => getCorpProfile(corpId),
+    enabled: !!corpId,
+    staleTime: 5 * 60 * 1000, // 5분 (TTL 7일이지만 화면 새로고침 시 최신 데이터 확인)
+  });
+}
+
+// Corp Profile 상세 조회 훅 (Audit Trail 포함)
+export function useCorpProfileDetail(corpId: string) {
+  return useQuery({
+    queryKey: ['corporation', corpId, 'profile', 'detail'],
+    queryFn: () => getCorpProfileDetail(corpId),
+    enabled: !!corpId,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+// Corp Profile 갱신 트리거 훅
+export function useRefreshCorpProfile() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (corpId: string) => refreshCorpProfile(corpId),
+    onSuccess: (_, corpId) => {
+      // Profile 관련 쿼리 무효화
+      queryClient.invalidateQueries({ queryKey: ['corporation', corpId, 'profile'] });
+    },
+  });
+}
+
 // API 타입 re-export (페이지에서 직접 사용)
-export type { ApiSignalDetail, ApiEvidence, ApiDashboardSummary, ApiSnapshot, SnapshotJson, SignalStatusType };
+export type {
+  ApiSignalDetail,
+  ApiEvidence,
+  ApiDashboardSummary,
+  ApiSnapshot,
+  SnapshotJson,
+  SignalStatusType,
+  ApiCorpProfileResponse,
+  ApiCorpProfileDetailResponse,
+};

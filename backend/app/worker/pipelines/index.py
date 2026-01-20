@@ -179,7 +179,7 @@ Summary: {sig.get('summary', '')}
                         "embedding_id": str(uuid4()),
                         "signal_id": sig["signal_id"],
                         "embedding": embedding_str,
-                        "model_name": "text-embedding-3-small",
+                        "model_name": "text-embedding-3-large",
                     })
                     stored_count += 1
                 except Exception as e:

@@ -148,22 +148,43 @@ def run_analysis_pipeline(self, job_id: str, corp_id: str):
         corp_name = snapshot_data.get("corporation", {}).get("corp_name", "")
         industry_code = snapshot_data.get("corporation", {}).get("industry_code", "")
 
-        # Run async profiling pipeline in sync context
+        # Run async profiling pipeline in sync context (Celery-safe)
         import asyncio
         profiling_pipeline = get_corp_profiling_pipeline()
         try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            profile_result = loop.run_until_complete(
-                profiling_pipeline.execute(
-                    corp_id=corp_id,
-                    corp_name=corp_name,
-                    industry_code=industry_code,
-                    db_session=None,  # Will use raw SQL in pipeline
-                    llm_service=signal_pipeline.llm_service if hasattr(signal_pipeline, 'llm_service') else None,
-                )
-            )
-            loop.close()
+            # Check if event loop is already running (e.g., nested async context)
+            try:
+                loop = asyncio.get_running_loop()
+                # If we get here, there's already a running loop - use thread executor
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(
+                        asyncio.run,
+                        profiling_pipeline.execute(
+                            corp_id=corp_id,
+                            corp_name=corp_name,
+                            industry_code=industry_code,
+                            db_session=None,
+                            llm_service=signal_pipeline.llm_service if hasattr(signal_pipeline, 'llm_service') else None,
+                        )
+                    )
+                    profile_result = future.result(timeout=120)  # 2 min timeout
+            except RuntimeError:
+                # No running loop - safe to create new one
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    profile_result = loop.run_until_complete(
+                        profiling_pipeline.execute(
+                            corp_id=corp_id,
+                            corp_name=corp_name,
+                            industry_code=industry_code,
+                            db_session=None,
+                            llm_service=signal_pipeline.llm_service if hasattr(signal_pipeline, 'llm_service') else None,
+                        )
+                    )
+                finally:
+                    loop.close()
             logger.info(
                 f"PROFILING completed: confidence={profile_result.profile.get('profile_confidence')}, "
                 f"queries_selected={len(profile_result.selected_queries)}, "

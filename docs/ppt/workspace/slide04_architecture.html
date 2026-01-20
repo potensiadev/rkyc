@@ -18,108 +18,140 @@ body {
   color: #E33737; font-size: 10pt; margin: 2pt 0 0 0;
 }
 .content {
-  flex: 1; padding: 12pt 20pt;
-  display: flex; gap: 15pt;
-}
-.arch-diagram {
-  flex: 2; display: flex; flex-direction: column; gap: 8pt;
+  flex: 1; padding: 15pt 25pt;
+  display: flex; flex-direction: column; gap: 10pt;
 }
 .arch-row {
-  display: flex; gap: 6pt; align-items: center;
+  display: flex; gap: 8pt; align-items: center;
 }
-.arch-box {
-  padding: 8pt 10pt; border-radius: 4pt; text-align: center;
+.layer-box {
+  flex: 1; padding: 10pt 12pt; border-radius: 5pt; text-align: center;
 }
-.frontend { background: #3498DB; flex: 1; }
-.backend { background: #9B59B6; flex: 1; }
-.database { background: #27AE60; flex: 1; }
-.worker { background: #E33737; flex: 1.5; }
-.llm { background: #0D1117; flex: 1.5; }
-.arch-box h3 {
-  color: #FFFFFF; font-size: 10pt; font-weight: bold; margin: 0;
+.layer-box h3 {
+  font-size: 11pt; font-weight: bold; margin: 0;
+  color: #FFFFFF;
 }
-.arch-box p {
-  color: #FFFFFF; font-size: 8pt; margin: 2pt 0 0 0; opacity: 0.9;
+.layer-box p {
+  font-size: 9pt; margin: 3pt 0 0 0; color: rgba(255,255,255,0.85);
 }
+.presentation { background: #3498DB; }
+.business { background: #9B59B6; }
+.data { background: #27AE60; }
 .arrow {
-  background: #AAB7B8; width: 15pt; height: 2pt;
+  color: #AAB7B8; font-size: 14pt;
 }
 .arrow-down {
-  background: #AAB7B8; width: 2pt; height: 10pt; margin: 0 auto;
+  text-align: center; color: #AAB7B8; font-size: 14pt;
 }
-.tech-list {
-  flex: 1; background: #F4F6F6; padding: 12pt; border-radius: 5pt;
+.worker-row {
+  display: flex; gap: 8pt;
 }
-.tech-title {
-  color: #0D1117; font-size: 11pt; font-weight: bold; margin: 0 0 8pt 0;
+.worker-box {
+  flex: 1; padding: 10pt 12pt; border-radius: 5pt; text-align: center;
 }
-.tech-item {
-  background: #FFFFFF; padding: 5pt 7pt; margin-bottom: 4pt; border-radius: 3pt;
+.worker-box h3 {
+  font-size: 11pt; font-weight: bold; margin: 0; color: #FFFFFF;
 }
-.tech-item p {
+.worker-box p {
+  font-size: 9pt; margin: 3pt 0 0 0; color: rgba(255,255,255,0.85);
+}
+.pipeline { background: #E33737; }
+.llm { background: #0D1117; }
+.external-row {
+  display: flex; gap: 8pt;
+}
+.external-box {
+  flex: 1; padding: 8pt 10pt; border-radius: 5pt; text-align: center;
+}
+.external-box h3 {
+  font-size: 10pt; font-weight: bold; margin: 0; color: #FFFFFF;
+}
+.external-box p {
+  font-size: 8pt; margin: 2pt 0 0 0; color: rgba(255,255,255,0.85);
+}
+.perplexity { background: #F39C12; }
+.embedding { background: #16A085; }
+.vector { background: #8E44AD; }
+.deploy-info {
+  display: flex; gap: 8pt; margin-top: 5pt;
+}
+.deploy-box {
+  flex: 1; background: #F4F6F6; padding: 6pt 10pt; border-radius: 4pt;
+  text-align: center;
+}
+.deploy-box p {
   color: #2E4053; font-size: 8pt; margin: 0;
+}
+.deploy-box span {
+  color: #566573; font-size: 7pt;
 }
 </style>
 </head>
 <body>
 <div class="header">
-  <h1>ARGUS™ System Architecture</h1>
-  <p class="header-sub">Multi-Agent Neural Orchestration Platform</p>
+  <h1>System Architecture</h1>
+  <p class="header-sub">3-Layer Architecture + Multi-Agent Pipeline</p>
 </div>
 <div class="content">
-  <div class="arch-diagram">
-    <div class="arch-row">
-      <div class="arch-box frontend">
-        <h3>Presentation Layer</h3>
-        <p>React 18 + TypeScript</p>
-      </div>
-      <div class="arrow"></div>
-      <div class="arch-box backend">
-        <h3>Business Layer</h3>
-        <p>FastAPI + ARGUS Engine</p>
-      </div>
-      <div class="arrow"></div>
-      <div class="arch-box database">
-        <h3>Data Layer</h3>
-        <p>PostgreSQL + pgvector</p>
-      </div>
+  <div class="arch-row">
+    <div class="layer-box presentation">
+      <h3>Presentation Layer</h3>
+      <p>React 18 + TypeScript + Vite</p>
     </div>
-    <div class="arrow-down"></div>
-    <div class="arch-row">
-      <div class="arch-box worker">
-        <h3>CHRONOS™ Pipeline</h3>
-        <p>Celery 9-Stage Orchestration</p>
-      </div>
-      <div class="arrow"></div>
-      <div class="arch-box llm">
-        <h3>Neural Ensemble</h3>
-        <p>Claude | GPT-5 | Gemini</p>
-      </div>
+    <span class="arrow">→</span>
+    <div class="layer-box business">
+      <h3>Business Layer</h3>
+      <p>FastAPI + SQLAlchemy 2.0</p>
     </div>
-    <div class="arrow-down"></div>
-    <div class="arch-row">
-      <div class="arch-box" style="background: #F39C12; flex: 1;">
-        <h3>Web Intelligence</h3>
-        <p>Perplexity sonar-pro</p>
-      </div>
-      <div class="arch-box" style="background: #16A085; flex: 1;">
-        <h3>Embedding Engine</h3>
-        <p>text-embedding-3-large</p>
-      </div>
+    <span class="arrow">→</span>
+    <div class="layer-box data">
+      <h3>Data Layer</h3>
+      <p>PostgreSQL + pgvector</p>
     </div>
   </div>
-  <div class="tech-list">
-    <p class="tech-title">Core Modules</p>
-    <div class="tech-item"><p>SENTINEL™ Signal Detector</p></div>
-    <div class="tech-item"><p>PRISM™ Profile Builder (4-Layer)</p></div>
-    <div class="tech-item"><p>AEGIS™ Anti-Hallucination</p></div>
-    <div class="tech-item"><p>NEXUS™ Context Synthesizer</p></div>
-    <div class="tech-item"><p>ORACLE™ Document Intelligence</p></div>
-    <div class="tech-item"><p>GUARDIAN™ Resilience System</p></div>
-    <p class="tech-title" style="margin-top: 10pt;">Key Specs</p>
-    <div class="tech-item"><p>Vector: HNSW 2000d</p></div>
-    <div class="tech-item"><p>Cache TTL: 7 days</p></div>
-    <div class="tech-item"><p>Zero-Failure Guarantee</p></div>
+  <p class="arrow-down">↓</p>
+  <div class="worker-row">
+    <div class="worker-box pipeline">
+      <h3>Pipeline Orchestrator</h3>
+      <p>Celery 9-Stage + Redis</p>
+    </div>
+    <div class="worker-box llm">
+      <h3>LLM Ensemble</h3>
+      <p>Claude Opus 4.5 | GPT-5 | Gemini 3 Pro</p>
+    </div>
+  </div>
+  <p class="arrow-down">↓</p>
+  <div class="external-row">
+    <div class="external-box perplexity">
+      <h3>Web Intelligence</h3>
+      <p>Perplexity sonar-pro</p>
+    </div>
+    <div class="external-box embedding">
+      <h3>Embedding Engine</h3>
+      <p>text-embedding-3-large</p>
+    </div>
+    <div class="external-box vector">
+      <h3>Vector Store</h3>
+      <p>pgvector HNSW 2000d</p>
+    </div>
+  </div>
+  <div class="deploy-info">
+    <div class="deploy-box">
+      <p>Frontend: <b>Vercel</b></p>
+      <span>rkyc-wine.vercel.app</span>
+    </div>
+    <div class="deploy-box">
+      <p>Backend: <b>Railway</b></p>
+      <span>rkyc-production.up.railway.app</span>
+    </div>
+    <div class="deploy-box">
+      <p>Database: <b>Supabase</b></p>
+      <span>Tokyo (ap-northeast-1)</span>
+    </div>
+    <div class="deploy-box">
+      <p>Worker: <b>Railway</b></p>
+      <span>Celery + Redis</span>
+    </div>
   </div>
 </div>
 </body>

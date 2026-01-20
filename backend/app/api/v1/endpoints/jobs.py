@@ -3,6 +3,7 @@ rKYC Jobs API Endpoints
 분석 작업 트리거 및 상태 조회 (Demo Mode)
 """
 
+import logging
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Header
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +11,8 @@ from sqlalchemy import select, func
 from typing import Optional
 
 from app.core.database import get_db
+
+logger = logging.getLogger(__name__)
 from app.models.job import Job, JobType, JobStatus
 from app.models.corporation import Corporation
 from app.schemas.job import (
@@ -87,19 +90,27 @@ async def trigger_analyze_job(
         from app.worker.tasks.analysis import run_analysis_pipeline
         task = run_analysis_pipeline.delay(str(new_job.job_id), request.corp_id)
         # Task ID는 로깅용 (Celery 결과 추적에 사용)
-        print(f"Celery task dispatched: task_id={task.id}, job_id={new_job.job_id}")
+        logger.info(f"Celery task dispatched: task_id={task.id}, job_id={new_job.job_id}")
     except Exception as e:
         # Redis 연결 실패 등의 경우
         celery_dispatch_failed = True
         celery_error_message = str(e)
-        print(f"Celery task dispatch failed: {e}")
+        logger.error(f"Celery task dispatch failed: {e}")
 
         # Job 상태를 FAILED로 업데이트하여 사용자에게 알림
-        new_job.status = JobStatus.FAILED
-        new_job.error_code = "CELERY_DISPATCH_FAILED"
-        new_job.error_message = f"Worker 연결 실패: {str(e)[:200]}"
-        await db.commit()
-        await db.refresh(new_job)
+        try:
+            new_job.status = JobStatus.FAILED
+            new_job.error_code = "CELERY_DISPATCH_FAILED"
+            new_job.error_message = f"Worker 연결 실패: {str(e)[:200]}"
+            await db.commit()
+            await db.refresh(new_job)
+        except Exception as commit_error:
+            # 커밋도 실패한 경우 롤백 시도
+            logger.error(f"Failed to update job status after Celery failure: {commit_error}")
+            try:
+                await db.rollback()
+            except Exception:
+                pass  # 롤백도 실패하면 무시
 
     if celery_dispatch_failed:
         return JobTriggerResponse(

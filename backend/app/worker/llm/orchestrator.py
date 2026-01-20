@@ -444,21 +444,24 @@ class MultiAgentOrchestrator:
                 return synthesis_result
             else:
                 # Claude 함수 없으면 Consensus Engine만 사용
-                merged_profile = self.consensus_engine.merge(
-                    profiles=[s["profile"] for s in sources],
-                    weights={s["provider"]: 1.0 for s in sources},
+                # ConsensusEngine.merge()는 perplexity_profile, gemini_result를 기대함
+                consensus_result = self.consensus_engine.merge(
+                    perplexity_profile=perplexity_result or {},
+                    gemini_result=gemini_validation or {},
+                    corp_name=corp_name,
+                    industry_code=industry_code,
                 )
 
                 return {
-                    "profile": merged_profile,
+                    "profile": consensus_result.profile,
                     "metadata": ConsensusMetadata(
                         total_sources=len(sources),
-                        agreement_ratio=0.8,  # 기본값
-                        fields_merged=list(merged_profile.keys()),
-                        discrepancies=[],
+                        agreement_ratio=consensus_result.metadata.matched_fields / max(consensus_result.metadata.total_fields, 1),
+                        fields_merged=[fc.field_name for fc in consensus_result.field_details],
+                        discrepancies=[fc.field_name for fc in consensus_result.field_details if fc.discrepancy],
                         fallback_layer=FallbackLayer.CLAUDE_SYNTHESIS.value,
-                        retry_count=0,
-                        error_messages=[],
+                        retry_count=consensus_result.metadata.retry_count,
+                        error_messages=consensus_result.metadata.error_messages,
                     ),
                 }
 

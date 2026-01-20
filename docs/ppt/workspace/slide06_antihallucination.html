@@ -9,7 +9,7 @@ body {
   display: flex; flex-direction: column;
 }
 .header {
-  background: #E33737; padding: 14pt 25pt;
+  background: #3498DB; padding: 14pt 25pt;
 }
 .header h1 {
   color: #FFFFFF; font-size: 22pt; font-weight: bold; margin: 0;
@@ -18,102 +18,126 @@ body {
   color: rgba(255,255,255,0.9); font-size: 10pt; margin: 2pt 0 0 0;
 }
 .content {
-  flex: 1; padding: 12pt 25pt;
-  display: flex; gap: 15pt;
+  flex: 1; padding: 12pt 20pt;
+  display: flex; flex-direction: column; gap: 8pt;
 }
-.layers {
-  flex: 1.2;
+.layer-row {
+  display: flex; gap: 8pt; align-items: center;
 }
-.layer {
-  display: flex; align-items: center; margin-bottom: 8pt;
+.layer-box {
+  flex: 1; padding: 10pt 12pt; border-radius: 5pt;
+  display: flex; align-items: center; gap: 10pt;
 }
 .layer-num {
-  width: 40pt; height: 40pt; background: #0D1117; border-radius: 50%;
+  width: 32pt; height: 32pt; background: #0D1117; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
 }
 .layer-num p {
-  color: #FFFFFF; font-size: 12pt; font-weight: bold; margin: 0;
+  color: #FFFFFF; font-size: 11pt; font-weight: bold; margin: 0;
 }
-.layer-content {
-  margin-left: 10pt; flex: 1;
-}
-.layer-title {
+.layer-content h3 {
   color: #1C2833; font-size: 11pt; font-weight: bold; margin: 0;
 }
-.layer-desc {
-  color: #2E4053; font-size: 9pt; margin: 2pt 0 0 0;
+.layer-content p {
+  color: #2E4053; font-size: 9pt; margin: 3pt 0 0 0;
 }
-.orchestrator {
-  flex: 0.8; background: #0D1117; padding: 12pt; border-radius: 5pt;
+.layer-0 { background: #F4F6F6; }
+.layer-1 { background: #E8F8F5; }
+.layer-15 { background: #FEF9E7; }
+.layer-2 { background: #EBF5FB; }
+.layer-3 { background: #F5EEF8; }
+.layer-4 { background: #FDEDEC; }
+.arrow-down {
+  text-align: center; color: #AAB7B8; font-size: 12pt;
 }
-.orch-title {
-  color: #E33737; font-size: 11pt; font-weight: bold; margin: 0 0 8pt 0;
+.guarantee {
+  background: #0D1117; padding: 10pt 15pt; border-radius: 5pt;
+  display: flex; align-items: center; justify-content: center; gap: 20pt;
+}
+.guarantee-item {
   text-align: center;
 }
-.orch-layer {
-  background: #1C2833; padding: 5pt 8pt; margin-bottom: 4pt; border-radius: 3pt;
+.guarantee-item p {
+  color: #E33737; font-size: 18pt; font-weight: bold; margin: 0;
 }
-.orch-layer p {
-  color: #FFFFFF; font-size: 8pt; margin: 0;
+.guarantee-item span {
+  color: #AAB7B8; font-size: 9pt;
 }
 </style>
 </head>
 <body>
 <div class="header">
-  <h1>AEGIS™ Anti-Hallucination Defense</h1>
-  <p class="header-sub">Enterprise-Grade Fact Verification System | 4-Layer Defense</p>
+  <h1>Multi-Agent Orchestrator</h1>
+  <p class="header-sub">4-Layer Fallback System for Zero-Failure Guarantee</p>
 </div>
 <div class="content">
-  <div class="layers">
-    <div class="layer">
+  <div class="layer-row">
+    <div class="layer-box layer-0">
+      <div class="layer-num"><p>L0</p></div>
+      <div class="layer-content">
+        <h3>Intelligent Cache</h3>
+        <p>7-day TTL, Profile Store</p>
+      </div>
+    </div>
+    <div class="layer-box layer-1">
       <div class="layer-num"><p>L1</p></div>
       <div class="layer-content">
-        <p class="layer-title">Source Verification</p>
-        <p class="layer-desc">Citation Validator, Domain Credibility Scorer (T1~T4)</p>
-      </div>
-    </div>
-    <div class="layer">
-      <div class="layer-num"><p>L2</p></div>
-      <div class="layer-content">
-        <p class="layer-title">Extraction Guardrails</p>
-        <p class="layer-desc">"Return null if uncertain" Policy, Schema Compliance</p>
-      </div>
-    </div>
-    <div class="layer">
-      <div class="layer-num"><p>L3</p></div>
-      <div class="layer-content">
-        <p class="layer-title">Cross-Validation (Gemini)</p>
-        <p class="layer-desc">Discrepancy Detector, Jaccard Similarity >= 0.7</p>
-      </div>
-    </div>
-    <div class="layer">
-      <div class="layer-num"><p>L4</p></div>
-      <div class="layer-content">
-        <p class="layer-title">Audit Trail</p>
-        <p class="layer-desc">Provenance Tracker, field_provenance, LLM Audit Log</p>
+        <h3>Perplexity Search</h3>
+        <p>sonar-pro, Citation with URLs</p>
       </div>
     </div>
   </div>
-  <div class="orchestrator">
-    <p class="orch-title">PRISM™ Multi-Agent Orchestrator</p>
-    <div class="orch-layer">
-      <p><b>Layer 0:</b> Intelligent Cache (7d TTL)</p>
+  <p class="arrow-down">↓</p>
+  <div class="layer-row">
+    <div class="layer-box layer-15">
+      <div class="layer-num"><p>L1.5</p></div>
+      <div class="layer-content">
+        <h3>Gemini Validation</h3>
+        <p>Cross-check, Enrich missing fields</p>
+      </div>
     </div>
-    <div class="orch-layer">
-      <p><b>Layer 1:</b> Perplexity Search Agent</p>
+    <div class="layer-box layer-2">
+      <div class="layer-num"><p>L2</p></div>
+      <div class="layer-content">
+        <h3>Consensus Engine</h3>
+        <p>Jaccard Similarity >= 0.7</p>
+      </div>
     </div>
-    <div class="orch-layer">
-      <p><b>Layer 1.5:</b> Gemini Validation Agent</p>
+  </div>
+  <p class="arrow-down">↓</p>
+  <div class="layer-row">
+    <div class="layer-box layer-3">
+      <div class="layer-num"><p>L3</p></div>
+      <div class="layer-content">
+        <h3>Rule-Based Merge</h3>
+        <p>Source priority, Range validation</p>
+      </div>
     </div>
-    <div class="orch-layer">
-      <p><b>Layer 2:</b> Consensus Engine</p>
+    <div class="layer-box layer-4">
+      <div class="layer-num"><p>L4</p></div>
+      <div class="layer-content">
+        <h3>Graceful Degradation</h3>
+        <p>Minimal profile, _degraded flag</p>
+      </div>
     </div>
-    <div class="orch-layer">
-      <p><b>Layer 3:</b> Rule-Based Merge</p>
+  </div>
+  <div class="guarantee">
+    <div class="guarantee-item">
+      <p>100%</p>
+      <span>Zero-Failure Rate</span>
     </div>
-    <div class="orch-layer">
-      <p><b>Layer 4:</b> Graceful Degradation</p>
+    <div class="guarantee-item">
+      <p>7 days</p>
+      <span>Cache TTL</span>
+    </div>
+    <div class="guarantee-item">
+      <p>1 day</p>
+      <span>Fallback TTL</span>
+    </div>
+    <div class="guarantee-item">
+      <p>19</p>
+      <span>Profile Fields</span>
     </div>
   </div>
 </div>

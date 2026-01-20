@@ -1,14 +1,14 @@
 # rKYC System Architecture v2.0
 
-> **ARGUS™ AI Engine** - Enterprise-Grade Corporate Risk Intelligence Platform
-> Proprietary Multi-Agent Neural Architecture for Financial Risk Detection
+> **rKYC AI Engine** - Enterprise-Grade Corporate Risk Intelligence Platform
+> Multi-Agent Architecture for Financial Risk Detection
 > Last Updated: 2026-01-20
 
 ---
 
 ## Executive Summary
 
-rKYC는 **ARGUS™ (Adaptive Risk Grounding & Unified Signal) AI Engine**을 핵심으로 하는 차세대 기업 리스크 인텔리전스 플랫폼입니다. 자체 개발한 Multi-Agent Neural Orchestration 아키텍처를 통해 실시간으로 기업 리스크 시그널을 탐지하고, 4-Layer Anti-Hallucination Defense System으로 금융권 수준의 정확도를 보장합니다.
+rKYC는 **rKYC AI Engine**을 핵심으로 하는 차세대 기업 리스크 인텔리전스 플랫폼입니다. Multi-Agent Orchestration 아키텍처를 통해 실시간으로 기업 리스크 시그널을 탐지하고, 4-Layer Anti-Hallucination Defense System으로 금융권 수준의 정확도를 보장합니다.
 
 ---
 
@@ -20,8 +20,8 @@ rKYC는 **ARGUS™ (Adaptive Risk Grounding & Unified Signal) AI Engine**을 핵
 ║                        rKYC RISK INTELLIGENCE PLATFORM                           ║
 ║                                                                                  ║
 ║    ┌─────────────────────────────────────────────────────────────────────────┐   ║
-║    │                         ARGUS™ AI ENGINE                                │   ║
-║    │         Adaptive Risk Grounding & Unified Signal System                 │   ║
+║    │                         rKYC AI ENGINE                                  │   ║
+║    │              Multi-Agent Orchestration System                           │   ║
 ║    └─────────────────────────────────────────────────────────────────────────┘   ║
 ║                                                                                  ║
 ║    ┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐        ║
@@ -29,16 +29,16 @@ rKYC는 **ARGUS™ (Adaptive Risk Grounding & Unified Signal) AI Engine**을 핵
 ║    │      LAYER       │───▶│     LAYER        │───▶│     LAYER        │        ║
 ║    │                  │    │                  │    │                  │        ║
 ║    │  React 18 SPA    │    │  FastAPI Core    │    │  PostgreSQL      │        ║
-║    │  Real-time UI    │    │  ARGUS Engine    │    │  Vector Store    │        ║
+║    │  Real-time UI    │    │  AI Engine       │    │  Vector Store    │        ║
 ║    └──────────────────┘    └────────┬─────────┘    └──────────────────┘        ║
 ║                                     │                                           ║
 ║                                     ▼                                           ║
 ║    ┌─────────────────────────────────────────────────────────────────────────┐   ║
-║    │                    ARGUS™ NEURAL ORCHESTRATION                          │   ║
+║    │                    MULTI-AGENT ORCHESTRATION                            │   ║
 ║    │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐       │   ║
-║    │  │ SENTINEL™   │ │ PRISM™      │ │ NEXUS™      │ │ AEGIS™      │       │   ║
-║    │  │ Signal      │ │ Profile     │ │ Context     │ │ Defense     │       │   ║
-║    │  │ Detector    │ │ Builder     │ │ Synthesizer │ │ System      │       │   ║
+║    │  │ Signal      │ │ Multi-Agent │ │ Context     │ │ Anti-Hallu  │       │   ║
+║    │  │ Detector    │ │ Profiler    │ │ Synthesizer │ │ Defense     │       │   ║
+║    │  │             │ │             │ │             │ │             │       │   ║
 ║    │  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘       │   ║
 ║    └─────────────────────────────────────────────────────────────────────────┘   ║
 ║                                                                                  ║
@@ -47,14 +47,14 @@ rKYC는 **ARGUS™ (Adaptive Risk Grounding & Unified Signal) AI Engine**을 핵
 
 ---
 
-## 2. ARGUS™ AI Engine - Core Architecture
+## 2. rKYC AI Engine - Core Architecture
 
 ### 2.1 System Component Tree
 
 ```
-ARGUS™ AI ENGINE
+rKYC AI ENGINE
 │
-├── 🔷 SENTINEL™ Signal Detection Module
+├── 🔷 Signal Detection Module
 │   │
 │   ├── SignalExtractionPipeline
 │   │   ├── ContextualNLU                    # Natural Language Understanding
@@ -85,7 +85,7 @@ ARGUS™ AI ENGINE
 │       ├── ConfidenceEstimator              # Bayesian Confidence
 │       └── UrgencyRanker                    # Priority Queue
 │
-├── 🔷 PRISM™ Corporate Profiling Module
+├── 🔷 Multi-Agent Profiling Module
 │   │
 │   ├── MultiAgentOrchestrator
 │   │   ├── Layer0_CacheManager              # 7-day TTL Intelligent Cache
@@ -116,7 +116,7 @@ ARGUS™ AI ENGINE
 │       ├── FieldConfidenceCalculator
 │       └── AuditTrailGenerator
 │
-├── 🔷 NEXUS™ Context Synthesis Module
+├── 🔷 Context Synthesis Module
 │   │
 │   ├── UnifiedContextBuilder
 │   │   ├── InternalDataAggregator
@@ -151,7 +151,7 @@ ARGUS™ AI ENGINE
 │       ├── RecencyWeighter
 │       └── SourceCredibilityRanker
 │
-├── 🔷 AEGIS™ Anti-Hallucination Defense System
+├── 🔷 Anti-Hallucination Defense System
 │   │
 │   ├── Layer1_SourceVerification
 │   │   ├── CitationValidator
@@ -180,7 +180,7 @@ ARGUS™ AI ENGINE
 │       ├── ConsensusMetadataRecorder
 │       └── LLMAuditLogWriter
 │
-├── 🔷 ORACLE™ Document Intelligence Module
+├── 🔷 Document Intelligence Module
 │   │
 │   ├── DocumentIngestionPipeline
 │   │   ├── PDFTextExtractor                 # pdfplumber Engine
@@ -212,7 +212,7 @@ ARGUS™ AI ENGINE
 │       ├── LLMFallbackExtractor
 │       └── FactNormalizer
 │
-├── 🔷 CHRONOS™ Pipeline Orchestration Module
+├── 🔷 Pipeline Orchestration Module
 │   │
 │   ├── 9-Stage Analysis Pipeline
 │   │   │
@@ -223,19 +223,19 @@ ARGUS™ AI ENGINE
 │   │   │   └── DocumentIngestionPipeline
 │   │   │
 │   │   ├── Stage 3: PROFILING
-│   │   │   └── CorpProfilingPipeline (PRISM™)
+│   │   │   └── CorpProfilingPipeline (Multi-Agent)
 │   │   │
 │   │   ├── Stage 4: EXTERNAL
 │   │   │   └── ExternalSearchPipeline
 │   │   │
 │   │   ├── Stage 5: UNIFIED_CONTEXT
-│   │   │   └── ContextSynthesisPipeline (NEXUS™)
+│   │   │   └── ContextSynthesisPipeline
 │   │   │
 │   │   ├── Stage 6: SIGNAL_EXTRACTION
-│   │   │   └── SignalExtractionPipeline (SENTINEL™)
+│   │   │   └── SignalExtractionPipeline
 │   │   │
 │   │   ├── Stage 7: VALIDATION
-│   │   │   ├── GuardrailsPipeline (AEGIS™)
+│   │   │   ├── GuardrailsPipeline (Anti-Hallucination)
 │   │   │   └── DeduplicationPipeline
 │   │   │
 │   │   ├── Stage 8: INDEX
@@ -255,7 +255,7 @@ ARGUS™ AI ENGINE
 │       ├── RedisMessageBroker
 │       └── WorkerPoolManager
 │
-└── 🔷 GUARDIAN™ Resilience & Security Module
+└── 🔷 Resilience & Security Module
     │
     ├── CircuitBreakerManager
     │   ├── PerplexityCircuitBreaker         # threshold=3, cooldown=5m
@@ -287,13 +287,13 @@ ARGUS™ AI ENGINE
 
 ---
 
-## 3. ARGUS™ Neural Model Architecture
+## 3. rKYC AI Engine Model Architecture
 
 ### 3.1 Multi-Model Ensemble Configuration
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════════════╗
-║                     ARGUS™ NEURAL MODEL ENSEMBLE                                 ║
+║                     rKYC AI ENGINE MODEL ENSEMBLE                                ║
 ╠══════════════════════════════════════════════════════════════════════════════════╣
 ║                                                                                  ║
 ║  ┌─────────────────────────────────────────────────────────────────────────┐    ║
@@ -356,7 +356,7 @@ ARGUS™ AI ENGINE
                                     │
                                     ▼
                     ┌───────────────────────────────┐
-                    │   ARGUS Router™               │
+                    │   AI Engine Router            │
                     │   Task Classification         │
                     └───────────────┬───────────────┘
                                     │
@@ -370,9 +370,9 @@ ARGUS™ AI ENGINE
             │                      │                      │
             ▼                      ▼                      ▼
     ┌───────────────┐      ┌───────────────┐      ┌───────────────┐
-    │ SENTINEL™     │      │ PRISM™        │      │ ORACLE™       │
-    │ Pipeline      │      │ MultiAgent    │      │ Parser        │
-    │               │      │ Orchestrator  │      │               │
+    │ Signal        │      │ Multi-Agent   │      │ Document      │
+    │ Extraction    │      │ Orchestrator  │      │ Parser        │
+    │               │      │               │      │               │
     │ Claude Opus   │      │               │      │ PDF Parser    │
     │ → GPT-5       │      │ Perplexity    │      │ → Regex       │
     │ → Gemini 3    │      │ → Gemini      │      │ → LLM         │
@@ -384,13 +384,13 @@ ARGUS™ AI ENGINE
 
 ---
 
-## 4. PRISM™ Multi-Agent Orchestration Architecture
+## 4. Multi-Agent Orchestration Architecture
 
 ### 4.1 4-Layer Fallback System
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════════════╗
-║                    PRISM™ MULTI-AGENT ORCHESTRATOR                               ║
+║                    MULTI-AGENT ORCHESTRATOR                                      ║
 ║                    Zero-Failure Guarantee Architecture                           ║
 ╠══════════════════════════════════════════════════════════════════════════════════╣
 ║                                                                                  ║
@@ -510,13 +510,13 @@ ARGUS™ AI ENGINE
 
 ---
 
-## 5. AEGIS™ Anti-Hallucination Defense System
+## 5. Anti-Hallucination Defense System
 
 ### 5.1 4-Layer Defense Architecture
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════════════╗
-║                    AEGIS™ ANTI-HALLUCINATION DEFENSE                             ║
+║                    ANTI-HALLUCINATION DEFENSE                                    ║
 ║                    Enterprise-Grade Fact Verification System                     ║
 ╠══════════════════════════════════════════════════════════════════════════════════╣
 ║                                                                                  ║
@@ -647,13 +647,13 @@ ARGUS™ AI ENGINE
 
 ---
 
-## 6. CHRONOS™ Pipeline Architecture
+## 6. Pipeline Architecture
 
 ### 6.1 9-Stage Analysis Pipeline
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════════════╗
-║                    CHRONOS™ 9-STAGE ANALYSIS PIPELINE                            ║
+║                    9-STAGE ANALYSIS PIPELINE                                     ║
 ║                    Automated Risk Signal Detection Workflow                      ║
 ╠══════════════════════════════════════════════════════════════════════════════════╣
 ║                                                                                  ║
@@ -668,7 +668,7 @@ ARGUS™ AI ENGINE
 ║          │                                                                      ║
 ║          ▼                                                                      ║
 ║  ┌─────────────────────────────────────────────────────────────────────────┐    ║
-║  │  [2] DOC_INGEST (ORACLE™)                                Progress: 25% │    ║
+║  │  [2] DOC_INGEST                                          Progress: 25% │    ║
 ║  │  ─────────────────────────────────────────────────────────────────────  │    ║
 ║  │   DocumentIngestionPipeline                                            │    ║
 ║  │   ├── PDF Text Extraction (pdfplumber)                                 │    ║
@@ -686,10 +686,10 @@ ARGUS™ AI ENGINE
 ║          │                                                                      ║
 ║          ▼                                                                      ║
 ║  ┌─────────────────────────────────────────────────────────────────────────┐    ║
-║  │  [3] PROFILING (PRISM™)                                  Progress: 28% │    ║
+║  │  [3] PROFILING (Multi-Agent)                             Progress: 28% │    ║
 ║  │  ─────────────────────────────────────────────────────────────────────  │    ║
 ║  │   CorpProfilingPipeline                                                │    ║
-║  │   ├── MultiAgentOrchestrator (4-Layer Fallback)                        │    ║
+║  │   ├── Multi-Agent Orchestrator (4-Layer Fallback)                      │    ║
 ║  │   │   ├── L0: Cache Check (7-day TTL)                                  │    ║
 ║  │   │   ├── L1: Perplexity Search Agent                                  │    ║
 ║  │   │   ├── L1.5: Gemini Validation Agent                                │    ║
@@ -714,7 +714,7 @@ ARGUS™ AI ENGINE
 ║          │                                                                      ║
 ║          ▼                                                                      ║
 ║  ┌─────────────────────────────────────────────────────────────────────────┐    ║
-║  │  [5] UNIFIED_CONTEXT (NEXUS™)                            Progress: 50% │    ║
+║  │  [5] UNIFIED_CONTEXT                                     Progress: 50% │    ║
 ║  │  ─────────────────────────────────────────────────────────────────────  │    ║
 ║  │   ContextSynthesisPipeline                                             │    ║
 ║  │   ├── Aggregate all data sources                                       │    ║
@@ -730,7 +730,7 @@ ARGUS™ AI ENGINE
 ║          │                                                                      ║
 ║          ▼                                                                      ║
 ║  ┌─────────────────────────────────────────────────────────────────────────┐    ║
-║  │  [6] SIGNAL_EXTRACTION (SENTINEL™)                       Progress: 75% │    ║
+║  │  [6] SIGNAL_EXTRACTION                                   Progress: 75% │    ║
 ║  │  ─────────────────────────────────────────────────────────────────────  │    ║
 ║  │   SignalExtractionPipeline                                             │    ║
 ║  │   ├── LLMService (3-Tier Fallback)                                     │    ║
@@ -747,7 +747,7 @@ ARGUS™ AI ENGINE
 ║          │                                                                      ║
 ║          ▼                                                                      ║
 ║  ┌─────────────────────────────────────────────────────────────────────────┐    ║
-║  │  [7] VALIDATION (AEGIS™)                                 Progress: 85% │    ║
+║  │  [7] VALIDATION (Anti-Hallucination)                     Progress: 85% │    ║
 ║  │  ─────────────────────────────────────────────────────────────────────  │    ║
 ║  │   GuardrailsPipeline                                                   │    ║
 ║  │   ├── Evidence requirement check (≥1 per signal)                       │    ║
@@ -787,7 +787,7 @@ ARGUS™ AI ENGINE
 ║  │  ─────────────────────────────────────────────────────────────────────  │    ║
 ║  │   Total Execution Time: ~22.7 seconds                                  │    ║
 ║  │   Signal Detection Rate: 4-6 signals per corporation                   │    ║
-║  │   Accuracy (with AEGIS™): 95%+                                         │    ║
+║  │   Accuracy (with Anti-Hallucination): 95%+                             │    ║
 ║  │   Zero-Failure Rate: 100% (Layer 4 guarantee)                          │    ║
 ║  └─────────────────────────────────────────────────────────────────────────┘    ║
 ║                                                                                  ║
@@ -836,7 +836,7 @@ PostgreSQL (Supabase) + pgvector
 │       ├── corp_id (PK, FK)              VARCHAR(20)
 │       └── snapshot_id (FK)              UUID
 │
-├── 📁 DOCUMENT LAYER (ORACLE™)
+├── 📁 DOCUMENT LAYER
 │   │
 │   ├── rkyc_document                     # 제출 문서 메타
 │   │   ├── doc_id (PK)                   UUID
@@ -864,7 +864,7 @@ PostgreSQL (Supabase) + pgvector
 │       ├── extraction_method             VARCHAR(20)     # REGEX / LLM
 │       └── created_at                    TIMESTAMPTZ
 │
-├── 📁 PROFILE LAYER (PRISM™)
+├── 📁 PROFILE LAYER (Multi-Agent)
 │   │
 │   └── rkyc_corp_profile                 # 기업 프로파일 (19개 필드)
 │       ├── profile_id (PK)               UUID
@@ -930,7 +930,7 @@ PostgreSQL (Supabase) + pgvector
 │   │   ├── sentiment                     ENUM
 │   │   └── published_at                  TIMESTAMPTZ
 │   │
-│   └── rkyc_llm_audit_log                # LLM 감사 로그 (AEGIS™)
+│   └── rkyc_llm_audit_log                # LLM 감사 로그 (Anti-Hallucination)
 │       ├── log_id (PK)                   UUID
 │       ├── timestamp                     TIMESTAMPTZ
 │       ├── llm_type                      ENUM
@@ -942,7 +942,7 @@ PostgreSQL (Supabase) + pgvector
 │       ├── response_hash                 VARCHAR(64)
 │       └── latency_ms                    INT
 │
-├── 📁 SIGNAL LAYER (SENTINEL™)
+├── 📁 SIGNAL LAYER
 │   │
 │   ├── rkyc_signal                       # 시그널 원본
 │   │   ├── signal_id (PK)                UUID
@@ -988,7 +988,7 @@ PostgreSQL (Supabase) + pgvector
 │       ├── meta                          JSONB
 │       └── created_at                    TIMESTAMPTZ
 │
-├── 📁 VECTOR LAYER (NEXUS™)
+├── 📁 VECTOR LAYER
 │   │
 │   ├── rkyc_signal_embedding             # 시그널 임베딩
 │   │   ├── signal_id (FK)                UUID
@@ -1002,7 +1002,7 @@ PostgreSQL (Supabase) + pgvector
 │       ├── embedding                     VECTOR(2000)
 │       └── created_at                    TIMESTAMPTZ
 │
-└── 📁 JOB LAYER (CHRONOS™)
+└── 📁 JOB LAYER
     │
     └── rkyc_job                          # 분석 작업
         ├── job_id (PK)                   UUID
@@ -1046,13 +1046,13 @@ EMBEDDING CONFIGURATION
 
 ---
 
-## 8. GUARDIAN™ Resilience Architecture
+## 8. Resilience Architecture
 
 ### 8.1 Circuit Breaker Configuration
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════════════╗
-║                    GUARDIAN™ CIRCUIT BREAKER SYSTEM                              ║
+║                    CIRCUIT BREAKER SYSTEM                                        ║
 ╠══════════════════════════════════════════════════════════════════════════════════╣
 ║                                                                                  ║
 ║  ┌─────────────────────────────────────────────────────────────────────────┐    ║
@@ -1147,7 +1147,7 @@ RATE LIMITER CONFIGURATION
 ║                           │    Worker    │            │    Redis     │          ║
 ║                           │   (Celery)   │◀──────────▶│   (Broker)   │          ║
 ║                           │              │            └──────────────┘          ║
-║                           │  ARGUS™ AI   │                                       ║
+║                           │  rKYC AI     │                                       ║
 ║                           │   Engine     │────────────▶ External LLMs           ║
 ║                           │              │              ├── Anthropic            ║
 ║                           │  9-Stage     │              ├── OpenAI               ║
@@ -1167,13 +1167,13 @@ RATE LIMITER CONFIGURATION
 
 ## 10. Performance Metrics
 
-### 10.1 ARGUS™ Engine Performance
+### 10.1 AI Engine Performance
 
 | Metric | Value | Description |
 |--------|-------|-------------|
 | Pipeline Execution | ~22.7s | 9-stage complete analysis |
 | Signal Detection Rate | 4-6 | Signals per corporation |
-| Accuracy (with AEGIS™) | 95%+ | Anti-hallucination verified |
+| Accuracy (with Anti-Hallucination) | 95%+ | Fact verification verified |
 | Zero-Failure Rate | 100% | Layer 4 guarantee |
 | Embedding Dimension | 2000 | pgvector maximum |
 | Cache TTL | 7 days | Profile freshness |
@@ -1194,16 +1194,16 @@ RATE LIMITER CONFIGURATION
 
 ## 11. Glossary
 
-| Term | Full Name | Description |
-|------|-----------|-------------|
-| ARGUS™ | Adaptive Risk Grounding & Unified Signal | Core AI engine |
-| SENTINEL™ | - | Signal detection module |
-| PRISM™ | - | Corporate profiling module |
-| NEXUS™ | - | Context synthesis module |
-| AEGIS™ | - | Anti-hallucination defense |
-| ORACLE™ | - | Document intelligence module |
-| CHRONOS™ | - | Pipeline orchestration |
-| GUARDIAN™ | - | Resilience & security module |
+| Term | Description |
+|------|-------------|
+| rKYC AI Engine | Core AI engine for risk intelligence |
+| Signal Detector | Signal detection module |
+| Multi-Agent Profiler | Corporate profiling with 4-layer fallback |
+| Context Synthesizer | Context synthesis with vector search |
+| Anti-Hallucination | 4-layer defense for fact verification |
+| Document Parser | Document intelligence module |
+| Pipeline Orchestrator | 9-stage pipeline orchestration |
+| Resilience System | Circuit breaker & rate limiter |
 
 ---
 

@@ -33,20 +33,35 @@ class Settings(BaseSettings):
     SUPABASE_SERVICE_ROLE_KEY: str = Field(..., description="Supabase service role key")
 
     # Redis & Celery
-    REDIS_URL: str = "redis://localhost:6379/0"
+    REDIS_URL: str = "redis://localhost:6379"
+    REDIS_BROKER_DB: int = Field(default=0, description="Redis DB number for Celery broker")
+    REDIS_RESULT_DB: int = Field(default=1, description="Redis DB number for Celery results")
 
     @property
     def CELERY_BROKER_URL(self) -> str:
-        """Celery broker URL (uses REDIS_URL)"""
-        return self.REDIS_URL
+        """Celery broker URL (uses REDIS_URL with REDIS_BROKER_DB)"""
+        base_url = self.REDIS_URL.rstrip("/0123456789")
+        return f"{base_url}/{self.REDIS_BROKER_DB}"
 
     @property
     def CELERY_RESULT_BACKEND(self) -> str:
-        """Celery result backend URL (uses REDIS_URL with db 1)"""
-        # Use db 1 for results if using default localhost
-        if self.REDIS_URL.endswith("/0"):
-            return self.REDIS_URL.replace("/0", "/1")
-        return self.REDIS_URL
+        """Celery result backend URL (uses REDIS_URL with REDIS_RESULT_DB)"""
+        base_url = self.REDIS_URL.rstrip("/0123456789")
+        return f"{base_url}/{self.REDIS_RESULT_DB}"
+
+    # LLM Retry Configuration
+    LLM_MAX_RETRIES: int = Field(default=3, description="Maximum retry attempts for LLM calls")
+    LLM_INITIAL_DELAY: float = Field(default=1.0, description="Initial retry delay in seconds")
+    LLM_MAX_DELAY: float = Field(default=60.0, description="Maximum retry delay in seconds")
+    LLM_BACKOFF_MULTIPLIER: float = Field(default=2.0, description="Exponential backoff multiplier")
+    LLM_VERBOSE: bool = Field(default=False, description="Enable verbose LLM logging (litellm)")
+
+    # Embedding Configuration
+    EMBEDDING_MAX_BATCH_SIZE: int = Field(default=100, description="Max batch size for embedding API")
+    EMBEDDING_MAX_RETRIES: int = Field(default=3, description="Max retries for embedding API")
+
+    # Document Storage
+    DOCUMENT_STORAGE_PATH: str = Field(default="./data/documents", description="Path for document storage")
 
     # LLM Providers (Legacy - used by both External/Internal in MVP)
     ANTHROPIC_API_KEY: str = Field(default="", description="Anthropic API key for Claude")

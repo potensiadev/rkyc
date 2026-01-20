@@ -10,17 +10,46 @@ PRD v1.2 설정:
 - CLOSED: 정상 동작
 - OPEN: 차단 (cooldown 대기)
 - HALF_OPEN: 테스트 요청 허용
+
+v1.3 변경사항:
+- Redis 영속화 지원 (Worker 재시작 시에도 상태 유지)
 """
 
+import json
 import logging
 import time
 import threading
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from enum import Enum
 from typing import Optional, Callable
 
 logger = logging.getLogger(__name__)
+
+# Redis client (lazy initialization)
+_redis_client = None
+
+
+def _get_redis():
+    """Redis 클라이언트 가져오기 (lazy initialization)"""
+    global _redis_client
+    if _redis_client is None:
+        try:
+            import redis
+            from app.core.config import settings
+            redis_url = getattr(settings, 'REDIS_URL', None)
+            if redis_url:
+                _redis_client = redis.from_url(redis_url, decode_responses=True)
+                # Test connection
+                _redis_client.ping()
+                logger.info("[CircuitBreaker] Redis connection established for state persistence")
+            else:
+                logger.warning("[CircuitBreaker] REDIS_URL not configured, using in-memory storage")
+                _redis_client = False  # Mark as unavailable
+        except Exception as e:
+            logger.warning(f"[CircuitBreaker] Redis connection failed, using in-memory: {e}")
+            _redis_client = False
+    return _redis_client if _redis_client else None
 
 
 class CircuitState(str, Enum):
@@ -71,11 +100,21 @@ class CircuitBreaker:
     OPEN → HALF_OPEN: cooldown_seconds 경과
     HALF_OPEN → CLOSED: 테스트 성공
     HALF_OPEN → OPEN: 테스트 실패
+
+    Redis 영속화:
+    - 상태 변경 시 Redis에 저장
+    - 초기화 시 Redis에서 상태 복원
     """
 
-    def __init__(self, provider: str, config: CircuitConfig):
+    REDIS_KEY_PREFIX = "rkyc:circuit_breaker:"
+
+    def __init__(self, provider: str, config: CircuitConfig, use_redis: bool = True):
         self.provider = provider
         self.config = config
+        self._use_redis = use_redis
+        self._lock = threading.Lock()
+
+        # 기본 상태 초기화
         self.state = CircuitState.CLOSED
         self.failure_count = 0
         self.success_count = 0
@@ -84,7 +123,70 @@ class CircuitBreaker:
         self.last_success_at: Optional[float] = None
         self.opened_at: Optional[float] = None
         self.metrics = CircuitMetrics()
-        self._lock = threading.Lock()
+
+        # Redis에서 상태 복원 시도
+        if use_redis:
+            self._restore_from_redis()
+
+    def _get_redis_key(self) -> str:
+        """Redis 키 생성"""
+        return f"{self.REDIS_KEY_PREFIX}{self.provider}"
+
+    def _restore_from_redis(self):
+        """Redis에서 상태 복원"""
+        redis = _get_redis()
+        if not redis:
+            return
+
+        try:
+            key = self._get_redis_key()
+            data = redis.get(key)
+            if data:
+                state_dict = json.loads(data)
+                self.state = CircuitState(state_dict.get("state", "CLOSED"))
+                self.failure_count = state_dict.get("failure_count", 0)
+                self.success_count = state_dict.get("success_count", 0)
+                self.half_open_successes = state_dict.get("half_open_successes", 0)
+                self.last_failure_at = state_dict.get("last_failure_at")
+                self.last_success_at = state_dict.get("last_success_at")
+                self.opened_at = state_dict.get("opened_at")
+
+                logger.info(
+                    f"[CircuitBreaker:{self.provider}] State restored from Redis: "
+                    f"state={self.state.value}, failures={self.failure_count}"
+                )
+        except Exception as e:
+            logger.warning(f"[CircuitBreaker:{self.provider}] Failed to restore from Redis: {e}")
+
+    def _save_to_redis(self):
+        """Redis에 상태 저장"""
+        if not self._use_redis:
+            return
+
+        redis = _get_redis()
+        if not redis:
+            return
+
+        try:
+            key = self._get_redis_key()
+            state_dict = {
+                "state": self.state.value,
+                "failure_count": self.failure_count,
+                "success_count": self.success_count,
+                "half_open_successes": self.half_open_successes,
+                "last_failure_at": self.last_failure_at,
+                "last_success_at": self.last_success_at,
+                "opened_at": self.opened_at,
+                "updated_at": time.time(),
+            }
+
+            # TTL: cooldown 시간의 2배 (OPEN 상태가 만료되어도 일정 시간 유지)
+            ttl = self.config.cooldown_seconds * 2
+            redis.setex(key, ttl, json.dumps(state_dict))
+
+            logger.debug(f"[CircuitBreaker:{self.provider}] State saved to Redis")
+        except Exception as e:
+            logger.warning(f"[CircuitBreaker:{self.provider}] Failed to save to Redis: {e}")
 
     def is_available(self) -> bool:
         """요청 허용 여부 확인"""
@@ -123,6 +225,7 @@ class CircuitBreaker:
                 # 성공 시 실패 카운트 리셋
                 self.failure_count = 0
 
+            self._save_to_redis()
             logger.debug(f"[CircuitBreaker:{self.provider}] Success recorded, state={self.state}")
 
     def record_failure(self, error: Optional[str] = None):
@@ -146,6 +249,8 @@ class CircuitBreaker:
                         f"[CircuitBreaker:{self.provider}] CLOSED → OPEN "
                         f"(failures={self.failure_count}): {error}"
                     )
+
+            self._save_to_redis()
 
     def get_status(self) -> CircuitStatus:
         """현재 상태 조회"""
@@ -178,6 +283,7 @@ class CircuitBreaker:
         with self._lock:
             self._transition_to_closed()
             self.failure_count = 0
+            self._save_to_redis()
             logger.info(f"[CircuitBreaker:{self.provider}] Manually reset to CLOSED")
 
     def _check_state_transition(self):
@@ -201,6 +307,7 @@ class CircuitBreaker:
         """HALF_OPEN 상태로 전이 (lock 내부에서 호출)"""
         self.state = CircuitState.HALF_OPEN
         self.half_open_successes = 0
+        self._save_to_redis()
 
     def _transition_to_closed(self):
         """CLOSED 상태로 전이 (lock 내부에서 호출)"""
@@ -223,6 +330,8 @@ class CircuitBreakerManager:
     - perplexity: threshold=3, cooldown=300s
     - gemini: threshold=3, cooldown=300s
     - claude: threshold=2, cooldown=600s
+
+    v1.3: Redis 영속화 지원
     """
 
     # PRD v1.2 기본 설정
@@ -244,13 +353,14 @@ class CircuitBreakerManager:
         ),
     }
 
-    def __init__(self):
+    def __init__(self, use_redis: bool = True):
         self._breakers: dict[str, CircuitBreaker] = {}
         self._lock = threading.Lock()
+        self._use_redis = use_redis
 
         # 기본 provider 초기화
         for provider, config in self.DEFAULT_CONFIGS.items():
-            self._breakers[provider] = CircuitBreaker(provider, config)
+            self._breakers[provider] = CircuitBreaker(provider, config, use_redis=use_redis)
 
     def get_breaker(self, provider: str) -> CircuitBreaker:
         """Provider별 Circuit Breaker 조회"""
@@ -260,6 +370,7 @@ class CircuitBreakerManager:
                 self._breakers[provider] = CircuitBreaker(
                     provider,
                     CircuitConfig(),
+                    use_redis=self._use_redis,
                 )
             return self._breakers[provider]
 
@@ -343,20 +454,46 @@ class CircuitOpenError(Exception):
 
 
 # ============================================================================
-# Singleton Instance
+# Singleton Instance (P0-003 fix: Thread-safe)
 # ============================================================================
 
 _manager_instance: Optional[CircuitBreakerManager] = None
+_manager_lock = threading.Lock()
 
 
-def get_circuit_breaker_manager() -> CircuitBreakerManager:
-    """CircuitBreakerManager 싱글톤 인스턴스 반환"""
+def get_circuit_breaker_manager(use_redis: bool = True) -> CircuitBreakerManager:
+    """
+    CircuitBreakerManager 싱글톤 인스턴스 반환 (thread-safe).
+
+    P0-003 fix: Double-checked locking pattern for thread safety
+    in Celery multi-worker environment.
+    """
     global _manager_instance
-    if _manager_instance is None:
-        _manager_instance = CircuitBreakerManager()
+
+    # First check without lock (fast path)
+    if _manager_instance is not None:
+        return _manager_instance
+
+    # Acquire lock for initialization
+    with _manager_lock:
+        # Double-check after acquiring lock
+        if _manager_instance is None:
+            _manager_instance = CircuitBreakerManager(use_redis=use_redis)
+            logger.info("CircuitBreakerManager singleton initialized")
+
     return _manager_instance
 
 
 def get_circuit_breaker(provider: str) -> CircuitBreaker:
     """특정 provider의 Circuit Breaker 반환"""
     return get_circuit_breaker_manager().get_breaker(provider)
+
+
+def reset_circuit_breaker_manager():
+    """테스트용 - 싱글톤 인스턴스 리셋 (thread-safe)"""
+    global _manager_instance
+    with _manager_lock:
+        if _manager_instance is not None:
+            _manager_instance.reset_all()
+        _manager_instance = None
+        logger.info("CircuitBreakerManager singleton reset")

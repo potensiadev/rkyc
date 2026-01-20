@@ -9,107 +9,130 @@ body {
   display: flex; flex-direction: column;
 }
 .header {
-  background: #0D1117; padding: 14pt 25pt;
+  background: #27AE60; padding: 14pt 25pt;
 }
 .header h1 {
   color: #FFFFFF; font-size: 22pt; font-weight: bold; margin: 0;
 }
 .header-sub {
-  color: #E33737; font-size: 10pt; margin: 2pt 0 0 0;
+  color: rgba(255,255,255,0.9); font-size: 10pt; margin: 2pt 0 0 0;
 }
 .content {
-  flex: 1; padding: 12pt 25pt;
-  display: flex; gap: 12pt;
+  flex: 1; padding: 15pt 25pt;
+  display: flex; gap: 15pt;
 }
-.track {
-  flex: 1; border-radius: 5pt; padding: 10pt;
+.db-schema {
+  flex: 1.3;
 }
-.external { background: #E8F8F5; }
-.internal { background: #FDEDEC; }
-.track-title-ext { color: #27AE60; font-size: 13pt; font-weight: bold; margin: 0 0 6pt 0; }
-.track-title-int { color: #E33737; font-size: 13pt; font-weight: bold; margin: 0 0 6pt 0; }
-.track-subtitle {
-  color: #2E4053; font-size: 9pt; margin: 0 0 8pt 0;
+.table-group {
+  margin-bottom: 10pt;
 }
-.track-item {
-  background: #FFFFFF; padding: 6pt 8pt; margin-bottom: 4pt; border-radius: 3pt;
+.group-title {
+  color: #E33737; font-size: 11pt; font-weight: bold; margin: 0 0 5pt 0;
 }
-.track-item p {
-  color: #1C2833; font-size: 9pt; margin: 0;
+.table-row {
+  display: flex; gap: 4pt; flex-wrap: wrap;
 }
-.audit {
-  flex: 0.6; background: #0D1117; padding: 10pt; border-radius: 5pt;
+.table-box {
+  background: #F4F6F6; padding: 5pt 10pt; border-radius: 4pt;
 }
-.audit-title {
-  color: #E33737; font-size: 11pt; font-weight: bold; margin: 0 0 8pt 0;
+.table-box p {
+  color: #1C2833; font-size: 9pt; margin: 0; font-family: monospace;
 }
-.audit-item {
-  background: #1C2833; padding: 4pt 7pt; margin-bottom: 3pt; border-radius: 3pt;
+.vector-info {
+  flex: 0.7; background: #0D1117; padding: 12pt; border-radius: 6pt;
 }
-.audit-item p {
-  color: #FFFFFF; font-size: 8pt; margin: 0;
+.vec-title {
+  color: #27AE60; font-size: 12pt; font-weight: bold; margin: 0 0 10pt 0;
 }
-.roadmap {
-  margin-top: 8pt; padding-top: 8pt; border-top: 1pt solid #2E4053;
+.vec-item {
+  background: #1C2833; padding: 8pt 10pt; margin-bottom: 6pt; border-radius: 4pt;
 }
-.roadmap-title {
-  color: #F39C12; font-size: 9pt; font-weight: bold; margin: 0 0 5pt 0;
+.vec-item h4 {
+  color: #FFFFFF; font-size: 10pt; font-weight: bold; margin: 0;
 }
-.roadmap-item {
-  color: #AAB7B8; font-size: 7pt; margin: 2pt 0;
+.vec-item p {
+  color: #AAB7B8; font-size: 8pt; margin: 3pt 0 0 0;
+}
+.vec-spec {
+  margin-top: 10pt; padding-top: 10pt; border-top: 1pt solid #2E4053;
+}
+.spec-title {
+  color: #F39C12; font-size: 10pt; font-weight: bold; margin: 0 0 6pt 0;
+}
+.spec-item {
+  color: #AAB7B8; font-size: 8pt; margin: 3pt 0;
 }
 </style>
 </head>
 <body>
 <div class="header">
-  <h1>GUARDIAN™ Security Architecture</h1>
-  <p class="header-sub">2-Track LLM Isolation | Financial-Grade Data Protection</p>
+  <h1>Data & Vector Architecture</h1>
+  <p class="header-sub">PostgreSQL + pgvector | Semantic Search Engine</p>
 </div>
 <div class="content">
-  <div class="track external">
-    <p class="track-title-ext">External LLM Track</p>
-    <p class="track-subtitle">Public Data Processing Only</p>
-    <div class="track-item">
-      <p>Perplexity sonar-pro (Web Intel)</p>
+  <div class="db-schema">
+    <div class="table-group">
+      <p class="group-title">Core Master</p>
+      <div class="table-row">
+        <div class="table-box"><p>corp</p></div>
+        <div class="table-box"><p>industry_master</p></div>
+      </div>
     </div>
-    <div class="track-item">
-      <p>GPT-5 (External Analysis)</p>
+    <div class="table-group">
+      <p class="group-title">Signal System</p>
+      <div class="table-row">
+        <div class="table-box"><p>rkyc_signal</p></div>
+        <div class="table-box"><p>rkyc_signal_index</p></div>
+        <div class="table-box"><p>rkyc_evidence</p></div>
+        <div class="table-box"><p>rkyc_signal_embedding</p></div>
+      </div>
     </div>
-    <div class="track-item">
-      <p>Gemini 3 Pro (Cross-validation)</p>
+    <div class="table-group">
+      <p class="group-title">Profile & Context</p>
+      <div class="table-row">
+        <div class="table-box"><p>rkyc_corp_profile</p></div>
+        <div class="table-box"><p>rkyc_internal_snapshot</p></div>
+        <div class="table-box"><p>rkyc_unified_context</p></div>
+      </div>
     </div>
-    <div class="track-item">
-      <p>Data: News, Filings, Market Data</p>
+    <div class="table-group">
+      <p class="group-title">Document & External</p>
+      <div class="table-row">
+        <div class="table-box"><p>rkyc_document</p></div>
+        <div class="table-box"><p>rkyc_fact</p></div>
+        <div class="table-box"><p>rkyc_external_news</p></div>
+      </div>
+    </div>
+    <div class="table-group">
+      <p class="group-title">Audit & Jobs</p>
+      <div class="table-row">
+        <div class="table-box"><p>rkyc_llm_audit_log</p></div>
+        <div class="table-box"><p>rkyc_job</p></div>
+        <div class="table-box"><p>rkyc_case_index</p></div>
+      </div>
     </div>
   </div>
-  <div class="track internal">
-    <p class="track-title-int">Internal LLM Track</p>
-    <p class="track-subtitle">Sensitive Data Processing</p>
-    <div class="track-item">
-      <p>Phase 1: API-based Isolation</p>
+  <div class="vector-info">
+    <p class="vec-title">Vector Store</p>
+    <div class="vec-item">
+      <h4>Embedding Model</h4>
+      <p>text-embedding-3-large (2000d)</p>
     </div>
-    <div class="track-item">
-      <p>Phase 2: Azure Private Cloud</p>
+    <div class="vec-item">
+      <h4>Index Type</h4>
+      <p>HNSW (m=16, ef_construction=64)</p>
     </div>
-    <div class="track-item">
-      <p>Phase 3: On-Premise Llama</p>
+    <div class="vec-item">
+      <h4>Similarity</h4>
+      <p>Cosine Distance (vector <=> vector)</p>
     </div>
-    <div class="track-item">
-      <p>Data: Financials, KYC, Credit</p>
-    </div>
-  </div>
-  <div class="audit">
-    <p class="audit-title">LLM Audit Log</p>
-    <div class="audit-item"><p>Timestamp + Trace ID</p></div>
-    <div class="audit-item"><p>Model Provider + ID</p></div>
-    <div class="audit-item"><p>Token Count (I/O)</p></div>
-    <div class="audit-item"><p>Data Classification</p></div>
-    <div class="audit-item"><p>Request/Response Hash</p></div>
-    <div class="roadmap">
-      <p class="roadmap-title">Compliance Roadmap</p>
-      <p class="roadmap-item">Circuit Breaker Protection</p>
-      <p class="roadmap-item">Rate Limiting (10/min)</p>
-      <p class="roadmap-item">Data Classification Labels</p>
+    <div class="vec-spec">
+      <p class="spec-title">Key Features</p>
+      <p class="spec-item">Signal Embedding (rkyc_signal_embedding)</p>
+      <p class="spec-item">Case-Based Reasoning (rkyc_case_index)</p>
+      <p class="spec-item">Semantic Search for Similar Cases</p>
+      <p class="spec-item">Provenance JSON Pointer</p>
     </div>
   </div>
 </div>
