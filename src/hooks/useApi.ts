@@ -416,6 +416,80 @@ export function useSignalRelated(signalId: string, relationTypes?: string[], lim
   });
 }
 
+// ============================================================
+// Session 16: Scheduler Control Hooks (실시간 자동 탐지 제어)
+// ============================================================
+
+import {
+  getSchedulerStatus,
+  startScheduler,
+  stopScheduler,
+  setSchedulerInterval,
+  triggerImmediateScan,
+  SchedulerStatus,
+  SchedulerActionResponse,
+  SchedulerTriggerResponse,
+} from '@/lib/api';
+
+// 스케줄러 상태 조회 훅
+export function useSchedulerStatus() {
+  return useQuery({
+    queryKey: ['scheduler', 'status'],
+    queryFn: getSchedulerStatus,
+    refetchInterval: 5000, // 5초마다 상태 갱신
+  });
+}
+
+// 스케줄러 시작 훅
+export function useStartScheduler() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (intervalMinutes: number) => startScheduler(intervalMinutes),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['scheduler', 'status'] });
+    },
+  });
+}
+
+// 스케줄러 중지 훅
+export function useStopScheduler() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: stopScheduler,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['scheduler', 'status'] });
+    },
+  });
+}
+
+// 스케줄러 주기 변경 훅
+export function useSetSchedulerInterval() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (intervalMinutes: number) => setSchedulerInterval(intervalMinutes),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['scheduler', 'status'] });
+    },
+  });
+}
+
+// 즉시 스캔 트리거 훅
+export function useTriggerImmediateScan() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: triggerImmediateScan,
+    onSuccess: () => {
+      // 스캔 후 시그널 목록 갱신
+      queryClient.invalidateQueries({ queryKey: ['signals'] });
+      queryClient.invalidateQueries({ queryKey: ['scheduler', 'status'] });
+    },
+  });
+}
+
 // API 타입 re-export (페이지에서 직접 사용)
 export type {
   ApiSignalDetail,
@@ -436,4 +510,8 @@ export type {
   ApiEnrichedEvidence,
   ApiVerification,
   ApiImpactAnalysis,
+  // Scheduler types
+  SchedulerStatus,
+  SchedulerActionResponse,
+  SchedulerTriggerResponse,
 };

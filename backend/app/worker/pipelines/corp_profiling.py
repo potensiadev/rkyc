@@ -1036,12 +1036,24 @@ class CorpProfilingPipeline:
         industry_name: str,
         parsed_response: dict,
     ) -> dict:
-        """Extract structured profile fields from search response."""
+        """Extract structured profile fields from search response using LLM."""
         content = parsed_response.get("content", "")
         citations = parsed_response.get("citations", [])
         source_quality = parsed_response.get("source_quality", "LOW")
 
-        # Basic extraction (can be enhanced with LLM if available)
+        # Try LLM extraction if service available
+        if self._llm_service and content:
+            try:
+                llm_profile = self._extract_with_llm(content, corp_name, industry_name, citations)
+                if llm_profile:
+                    llm_profile["source_urls"] = citations
+                    llm_profile["source_quality"] = source_quality
+                    llm_profile["raw_content"] = content
+                    return llm_profile
+            except Exception as e:
+                logger.warning(f"LLM extraction failed, using basic extraction: {e}")
+
+        # Fallback to basic extraction
         profile = {
             "corp_name": corp_name,
             "industry_name": industry_name,
@@ -1052,6 +1064,80 @@ class CorpProfilingPipeline:
         }
 
         return profile
+
+    def _extract_with_llm(
+        self,
+        content: str,
+        corp_name: str,
+        industry_name: str,
+        citations: list[str],
+    ) -> Optional[dict]:
+        """Use LLM to extract structured profile from search content."""
+        system_prompt = PROFILE_EXTRACTION_SYSTEM_PROMPT
+        user_prompt = PROFILE_EXTRACTION_USER_PROMPT.format(
+            search_results=content[:8000],  # Limit content length
+            corp_name=corp_name,
+            industry_name=industry_name,
+        )
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+
+        try:
+            result = self._llm_service.call_with_json_response(
+                messages=messages,
+                temperature=0.1,
+            )
+
+            if not result:
+                return None
+
+            # Extract values from structured response
+            profile = {
+                "corp_name": corp_name,
+                "industry_name": industry_name,
+            }
+
+            # Map fields with value extraction
+            field_mapping = [
+                "business_summary", "revenue_krw", "export_ratio_pct",
+                "country_exposure", "key_materials", "key_customers",
+                "overseas_operations", "ceo_name", "employee_count",
+                "founded_year", "headquarters", "executives",
+                "industry_overview", "business_model", "financial_history",
+                "competitors", "macro_factors", "supply_chain",
+                "overseas_business", "shareholders",
+            ]
+
+            for field_name in field_mapping:
+                field_data = result.get(field_name)
+                if field_data is None:
+                    profile[field_name] = None
+                elif isinstance(field_data, dict) and "value" in field_data:
+                    profile[field_name] = field_data.get("value")
+                    # Track provenance
+                    self.provenance_tracker.record(
+                        field_name=field_name,
+                        value=field_data.get("value"),
+                        source_url=field_data.get("source_url"),
+                        excerpt=field_data.get("excerpt"),
+                        confidence=field_data.get("confidence", "LOW"),
+                    )
+                else:
+                    profile[field_name] = field_data
+
+            # Add metadata
+            profile["_uncertainty_notes"] = result.get("_uncertainty_notes", [])
+            profile["_source_urls"] = result.get("_source_urls", citations)
+
+            logger.info(f"LLM extraction successful for {corp_name}")
+            return profile
+
+        except Exception as e:
+            logger.error(f"LLM extraction error: {e}")
+            return None
 
     def _sync_claude_synthesis(
         self,

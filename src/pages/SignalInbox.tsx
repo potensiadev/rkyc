@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { DemoPanel } from "@/components/demo/DemoPanel";
+import { SchedulerPanel } from "@/components/demo/SchedulerPanel";
 import { SIGNAL_TYPE_CONFIG, SIGNAL_IMPACT_CONFIG, SIGNAL_STRENGTH_CONFIG } from "@/types/signal";
 import { formatRelativeTime } from "@/data/signals";
 import { useSignals, useSignalStats } from "@/hooks/useApi";

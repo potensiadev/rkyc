@@ -605,3 +605,73 @@ export async function getSignalRelated(
     `/api/v1/signals/${signalId}/related${query ? `?${query}` : ''}`
   );
 }
+
+// ============================================================
+// Session 16: Scheduler Control API (실시간 자동 탐지)
+// ============================================================
+
+export type SchedulerStatusType = 'STOPPED' | 'RUNNING' | 'PAUSED';
+
+export interface SchedulerStatus {
+  status: SchedulerStatusType;
+  interval_minutes: number;
+  last_run: string | null;
+  next_run: string | null;
+  total_runs: number;
+  total_signals_detected: number;
+  corporations_count: number;
+  current_corp_index: number;
+}
+
+export interface SchedulerActionResponse {
+  status: string;
+  message: string;
+  interval_minutes?: number;
+  corporations_count?: number;
+}
+
+export interface SchedulerTriggerResponse {
+  status: string;
+  result?: {
+    cycle: number;
+    jobs_created: number;
+    corporations_scanned: number;
+    new_signals: number;
+    timestamp: string;
+  };
+}
+
+// 스케줄러 상태 조회
+export async function getSchedulerStatus(): Promise<SchedulerStatus> {
+  return fetchApi<SchedulerStatus>('/api/v1/scheduler/status');
+}
+
+// 스케줄러 시작
+export async function startScheduler(intervalMinutes: number): Promise<SchedulerActionResponse> {
+  return fetchApi<SchedulerActionResponse>('/api/v1/scheduler/start', {
+    method: 'POST',
+    body: JSON.stringify({ interval_minutes: intervalMinutes }),
+  });
+}
+
+// 스케줄러 중지
+export async function stopScheduler(): Promise<SchedulerActionResponse> {
+  return fetchApi<SchedulerActionResponse>('/api/v1/scheduler/stop', {
+    method: 'POST',
+  });
+}
+
+// 스케줄러 주기 변경
+export async function setSchedulerInterval(intervalMinutes: number): Promise<SchedulerActionResponse> {
+  return fetchApi<SchedulerActionResponse>('/api/v1/scheduler/interval', {
+    method: 'PATCH',
+    body: JSON.stringify({ interval_minutes: intervalMinutes }),
+  });
+}
+
+// 즉시 스캔 트리거
+export async function triggerImmediateScan(): Promise<SchedulerTriggerResponse> {
+  return fetchApi<SchedulerTriggerResponse>('/api/v1/scheduler/trigger', {
+    method: 'POST',
+  });
+}
