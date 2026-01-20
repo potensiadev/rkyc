@@ -255,7 +255,7 @@ async def _get_corp_context(db: AsyncSession, corp_id: str) -> Optional[CorpCont
             p.country_exposure,
             p.key_materials,
             p.key_customers,
-            p.overall_confidence,
+            p.profile_confidence,
             p.updated_at as profile_updated_at,
             s.snapshot_json
         FROM corp c
@@ -301,7 +301,7 @@ async def _get_corp_context(db: AsyncSession, corp_id: str) -> Optional[CorpCont
         internal_risk_grade=kyc_data.get("internal_risk_grade"),
         overdue_flag=credit_data.get("overdue_flag"),
         total_exposure_krw=credit_data.get("total_exposure_krw"),
-        profile_confidence=row.overall_confidence,
+        profile_confidence=row.profile_confidence,
         profile_updated_at=row.profile_updated_at,
     )
 
