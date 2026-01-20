@@ -4,6 +4,7 @@ Celery worker configuration for background task processing
 """
 
 from celery import Celery
+from celery.schedules import crontab
 from kombu import Queue
 
 from app.core.config import settings
@@ -53,6 +54,40 @@ celery_app.conf.update(
     # Retry settings
     task_default_retry_delay=60,  # 1 minute default retry delay
     task_max_retries=3,
+
+    # ===========================================
+    # Celery Beat Schedule (Periodic Tasks)
+    # ===========================================
+    beat_schedule={
+        # Full scan of all corporations - every 6 hours
+        "scan-all-corporations-every-6-hours": {
+            "task": "scan_all_corporations",
+            "schedule": crontab(minute=0, hour="*/6"),  # 00:00, 06:00, 12:00, 18:00
+            "options": {"queue": "default"},
+        },
+
+        # High-risk corporations scan - every hour
+        "scan-high-risk-every-hour": {
+            "task": "scan_high_risk_corporations",
+            "schedule": crontab(minute=30),  # Every hour at :30
+            "options": {"queue": "high"},
+        },
+
+        # Profile refresh for expiring profiles - every hour
+        "refresh-expiring-profiles-hourly": {
+            "task": "refresh_expiring_profiles",
+            "schedule": crontab(minute=15),  # Every hour at :15
+            "options": {"queue": "low"},
+        },
+
+        # Cleanup old jobs - daily at 3 AM
+        "cleanup-old-jobs-daily": {
+            "task": "cleanup_old_jobs",
+            "schedule": crontab(minute=0, hour=3),
+            "args": (30,),  # Keep jobs for 30 days
+            "options": {"queue": "low"},
+        },
+    },
 )
 
 # Auto-discover tasks in the tasks module

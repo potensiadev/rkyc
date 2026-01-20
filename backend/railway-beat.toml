@@ -1,0 +1,29 @@
+# ============================================
+# rKYC Celery Beat - Railway Configuration
+# Deploy as a separate service in Railway
+# ============================================
+#
+# Celery Beat is the scheduler that triggers periodic tasks.
+# It should run as a SINGLE instance (not scaled).
+#
+# To deploy beat:
+# 1. Create a new service in Railway project
+# 2. Link to same GitHub repo with root /backend
+# 3. Set start command to: celery -A app.worker.celery_app:celery_app beat --loglevel=info
+# 4. Add required environment variables (same as Worker)
+# 5. IMPORTANT: Only run ONE instance of beat
+
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "celery -A app.worker.celery_app:celery_app beat --loglevel=info"
+# Beat does not need healthcheck endpoint
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 5
+
+# Schedule Overview (Asia/Seoul timezone):
+# - scan_all_corporations: Every 6 hours (00:00, 06:00, 12:00, 18:00)
+# - scan_high_risk_corporations: Every hour at :30
+# - refresh_expiring_profiles: Every hour at :15
+# - cleanup_old_jobs: Daily at 03:00 AM

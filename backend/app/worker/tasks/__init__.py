@@ -6,6 +6,12 @@ from app.worker.tasks.profile_refresh import (
     refresh_all_profiles,
     trigger_profile_refresh_on_signal,
 )
+from app.worker.tasks.scheduled import (
+    scan_all_corporations,
+    scan_single_corporation,
+    scan_high_risk_corporations,
+    cleanup_old_jobs,
+)
 
 __all__ = [
     "run_analysis_pipeline",
@@ -14,4 +20,9 @@ __all__ = [
     "refresh_expiring_profiles",
     "refresh_all_profiles",
     "trigger_profile_refresh_on_signal",
+    # Scheduled Tasks (Celery Beat)
+    "scan_all_corporations",
+    "scan_single_corporation",
+    "scan_high_risk_corporations",
+    "cleanup_old_jobs",
 ]
