@@ -14,7 +14,7 @@ api_router.include_router(
     corporations.router, prefix="/corporations", tags=["corporations"]
 )
 api_router.include_router(signals.router, prefix="/signals", tags=["signals"])
-api_router.include_router(signals_enriched.router, prefix="/signals", tags=["signals-enriched"])  # Enriched signal detail
+api_router.include_router(signals_enriched.router, prefix="/signals-enriched", tags=["signals-enriched"])  # Enriched signal detail (separate prefix to avoid collision)
 api_router.include_router(jobs.router, prefix="/jobs", tags=["jobs"])
 api_router.include_router(dashboard.router, prefix="/dashboard", tags=["dashboard"])
 api_router.include_router(documents.router, prefix="/documents", tags=["documents"])

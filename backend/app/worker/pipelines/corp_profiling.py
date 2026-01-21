@@ -324,45 +324,50 @@ class PerplexityResponseParser:
 
 PROFILE_EXTRACTION_SYSTEM_PROMPT = """당신은 금융기관 기업심사를 위한 기업 프로파일 추출 전문가입니다.
 
-## 핵심 규칙 (Anti-Hallucination)
+## 핵심 원칙: 적극적 추출 + 신뢰도 표시
+검색 결과에 정보가 있으면 **반드시 추출**하고, 신뢰도(confidence)로 정확성을 표시하세요.
+null은 정보가 **완전히 없는 경우에만** 사용합니다.
 
-### 규칙 1: 출처 귀속 필수
-추출하는 모든 값에는 반드시 다음이 포함되어야 합니다:
-- 해당 정보를 찾은 출처 URL
-- 출처에서 직접 인용하거나 요약한 텍스트
+## 규칙 1: 숫자 데이터 - 적극 추출
+다음 필드는 검색 결과에 숫자가 언급되면 **반드시 추출**하세요:
 
-### 규칙 2: 숫자 데이터 = 정확해야 함
-다음 필드는 정확한 출처 없이는 반드시 null:
-- revenue_krw, export_ratio_pct, employee_count (정확한 수치 필요)
-- ownership_pct (정확한 지분율 필요)
+**revenue_krw (연간 매출액, 원화)**
+- "매출 3,000억원" → 300000000000
+- "매출 약 3천억" → 300000000000 (confidence: MED)
+- "수조원대 매출" → 추정값 사용 (confidence: LOW)
 
-### 규칙 3: 텍스트/목록 필드 = 적극 추출
-다음 필드는 검색 결과에서 언급된 내용을 적극적으로 추출하세요:
-- supply_chain: 원자재, 부품, 공급사가 언급되면 추출. 건설사도 철강, 시멘트, 레미콘 등 주요 자재 공급사 존재
-- overseas_business: 해외 법인, 해외 프로젝트, 해외 진출이 언급되면 추출
-- shareholders: 대주주, 최대주주, 지분 구조가 언급되면 추출 (지분율은 모르면 null로)
-- key_materials: 업종별 주요 원자재 (건설: 철강, 시멘트, 레미콘 / 제조: 반도체, 디스플레이 등)
+**export_ratio_pct (수출 비중 %)**
+- "수출 80%" → 80
+- "수출 80% 이상" → 80 (confidence: MED)
+- "수출 중심 기업" → 70 추정 (confidence: LOW)
 
-### 규칙 4: 업종별 기본 정보 활용
-정보가 부족해도 업종 특성상 명확한 경우:
-- 건설업: 국내 사업 중심이면 overseas_business는 빈 배열 가능
-- 제조업: 공급망이 복잡하므로 supply_chain 적극 추출
-- 수출 기업: country_exposure 적극 추출
+**employee_count (임직원 수)**
+- "직원 800명" → 800
+- "약 800명 규모" → 800 (confidence: MED)
+- "수백 명" → 500 추정 (confidence: LOW)
 
-### 규칙 5: 필드별 신뢰도
-추출하는 각 필드에 대해 다음을 제공하세요:
-- confidence: HIGH/MED/LOW
-- source_url: 특정 URL (없으면 null)
-- excerpt: 값을 뒷받침하는 정확한 텍스트 (최대 200자)
+## 규칙 2: 신뢰도 판단 기준
+- **HIGH**: DART 공시, IR 자료, 사업보고서에서 직접 인용
+- **MED**: "사업보고서에 따르면...", 언론 보도, "약 X", "X 이상"
+- **LOW**: 추정치, 간접 정보, "수백 명", "수천억대"
 
-## 신뢰도 판단 기준
-- HIGH: DART 공시, IR 자료, 사업보고서 등 공식 출처
-- MED: 주요 언론 보도, 업계 리포트
-- LOW: 추정, 간접 정보, 출처 불명확
+## 규칙 3: 모든 필드 적극 추출
+다음 필드들은 검색 결과에 조금이라도 관련 정보가 있으면 추출하세요:
+- supply_chain: 원자재, 부품, 공급사 언급 시 추출
+- overseas_business: 해외 법인, 해외 프로젝트 언급 시 추출
+- shareholders: 대주주, 최대주주, 지분 구조 언급 시 추출
+- key_materials: 업종별 주요 원자재
+- key_customers: 주요 고객사, 납품처
+- competitors: 경쟁사
 
-## 중요: 빈 배열보다 추출 우선
-shareholders, supply_chain, overseas_business 필드가 검색 결과에 조금이라도 관련 정보가 있으면 추출하세요.
-완전히 정보가 없는 경우에만 빈 배열([]) 또는 null을 사용하세요.
+## 규칙 4: 출처 정보
+- source_url: 가능하면 URL 포함, 없으면 null
+- excerpt: 값을 뒷받침하는 텍스트 (최대 200자)
+
+## 중요: null 최소화
+- 검색 결과에 힌트가 있으면 **추출 + confidence 표시**
+- null은 검색 결과에 관련 정보가 **전혀 없을 때만** 사용
+- 빈 배열([])보다 추출된 데이터가 더 가치 있음
 """
 
 PROFILE_EXTRACTION_USER_PROMPT = """## 검색 결과

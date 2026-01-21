@@ -1438,6 +1438,66 @@ PROFILING Stage (analysis.py Step 3)
      → _save_profile() → rkyc_corp_profile INSERT/UPDATE
 ```
 
+### 세션 17 (2026-01-21) - 코드베이스 리팩토링 (Dead Code 제거) ✅
+**목표**: Production 런칭 전 unused/irrelevant 코드 정리
+
+**완료 항목**:
+
+#### 1. 삭제된 파일 (Orphaned Stubs)
+| 파일 | 라인 | 이유 |
+|------|------|------|
+| `backend/app/api/v1/endpoints/analysis.py` | 9 | TODO 스텁만 존재, 실제 로직은 jobs.py에 구현됨 |
+| `backend/app/services/corporation_service.py` | 12 | TODO 플레이스홀더, 사용되지 않음 |
+| `backend/app/services/signal_service.py` | 11 | TODO 플레이스홀더, 사용되지 않음 |
+
+#### 2. 삭제된 프론트엔드 컴포넌트 (Zero Imports)
+| 파일 | 이유 |
+|------|------|
+| `src/components/detail/GlassSignalViewer.tsx` | 어디서도 import되지 않음 |
+| `src/components/detail/AnalysisReport.tsx` | 어디서도 import되지 않음 |
+| `src/components/detail/DocViewer.tsx` | 어디서도 import되지 않음 |
+| `src/components/detail/MorphingDetailView.tsx` | 어디서도 import되지 않음 |
+| `src/components/ui-liquid/GlassCard.tsx` | GlassSignalViewer에서만 사용 (함께 삭제) |
+| `src/components/ui-liquid/GlowInput.tsx` | 어디서도 import되지 않음 |
+| `src/components/ui-liquid/MagneticButton.tsx` | 어디서도 import되지 않음 |
+| `src/components/ui-liquid/Typewriter.tsx` | 어디서도 import되지 않음 |
+
+#### 3. 삭제된 디렉토리
+- `src/components/detail/` - 빈 디렉토리
+- `src/components/ui-liquid/` - 빈 디렉토리
+
+#### 4. Router Prefix 충돌 수정
+**문제**: `signals.py`와 `signals_enriched.py` 모두 `/signals` prefix 사용 → Route collision 위험
+
+**수정**:
+- `signals_enriched.py`: `/signals` → `/signals-enriched` 변경
+- Frontend API 엔드포인트 업데이트:
+  - `/api/v1/signals/{id}/enriched` → `/api/v1/signals-enriched/{id}/enriched`
+  - `/api/v1/signals/{id}/similar-cases` → `/api/v1/signals-enriched/{id}/similar-cases`
+  - `/api/v1/signals/{id}/related` → `/api/v1/signals-enriched/{id}/related`
+
+**수정된 파일**:
+```
+backend/app/api/v1/router.py (prefix 변경)
+src/lib/api.ts (API 엔드포인트 URL 업데이트)
+```
+
+#### 5. 유지된 파일 (Production 사용 중)
+| 파일 | 이유 |
+|------|------|
+| `backend/app/api/v1/endpoints/signals_enriched.py` | SignalDetailPage에서 사용 중 |
+| `backend/app/api/v1/endpoints/scheduler.py` | SchedulerPanel에서 사용 중 |
+| `backend/app/api/v1/endpoints/diagnostics.py` | 관리자 디버깅 기능 |
+| `backend/app/models/external_intel.py` | Phase 2 External Intel 로드맵 |
+
+**코드베이스 정리 통계**:
+| 항목 | 수량 |
+|------|------|
+| 삭제된 Python 파일 | 3 |
+| 삭제된 TypeScript 파일 | 8 |
+| 삭제된 디렉토리 | 2 |
+| 수정된 파일 | 2 |
+
 ---
 
 ## 참고 사항
@@ -1462,4 +1522,4 @@ PROFILING Stage (analysis.py Step 3)
 - **Circuit Breaker**: Perplexity/Gemini 3회/5분, Claude 2회/10분
 
 ---
-*Last Updated: 2026-01-21 (세션 16 완료 - Corp Profiling Pipeline PRD v1.2 필드 확장)*
+*Last Updated: 2026-01-21 (세션 17 완료 - 코드베이스 리팩토링, Dead Code 제거)*

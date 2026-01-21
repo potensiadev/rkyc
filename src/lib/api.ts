@@ -568,7 +568,7 @@ export async function getSignalEnrichedDetail(
 
   const query = searchParams.toString();
   return fetchApi<ApiSignalEnrichedDetail>(
-    `/api/v1/signals/${signalId}/enriched${query ? `?${query}` : ''}`
+    `/api/v1/signals-enriched/${signalId}/enriched${query ? `?${query}` : ''}`
   );
 }
 
@@ -584,7 +584,7 @@ export async function getSignalSimilarCases(
 
   const query = searchParams.toString();
   return fetchApi<ApiSimilarCase[]>(
-    `/api/v1/signals/${signalId}/similar-cases${query ? `?${query}` : ''}`
+    `/api/v1/signals-enriched/${signalId}/similar-cases${query ? `?${query}` : ''}`
   );
 }
 
@@ -602,7 +602,7 @@ export async function getSignalRelated(
 
   const query = searchParams.toString();
   return fetchApi<ApiRelatedSignal[]>(
-    `/api/v1/signals/${signalId}/related${query ? `?${query}` : ''}`
+    `/api/v1/signals-enriched/${signalId}/related${query ? `?${query}` : ''}`
   );
 }
 
