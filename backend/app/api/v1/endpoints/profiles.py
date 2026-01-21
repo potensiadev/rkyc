@@ -100,7 +100,8 @@ def _parse_overseas_business(data: dict | None) -> OverseasBusinessSchema:
         OverseasSubsidiarySchema(
             name=s.get("name", ""),
             country=s.get("country", ""),
-            business_type=s.get("business_type"),
+            # LLM returns "type", schema expects "business_type"
+            business_type=s.get("business_type") or s.get("type"),
             ownership_pct=s.get("ownership_pct"),
         )
         for s in data.get("subsidiaries", [])
@@ -109,6 +110,37 @@ def _parse_overseas_business(data: dict | None) -> OverseasBusinessSchema:
         subsidiaries=subsidiaries,
         manufacturing_countries=data.get("manufacturing_countries", []),
     )
+
+
+def _parse_executives(data: list | None) -> list[ExecutiveSchema]:
+    """Parse executives JSONB to schema."""
+    if not data:
+        return []
+    return [
+        ExecutiveSchema(
+            name=e.get("name"),
+            # LLM returns "title", schema expects "position"
+            position=e.get("position") or e.get("title"),
+            tenure_years=e.get("tenure_years"),
+        )
+        for e in data
+    ]
+
+
+def _parse_shareholders(data: list | None) -> list[ShareholderSchema]:
+    """Parse shareholders JSONB to schema."""
+    if not data:
+        return []
+    return [
+        ShareholderSchema(
+            name=s.get("name"),
+            # LLM returns "ratio_pct", schema expects "ownership_pct"
+            ownership_pct=s.get("ownership_pct") or s.get("ratio_pct"),
+            is_largest=s.get("is_largest"),
+            relationship=s.get("relationship"),
+        )
+        for s in data
+    ]
 
 
 def _parse_consensus_metadata(data: dict | None) -> ConsensusMetadataSchema:
@@ -197,7 +229,7 @@ async def get_corp_profile(
 
     # Parse JSONB fields to schemas with error handling
     try:
-        executives = [ExecutiveSchema(**e) for e in (row.executives or [])] if row.executives else []
+        executives = _parse_executives(row.executives)
     except Exception as e:
         logger.warning(f"Failed to parse executives for {corp_id}: {e}")
         executives = []
@@ -221,7 +253,7 @@ async def get_corp_profile(
         macro_factors = []
 
     try:
-        shareholders = [ShareholderSchema(**s) for s in (row.shareholders or [])] if row.shareholders else []
+        shareholders = _parse_shareholders(row.shareholders)
     except Exception as e:
         logger.warning(f"Failed to parse shareholders for {corp_id}: {e}")
         shareholders = []
@@ -357,12 +389,12 @@ async def get_corp_profile_detail(
             },
         )
 
-    # Parse JSONB fields to schemas
-    executives = [ExecutiveSchema(**e) for e in (row.executives or [])]
-    financial_history = [FinancialSnapshotSchema(**f) for f in (row.financial_history or [])]
-    competitors = [CompetitorSchema(**c) for c in (row.competitors or [])]
-    macro_factors = [MacroFactorSchema(**m) for m in (row.macro_factors or [])]
-    shareholders = [ShareholderSchema(**s) for s in (row.shareholders or [])]
+    # Parse JSONB fields to schemas using helper functions for field name mapping
+    executives = _parse_executives(row.executives)
+    financial_history = [FinancialSnapshotSchema(**f) for f in (row.financial_history or [])] if row.financial_history else []
+    competitors = [CompetitorSchema(**c) for c in (row.competitors or [])] if row.competitors else []
+    macro_factors = [MacroFactorSchema(**m) for m in (row.macro_factors or [])] if row.macro_factors else []
+    shareholders = _parse_shareholders(row.shareholders)
     supply_chain = _parse_supply_chain(row.supply_chain)
     overseas_business = _parse_overseas_business(row.overseas_business)
     consensus_metadata = _parse_consensus_metadata(row.consensus_metadata)
