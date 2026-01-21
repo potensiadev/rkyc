@@ -23,14 +23,23 @@ import {
   ExternalLink,
   AlertCircle,
   CheckCircle,
+  Info,
+  ChevronDown,
+  ChevronUp,
+  FileText,
+  Target,
+  Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useState, useEffect } from "react";
 import ReportPreviewModal from "@/components/reports/ReportPreviewModal";
-import { useCorporation, useSignals, useCorporationSnapshot, useCorpProfile, useRefreshCorpProfile, useJobStatus } from "@/hooks/useApi";
-import type { ProfileConfidence } from "@/types/profile";
+import { useCorporation, useSignals, useCorporationSnapshot, useCorpProfile, useCorpProfileDetail, useRefreshCorpProfile, useJobStatus } from "@/hooks/useApi";
+import type { ProfileConfidence, CorpProfile } from "@/types/profile";
 import { useQueryClient } from "@tanstack/react-query";
+import { EvidenceBackedField } from "@/components/profile/EvidenceBackedField";
+import { EvidenceMap } from "@/components/profile/EvidenceMap";
+import { RiskIndicators } from "@/components/profile/RiskIndicators";
 
 // Confidence 배지 색상 헬퍼
 function getConfidenceBadge(confidence: ProfileConfidence | undefined): { bg: string; text: string; label: string } {
@@ -67,7 +76,10 @@ export default function CorporateDetailPage() {
   const { data: apiSignals, isLoading: isLoadingSignals } = useSignals({ corp_id: corporateId });
   const { data: snapshot, isLoading: isLoadingSnapshot } = useCorporationSnapshot(corporateId || "");
   const { data: profile, isLoading: isLoadingProfile, error: profileError, refetch: refetchProfile } = useCorpProfile(corporateId || "");
+  // 상세 프로필 (field_provenance 포함) - 기본 뷰 / 상세 뷰 토글용
+  const { data: profileDetail, refetch: refetchProfileDetail } = useCorpProfileDetail(corporateId || "");
   const refreshProfile = useRefreshCorpProfile();
+  const [showDetailedView, setShowDetailedView] = useState(false);
 
   // Job 상태 폴링
   const { data: jobStatus } = useJobStatus(refreshJobId || '', {
@@ -79,8 +91,9 @@ export default function CorporateDetailPage() {
     if (jobStatus?.status === 'DONE') {
       setRefreshStatus('done');
       setRefreshJobId(null);
-      // 프로필 쿼리 무효화하여 다시 로드
+      // 프로필 쿼리 무효화하여 다시 로드 (기본 + 상세)
       queryClient.invalidateQueries({ queryKey: ['corporation', corporateId, 'profile'] });
+      queryClient.invalidateQueries({ queryKey: ['corporation', corporateId, 'profile', 'detail'] });
     } else if (jobStatus?.status === 'FAILED') {
       setRefreshStatus('failed');
       setRefreshJobId(null);
@@ -328,7 +341,7 @@ export default function CorporateDetailPage() {
           <Separator />
 
           {/* ============================================================ */}
-          {/* Corp Profile Section (PRD v1.2) */}
+          {/* Corp Profile Section (PRD v1.2) - 근거 강화 */}
           {/* ============================================================ */}
           <section>
             <div className="flex items-center justify-between mb-3 pb-2 border-b border-border">
@@ -359,6 +372,18 @@ export default function CorporateDetailPage() {
                     <AlertCircle className="w-3 h-3" />
                     실패
                   </span>
+                )}
+                {/* 기본/상세 뷰 토글 */}
+                {profile && (
+                  <Button
+                    variant={showDetailedView ? "default" : "outline"}
+                    size="sm"
+                    className="gap-1"
+                    onClick={() => setShowDetailedView(!showDetailedView)}
+                  >
+                    <FileText className="w-3 h-3" />
+                    {showDetailedView ? '기본 뷰' : '상세 뷰'}
+                  </Button>
                 )}
                 <Button
                   variant="outline"
@@ -695,6 +720,54 @@ export default function CorporateDetailPage() {
                     )}
                   </div>
                 </div>
+
+                {/* ============================================================ */}
+                {/* 상세 뷰: Evidence Map + Risk Indicators */}
+                {/* ============================================================ */}
+                {showDetailedView && profileDetail && (
+                  <div className="space-y-6 pt-4 border-t border-border">
+                    {/* Evidence Map - 근거-주장 연결 */}
+                    <EvidenceMap
+                      fieldProvenance={profileDetail.field_provenance || {}}
+                      fieldConfidences={profileDetail.field_confidences || {}}
+                      sourceUrls={profileDetail.source_urls || []}
+                      consensusMetadata={profileDetail.consensus_metadata ? {
+                        perplexity_success: profileDetail.consensus_metadata.perplexity_success,
+                        gemini_success: profileDetail.consensus_metadata.gemini_success,
+                        claude_success: profileDetail.consensus_metadata.claude_success,
+                        total_fields: profileDetail.consensus_metadata.total_fields,
+                        matched_fields: profileDetail.consensus_metadata.matched_fields,
+                        discrepancy_fields: profileDetail.consensus_metadata.discrepancy_fields,
+                        fallback_layer: profileDetail.consensus_metadata.fallback_layer,
+                      } : undefined}
+                    />
+
+                    {/* Risk Indicators - 조기경보 + 체크리스트 */}
+                    <RiskIndicators
+                      profile={profileDetail as unknown as CorpProfile}
+                      industryCode={corporation?.industryCode}
+                    />
+
+                    {/* 메타데이터 상세 */}
+                    <div className="p-3 bg-muted/30 rounded-lg">
+                      <div className="text-xs text-muted-foreground space-y-1">
+                        <div className="flex items-center gap-4">
+                          <span>추출 모델: {profileDetail.extraction_model || '-'}</span>
+                          <span>프롬프트 버전: {profileDetail.extraction_prompt_version || '-'}</span>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <span>생성: {profileDetail.created_at ? new Date(profileDetail.created_at).toLocaleString('ko-KR') : '-'}</span>
+                          <span>수정: {profileDetail.updated_at ? new Date(profileDetail.updated_at).toLocaleString('ko-KR') : '-'}</span>
+                        </div>
+                        {profileDetail.validation_warnings && profileDetail.validation_warnings.length > 0 && (
+                          <div className="mt-2 text-orange-600">
+                            검증 경고: {profileDetail.validation_warnings.join(', ')}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : null}
           </section>
