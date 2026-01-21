@@ -1,5 +1,4 @@
 @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -7,105 +6,125 @@
 
 @layer base {
   :root {
-    /* RKYC Design System - Dark Future Tech (Resend/Linear Style) */
-    
-    /* Core palette */
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
+    /* RKYC Design System - SoFi-inspired Professional Fintech */
+
+    /* Core palette - Muted blues and professional grays */
+    --background: 210 20% 98%;
+    --foreground: 215 35% 15%;
 
     --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
+    --card-foreground: 215 35% 15%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
+    --popover-foreground: 215 35% 15%;
 
-    --primary: 240 5.9% 10%;
-    --primary-foreground: 0 0% 98%;
+    /* Primary - Sophisticated navy blue */
+    --primary: 215 50% 23%;
+    --primary-foreground: 210 40% 98%;
 
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
+    /* Secondary - Light slate */
+    --secondary: 210 15% 95%;
+    --secondary-foreground: 215 35% 25%;
 
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
+    /* Muted - Subtle gray-blue */
+    --muted: 210 12% 93%;
+    --muted-foreground: 215 15% 50%;
 
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
+    /* Accent - Soft blue highlight */
+    --accent: 210 60% 95%;
+    --accent-foreground: 215 50% 23%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
+    /* Status colors */
+    --destructive: 0 65% 50%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 240 10% 3.9%;
+    --success: 145 50% 40%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 90% 50%;
+    --warning-foreground: 38 90% 15%;
+
+    --info: 210 60% 50%;
+    --info-foreground: 0 0% 100%;
+
+    /* Signal category colors - clearly differentiated */
+    --signal-direct: 215 65% 45%;
+    --signal-industry: 175 50% 40%;
+    --signal-environment: 35 70% 50%;
+
+    /* Signal status colors */
+    --signal-new: 210 70% 50%;
+    --signal-review: 38 80% 50%;
+    --signal-resolved: 145 45% 45%;
+
+    /* Impact colors */
+    --risk: 0 55% 50%;
+    --opportunity: 145 50% 42%;
+    --insight: 210 60% 50%;
+
+    /* UI elements */
+    --border: 210 20% 88%;
+    --input: 210 20% 88%;
+    --ring: 215 50% 40%;
 
     --radius: 0.5rem;
 
-    /* Custom AI/Tech Colors - Default Light (will rely heavily on Dark Mode) */
-    --signal-new: 210 100% 50%;
-    --signal-review: 35 100% 50%;
-    --signal-resolved: 145 60% 45%;
-    
-    --risk: 0 85% 60%;
-    --opportunity: 150 60% 50%;
-
     /* Sidebar */
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 240 5.9% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --sidebar-background: 215 40% 18%;
+    --sidebar-foreground: 210 20% 90%;
+    --sidebar-primary: 210 60% 70%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 215 35% 25%;
+    --sidebar-accent-foreground: 210 20% 95%;
+    --sidebar-border: 215 30% 25%;
+    --sidebar-ring: 210 60% 60%;
+
+    /* Custom tokens */
+    --surface-elevated: 0 0% 100%;
+    --surface-sunken: 210 15% 96%;
+    --text-primary: 215 35% 15%;
+    --text-secondary: 215 15% 45%;
+    --text-tertiary: 215 12% 60%;
+    --divider: 210 15% 90%;
   }
 
   .dark {
-    /* Deep Space Black Theme */
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
+    --background: 215 35% 10%;
+    --foreground: 210 20% 95%;
 
-    --card: 240 10% 3.9%; /* Transparent card feel */
-    --card-foreground: 0 0% 98%;
+    --card: 215 30% 14%;
+    --card-foreground: 210 20% 95%;
 
-    --popover: 240 10% 3.9%;
-    --popover-foreground: 0 0% 98%;
+    --popover: 215 30% 14%;
+    --popover-foreground: 210 20% 95%;
 
-    --primary: 0 0% 98%;
-    --primary-foreground: 240 5.9% 10%;
+    --primary: 210 60% 70%;
+    --primary-foreground: 215 35% 10%;
 
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
+    --secondary: 215 25% 20%;
+    --secondary-foreground: 210 20% 90%;
 
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
+    --muted: 215 25% 18%;
+    --muted-foreground: 210 15% 60%;
 
-    --accent: 240 3.7% 15.9%;
-    --accent-foreground: 0 0% 98%;
+    --accent: 215 30% 22%;
+    --accent-foreground: 210 60% 80%;
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
+    --destructive: 0 60% 45%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 240 4.9% 83.9%;
+    --border: 215 25% 22%;
+    --input: 215 25% 22%;
+    --ring: 210 60% 60%;
 
-    /* Neon Signals */
-    --signal-new: 210 100% 60%;     /* Neon Blue */
-    --signal-review: 45 100% 60%;   /* Neon Yellow */
-    --signal-resolved: 150 100% 50%; /* Neon Green */
-    
-    --risk: 0 90% 65%;              /* Neon Red */
-    --opportunity: 150 100% 50%;    /* Neon Green */
-
-    /* Sidebar - Glassy */
-    --sidebar-background: 240 10% 3.9%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --sidebar-background: 215 40% 8%;
+    --sidebar-foreground: 210 20% 85%;
+    --sidebar-primary: 210 60% 70%;
+    --sidebar-primary-foreground: 215 35% 10%;
+    --sidebar-accent: 215 30% 15%;
+    --sidebar-accent-foreground: 210 20% 90%;
+    --sidebar-border: 215 25% 18%;
+    --sidebar-ring: 210 60% 60%;
   }
 }
 
@@ -115,71 +134,58 @@
   }
 
   html {
-    font-family: 'Inter', 'Pretendard', sans-serif;
-    scroll-behavior: smooth;
+    font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   }
 
   body {
     @apply bg-background text-foreground antialiased;
-    font-feature-settings: "ss01", "ss02", "cv01", "cv02", "calt"; /* Inter font features */
+    font-feature-settings: "rlig" 1, "calt" 1;
   }
 
-  h1, h2, h3, h4, h5, h6 {
-    @apply font-bold tracking-tight text-foreground;
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-semibold tracking-tight text-foreground;
   }
 }
 
 @layer components {
-  /* Glass Card Effect */
-  .glass-card {
-    @apply bg-white/5 backdrop-blur-lg border border-white/10 shadow-xl;
-  }
-  
-  .glass-card-hover {
-    @apply hover:bg-white/10 hover:border-white/20 transition-all duration-300;
-  }
-
-  /* Animated Gradient Text */
-  .text-gradient {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-white via-white/80 to-white/50;
-  }
-  
-  .text-gradient-purple {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400;
-  }
-
-  /* Signal Card Polish */
   .signal-card {
-    @apply relative overflow-hidden bg-card/50 backdrop-blur-sm border border-border/50 rounded-xl p-5 transition-all duration-300;
-    @apply hover:shadow-2xl hover:shadow-primary/5 hover:border-primary/20 hover:-translate-y-0.5;
+    @apply bg-card rounded-lg border border-border p-5 transition-all duration-200;
+    @apply hover:shadow-md hover:border-primary/20;
   }
 
-  /* Grid Background Utility */
-  .bg-grid-white {
-    background-size: 40px 40px;
-    background-image: linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
-                      linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  .status-badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .status-new {
+    @apply bg-[hsl(var(--signal-new)/0.1)] text-[hsl(var(--signal-new))];
+  }
+
+  .status-review {
+    @apply bg-[hsl(var(--signal-review)/0.1)] text-[hsl(var(--signal-review))];
+  }
+
+  .status-resolved {
+    @apply bg-[hsl(var(--signal-resolved)/0.1)] text-[hsl(var(--signal-resolved))];
+  }
+
+  .nav-item {
+    @apply flex items-center gap-3 px-4 py-2.5 rounded-lg text-sidebar-foreground/80 transition-colors;
+    @apply hover:bg-sidebar-accent hover:text-sidebar-foreground;
+  }
+
+  .nav-item-active {
+    @apply bg-sidebar-accent text-sidebar-foreground font-medium;
   }
 }
 
 @layer utilities {
   .text-balance {
     text-wrap: balance;
-  }
-  
-  /* Smooth Fade In Animation Utility */
-  .animate-enter {
-    animation: enter 0.6s ease-out forwards;
-  }
-  
-  @keyframes enter {
-    from {
-      opacity: 0;
-      transform: translateY(10px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
   }
 }
