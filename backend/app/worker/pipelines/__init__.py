@@ -8,6 +8,12 @@ from app.worker.pipelines.validation import ValidationPipeline
 from app.worker.pipelines.deduplication import DeduplicationPipeline, deduplicate_within_batch
 from app.worker.pipelines.index import IndexPipeline, DuplicateSignalError
 from app.worker.pipelines.insight import InsightPipeline
+from app.worker.pipelines.expert_insight import (
+    ExpertInsightPipeline,
+    generate_actionable_checklist,
+    generate_early_warning_dashboard,
+    get_quality_report,
+)
 from app.worker.pipelines.corp_profiling import (
     CorpProfilingPipeline,
     get_corp_profiling_pipeline,
@@ -31,6 +37,11 @@ __all__ = [
     "IndexPipeline",
     "DuplicateSignalError",
     "InsightPipeline",
+    # Expert Insight (v2.0 - 4-Layer Architecture)
+    "ExpertInsightPipeline",
+    "generate_actionable_checklist",
+    "generate_early_warning_dashboard",
+    "get_quality_report",
     # Corp Profiling (Anti-Hallucination)
     "CorpProfilingPipeline",
     "get_corp_profiling_pipeline",

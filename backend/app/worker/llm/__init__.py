@@ -66,6 +66,47 @@ from app.worker.llm.orchestrator import (
     reset_orchestrator,
 )
 
+# v2.0 - 4-Layer Analysis Architecture
+from app.worker.llm.layer_architecture import (
+    # Enums and Constants
+    SourceCredibility,
+    ImpactPath,
+    ConfidenceLevel,
+    CREDIBILITY_CRITERIA,
+    # Data Classes
+    IntakeOutput,
+    EvidenceEntry,
+    EvidenceMapOutput,
+    CorporationAnalysis,
+    SignalAnalysis,
+    QualityGateOutput,
+    # Null-Free Policy
+    NullFreePolicy,
+    # Layer Implementations
+    IntakeLayer,
+    EvidenceLayer,
+    ExpertAnalysisLayer,
+    QualityGateLayer,
+    # Main Orchestrator
+    FourLayerAnalysisPipeline,
+)
+
+# v2.0 - Enhanced Prompts
+from app.worker.llm.prompts_v2 import (
+    EXPERT_ANALYSIS_SYSTEM_PROMPT,
+    CORPORATION_ANALYSIS_PROMPT,
+    SIGNAL_ANALYSIS_PROMPT,
+    EVIDENCE_MAP_PROMPT,
+    INSIGHT_GENERATION_PROMPT_V2,
+    NULL_FREE_RULES,
+    format_corporation_analysis_prompt,
+    format_signal_analysis_prompt,
+    format_evidence_map_prompt,
+    format_insight_prompt_v2,
+    get_industry_context,
+    INDUSTRY_CONTEXT,
+)
+
 __all__ = [
     # Legacy service (for backward compatibility)
     "LLMService",
@@ -118,4 +159,34 @@ __all__ = [
     "RuleBasedMergeConfig",
     "get_orchestrator",
     "reset_orchestrator",
+    # v2.0 - 4-Layer Analysis Architecture
+    "SourceCredibility",
+    "ImpactPath",
+    "ConfidenceLevel",
+    "CREDIBILITY_CRITERIA",
+    "IntakeOutput",
+    "EvidenceEntry",
+    "EvidenceMapOutput",
+    "CorporationAnalysis",
+    "SignalAnalysis",
+    "QualityGateOutput",
+    "NullFreePolicy",
+    "IntakeLayer",
+    "EvidenceLayer",
+    "ExpertAnalysisLayer",
+    "QualityGateLayer",
+    "FourLayerAnalysisPipeline",
+    # v2.0 - Enhanced Prompts
+    "EXPERT_ANALYSIS_SYSTEM_PROMPT",
+    "CORPORATION_ANALYSIS_PROMPT",
+    "SIGNAL_ANALYSIS_PROMPT",
+    "EVIDENCE_MAP_PROMPT",
+    "INSIGHT_GENERATION_PROMPT_V2",
+    "NULL_FREE_RULES",
+    "format_corporation_analysis_prompt",
+    "format_signal_analysis_prompt",
+    "format_evidence_map_prompt",
+    "format_insight_prompt_v2",
+    "get_industry_context",
+    "INDUSTRY_CONTEXT",
 ]
