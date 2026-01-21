@@ -322,52 +322,64 @@ class PerplexityResponseParser:
 # Layer 2: Extraction Guardrails - Prompts
 # ============================================================================
 
-PROFILE_EXTRACTION_SYSTEM_PROMPT = """당신은 금융기관 기업심사를 위한 기업 프로파일 추출 전문가입니다.
+PROFILE_EXTRACTION_SYSTEM_PROMPT = """당신은 금융기관 기업심사를 위한 기업 프로파일 추출 및 분석 전문가입니다.
 
-## 핵심 원칙: 적극적 추출 + 신뢰도 표시
-검색 결과에 정보가 있으면 **반드시 추출**하고, 신뢰도(confidence)로 정확성을 표시하세요.
-null은 정보가 **완전히 없는 경우에만** 사용합니다.
+## 핵심 원칙
+1. **적극적 추출**: 검색 결과에 정보가 있으면 반드시 추출
+2. **분석적 요약**: 단순 나열이 아닌, 은행 심사역 관점의 인사이트 제공
+3. **신뢰도 표시**: confidence로 정확성 구분
+4. **null 최소화**: 정보가 완전히 없는 경우에만 null
 
-## 규칙 1: 숫자 데이터 - 적극 추출
-다음 필드는 검색 결과에 숫자가 언급되면 **반드시 추출**하세요:
+## 규칙 1: business_summary - 분석적 인사이트 (가장 중요!)
 
-**revenue_krw (연간 매출액, 원화)**
-- "매출 3,000억원" → 300000000000
-- "매출 약 3천억" → 300000000000 (confidence: MED)
-- "수조원대 매출" → 추정값 사용 (confidence: LOW)
+**business_summary는 단순 사업 설명이 아닌, 3~5문장의 분석적 요약이어야 합니다:**
 
-**export_ratio_pct (수출 비중 %)**
-- "수출 80%" → 80
-- "수출 80% 이상" → 80 (confidence: MED)
-- "수출 중심 기업" → 70 추정 (confidence: LOW)
+포함해야 할 내용:
+1. 산업 내 포지션 (시장점유율, 글로벌/국내 순위)
+2. 핵심 경쟁력 또는 차별점
+3. 현재 직면한 기회 요인 (AI 수요, 친환경 트렌드, 신시장 등)
+4. 현재 직면한 위협/리스크 요인
+5. 향후 전망
 
-**employee_count (임직원 수)**
-- "직원 800명" → 800
-- "약 800명 규모" → 800 (confidence: MED)
-- "수백 명" → 500 추정 (confidence: LOW)
+**좋은 예시:**
+"글로벌 본딩와이어 시장 1위 기업으로, 반도체 후공정 소재 분야에서 독보적 기술력을 보유하고 있다.
+AI 반도체 수요 증가로 HBM용 본딩와이어 매출이 급성장하고 있으나,
+금 가격 변동과 중국 경쟁사의 저가 공세가 리스크 요인이다.
+주요 고객사인 삼성전자, SK하이닉스의 설비 투자 확대가 성장 동력으로 작용할 전망이다."
 
-## 규칙 2: 신뢰도 판단 기준
-- **HIGH**: DART 공시, IR 자료, 사업보고서에서 직접 인용
-- **MED**: "사업보고서에 따르면...", 언론 보도, "약 X", "X 이상"
-- **LOW**: 추정치, 간접 정보, "수백 명", "수천억대"
+**나쁜 예시 (단순 나열):**
+"반도체 소재 제조 기업. 본딩와이어와 솔더볼을 생산함."
 
-## 규칙 3: 모든 필드 적극 추출
-다음 필드들은 검색 결과에 조금이라도 관련 정보가 있으면 추출하세요:
-- supply_chain: 원자재, 부품, 공급사 언급 시 추출
-- overseas_business: 해외 법인, 해외 프로젝트 언급 시 추출
-- shareholders: 대주주, 최대주주, 지분 구조 언급 시 추출
-- key_materials: 업종별 주요 원자재
-- key_customers: 주요 고객사, 납품처
-- competitors: 경쟁사
+## 규칙 2: 숫자 데이터 - 적극 추출
 
-## 규칙 4: 출처 정보
-- source_url: 가능하면 URL 포함, 없으면 null
-- excerpt: 값을 뒷받침하는 텍스트 (최대 200자)
+**revenue_krw**: "매출 3,000억원" → 300000000000
+**export_ratio_pct**: "수출 80%" → 80, "수출 중심" → 70 추정
+**employee_count**: "약 800명" → 800
 
-## 중요: null 최소화
-- 검색 결과에 힌트가 있으면 **추출 + confidence 표시**
-- null은 검색 결과에 관련 정보가 **전혀 없을 때만** 사용
-- 빈 배열([])보다 추출된 데이터가 더 가치 있음
+## 규칙 3: 신뢰도 판단
+- **HIGH**: DART 공시, IR 자료, 사업보고서
+- **MED**: 언론 보도, "약 X", "X 이상"
+- **LOW**: 추정치, 업종 평균 기반 추론
+
+## 규칙 4: 업종 기반 합리적 추론 허용
+
+검색 결과에 직접적 정보가 없어도, 업종 특성상 추론 가능한 경우:
+
+**country_exposure 추론:**
+- 해외 법인이 있으면 → 해당 국가 노출 추정 (confidence: LOW)
+- 수출 기업이면 → 업종 주요 수출국 포함 (confidence: LOW)
+
+**supply_chain 추론:**
+- 제조업이면 → 업종별 주요 원자재 포함 (confidence: LOW)
+- 예: 반도체 기업 → key_materials: ["실리콘", "금", "구리"]
+
+**key_customers 추론:**
+- B2B 기업이면 → 업종 내 대기업 고객 추정 (confidence: LOW)
+
+## 규칙 5: null 최소화
+- 검색 결과에 힌트가 있으면 → 추출 + confidence 표시
+- 업종 특성으로 추론 가능하면 → 추론 + confidence: LOW
+- 빈 배열([])보다 추론 데이터가 더 가치 있음
 """
 
 PROFILE_EXTRACTION_USER_PROMPT = """## 검색 결과
@@ -376,15 +388,16 @@ PROFILE_EXTRACTION_USER_PROMPT = """## 검색 결과
 ## 추출 대상 기업
 기업명: {corp_name}
 업종: {industry_name}
+{industry_hints_text}
 
 ## 출력 스키마 (PRD v1.2 - 19개 필드)
 다음 JSON 형식으로만 응답하세요. 모든 필드에 대해 value, confidence, source_url, excerpt를 포함해야 합니다.
-확실하지 않은 정보는 value를 null로 설정하세요.
+**null은 정보가 완전히 없을 때만 사용하세요. 업종 특성으로 추론 가능하면 추론값 + confidence: LOW로 작성하세요.**
 
 ```json
 {{
   "business_summary": {{
-    "value": "string (100자 이내, 주요 사업 및 제품 설명) 또는 null",
+    "value": "3~5문장의 분석적 요약. 포함 내용: 1)산업 내 포지션 2)핵심 경쟁력 3)기회 요인 4)위협/리스크 5)전망. 은행 심사역이 '이 기업에 대출해도 될까?'를 판단할 수 있는 인사이트 제공. 단순 사업 나열 금지.",
     "confidence": "HIGH|MED|LOW",
     "source_url": "url 또는 null",
     "excerpt": "뒷받침 텍스트 또는 null"
@@ -955,61 +968,168 @@ INDUSTRY_NAMES = {
     "F41": "건설업",
 }
 
+# 업종별 힌트 캐시 (메모리 캐시, 서버 재시작 시 초기화)
+_industry_hints_cache: dict[str, dict] = {}
+
 
 def get_industry_name(industry_code: str) -> str:
     """Get industry name from code."""
     return INDUSTRY_NAMES.get(industry_code, f"업종코드 {industry_code}")
 
 
-def build_perplexity_query(corp_name: str, industry_name: str) -> str:
-    """Build comprehensive Perplexity search query for PRD v1.2 (19 fields)."""
+INDUSTRY_HINTS_PROMPT = """업종코드 {industry_code} ({industry_name})의 일반적인 특성을 분석하세요.
+
+다음 JSON 형식으로만 응답하세요:
+```json
+{{
+  "typical_materials": ["주요 원자재 5개 이상 - 이 업종에서 일반적으로 사용하는 원자재/부품"],
+  "typical_suppliers": ["공급사 유형 5개 이상 - 이 업종의 기업들이 거래하는 공급사 종류"],
+  "export_markets": ["주요 수출 시장 5개 이상 - 이 업종의 한국 기업들이 주로 수출하는 국가"],
+  "risk_factors": ["업종 리스크 3개 이상 - 이 업종 특유의 리스크 요인"],
+  "growth_drivers": ["성장 동력 3개 이상 - 이 업종의 성장을 이끄는 요인"]
+}}
+```
+
+예시 (반도체 C26):
+- typical_materials: ["실리콘 웨이퍼", "금", "구리", "희토류", "화학물질", "리드프레임"]
+- typical_suppliers: ["웨이퍼 공급사", "화학재료 공급사", "장비 공급사", "패키징 재료사", "가스 공급사"]
+- export_markets: ["중국", "미국", "대만", "베트남", "일본", "유럽"]
+- risk_factors: ["반도체 사이클", "미중 무역분쟁", "기술 경쟁", "설비 투자 부담"]
+- growth_drivers: ["AI 수요", "전기차", "데이터센터", "IoT"]
+"""
+
+
+async def get_industry_hints(industry_code: str, llm_service=None) -> dict:
+    """
+    업종 코드에 대한 힌트를 LLM으로 동적 생성 (캐싱 적용)
+
+    Args:
+        industry_code: 업종 코드 (예: C26)
+        llm_service: LLM 서비스 인스턴스 (없으면 기본 힌트 반환)
+
+    Returns:
+        dict with typical_materials, typical_suppliers, export_markets, etc.
+    """
+    # 캐시 확인
+    if industry_code in _industry_hints_cache:
+        logger.debug(f"Industry hints cache hit for {industry_code}")
+        return _industry_hints_cache[industry_code]
+
+    industry_name = get_industry_name(industry_code)
+
+    # LLM 서비스가 없으면 기본 힌트 반환
+    if llm_service is None:
+        default_hints = {
+            "typical_materials": ["원자재", "부품", "소재"],
+            "typical_suppliers": ["원자재 공급사", "부품 공급사", "장비 공급사"],
+            "export_markets": ["중국", "미국", "베트남", "일본", "유럽"],
+            "risk_factors": ["경기 변동", "환율 리스크", "공급망 리스크"],
+            "growth_drivers": ["기술 혁신", "시장 확대", "정부 정책"],
+        }
+        return default_hints
+
+    try:
+        # LLM으로 업종 힌트 생성
+        prompt = INDUSTRY_HINTS_PROMPT.format(
+            industry_code=industry_code,
+            industry_name=industry_name
+        )
+
+        response = await llm_service.generate(
+            prompt=prompt,
+            system_prompt="당신은 산업 분석 전문가입니다. JSON 형식으로만 응답하세요.",
+            temperature=0.3,
+        )
+
+        # JSON 파싱
+        json_match = re.search(r'```json\s*(.*?)\s*```', response, re.DOTALL)
+        if json_match:
+            hints = json.loads(json_match.group(1))
+        else:
+            hints = json.loads(response)
+
+        # 캐시에 저장
+        _industry_hints_cache[industry_code] = hints
+        logger.info(f"Generated and cached industry hints for {industry_code}")
+
+        return hints
+
+    except Exception as e:
+        logger.warning(f"Failed to generate industry hints for {industry_code}: {e}")
+        # 실패 시 기본 힌트 반환
+        return {
+            "typical_materials": ["원자재", "부품", "소재"],
+            "typical_suppliers": ["원자재 공급사", "부품 공급사"],
+            "export_markets": ["중국", "미국", "베트남"],
+            "risk_factors": ["경기 변동", "환율 리스크"],
+            "growth_drivers": ["기술 혁신", "시장 확대"],
+        }
+
+
+def build_perplexity_query(corp_name: str, industry_name: str, industry_hints: dict = None) -> str:
+    """
+    Build comprehensive Perplexity search query for PRD v1.2.
+
+    Args:
+        corp_name: 기업명
+        industry_name: 업종명
+        industry_hints: 업종별 힌트 (LLM 생성 또는 캐시)
+    """
+    # 업종 힌트가 있으면 쿼리에 포함
+    materials_hint = ""
+    markets_hint = ""
+    risk_hint = ""
+
+    if industry_hints:
+        materials = industry_hints.get("typical_materials", [])[:5]
+        markets = industry_hints.get("export_markets", [])[:5]
+        risks = industry_hints.get("risk_factors", [])[:3]
+        growth = industry_hints.get("growth_drivers", [])[:3]
+
+        if materials:
+            materials_hint = f"\n  (이 업종 주요 원자재: {', '.join(materials)})"
+        if markets:
+            markets_hint = f"\n  (이 업종 주요 수출 시장: {', '.join(markets)})"
+        if risks or growth:
+            risk_hint = f"\n  (업종 주요 이슈: {', '.join(risks + growth)})"
+
     return f"""
-{corp_name} ({industry_name}) 기업 종합 정보 (한국 기업, 2026년 기준):
+{corp_name} ({industry_name}) 기업 종합 분석 (한국 기업, 2026년 기준):
 
-[기본 정보] - 필수
-- 대표이사 이름
-- 설립연도
-- 본사 위치 (시/도 단위)
-- 임직원 수 (정규직 기준)
-- 주요 경영진 (이름, 직함)
+[핵심 분석 - 가장 중요!]
+{corp_name}에 대해 다음 관점에서 분석해주세요:
+1. 이 기업의 산업 내 포지션 (시장점유율, 글로벌/국내 순위)
+2. 핵심 경쟁력과 차별점
+3. 현재 직면한 기회 요인 (AI, 친환경, 신시장 등)
+4. 현재 직면한 위협/리스크 요인{risk_hint}
+5. 은행이 이 기업에 대출할 때 고려해야 할 핵심 사항
 
-[사업 현황]
-- 주요 사업 및 제품/서비스 설명
-- 비즈니스 모델 및 수익 구조
-- 업종 현황 및 시장 동향
+[기본 정보]
+- 대표이사, 설립연도, 본사 위치, 임직원 수, 주요 경영진
 
 [재무 정보]
-- 연간 매출액 (최근 3개년, 원화)
-- 영업이익, 순이익
+- 연간 매출액 (최근 실적, 원화), 영업이익, 순이익
+- 재무 건전성 지표
 
-[공급망 정보] - 중요! 반드시 찾아주세요
-- 주요 공급사 회사명 (원자재, 부품, 자재 공급하는 회사)
-- 공급사 국가 비중 (국내/해외)
-- 단일 조달처 위험 여부 (특정 공급사에 의존하는 품목)
-- 주요 원자재/자재 (건설: 철강, 시멘트, 레미콘 / 제조: 반도체, 부품 등)
-- 원자재 수입 비율 (%)
+[공급망 정보] - 반드시 찾아주세요{materials_hint}
+- {corp_name}의 실제 원자재/부품 공급사 회사명
+- 국내 조달 vs 해외 수입 비율
+- 특정 공급사에 의존하는 품목 (단일 조달처 위험)
 
-[주주 정보] - 중요! 반드시 찾아주세요
-- 최대주주 및 지분율
-- 주요 주주 명단 (개인, 기관, 계열사 등)
-- 지분 구조
-
-[해외 사업] - 중요!
+[해외 사업] - 반드시 찾아주세요{markets_hint}
 - 수출 비중 (%)
-- 국가별 매출/사업 노출도 (중국, 미국, 베트남 등)
-- 해외 법인 명단 (법인명, 국가, 사업유형)
-- 해외 공장/생산 국가
-- 해외 프로젝트
+- 국가별 매출 비중 (중국, 미국, 베트남 등 구체적 수치)
+- 해외 법인/공장 위치 (법인명, 국가)
 
-[고객 및 경쟁]
-- 주요 고객사 (발주처, 납품처)
-- 주요 경쟁사
+[주주 정보]
+- 최대주주 및 지분율
+- 주요 주주 명단
 
-[거시 요인]
-- 기업에 영향을 미치는 거시경제/정책 요인 (긍정/부정 구분)
+[경쟁 환경]
+- 주요 경쟁사 및 시장점유율 비교
+- 경쟁 우위/열위 요인
 
-공식 출처(DART, 금감원, 기업 IR 자료, 사업보고서, 주요 언론)의 정보를 검색해주세요.
-특히 공급망, 주주 정보, 해외 사업 관련 정보를 반드시 찾아주세요.
+공식 출처(DART, 금감원, 기업 IR, 사업보고서, 애널리스트 리포트, 주요 언론)에서 검색해주세요.
 """
 
 
@@ -1075,6 +1195,14 @@ class CorpProfilingPipeline:
         self._llm_service = llm_service
         self._db_session = db_session
         self._perplexity_api_key = perplexity_api_key
+
+        # Generate industry hints dynamically using LLM (with caching)
+        try:
+            self._industry_hints = await get_industry_hints(industry_code, llm_service)
+            logger.info(f"Industry hints generated for {industry_code}: {list(self._industry_hints.keys())}")
+        except Exception as e:
+            logger.warning(f"Failed to generate industry hints: {e}")
+            self._industry_hints = {}
 
         # Configure orchestrator with injectable functions
         self.orchestrator.set_cache_lookup(
@@ -1257,8 +1385,9 @@ class CorpProfilingPipeline:
             logger.warning("Perplexity API key not configured")
             return {}
 
-        # PRD v1.2: 19개 필드를 위한 종합 쿼리
-        query = build_perplexity_query(corp_name, industry_name)
+        # PRD v1.2: 19개 필드를 위한 종합 쿼리 (업종 힌트 포함)
+        industry_hints = getattr(self, '_industry_hints', None)
+        query = build_perplexity_query(corp_name, industry_name, industry_hints)
 
         try:
             with httpx.Client(timeout=30.0) as client:
@@ -1339,11 +1468,37 @@ class CorpProfilingPipeline:
         citations: list[str],
     ) -> Optional[dict]:
         """Use LLM to extract structured profile from search content."""
+        # Build industry hints text for prompt
+        industry_hints = getattr(self, '_industry_hints', {})
+        industry_hints_text = ""
+        if industry_hints:
+            materials = industry_hints.get("typical_materials", [])[:5]
+            suppliers = industry_hints.get("typical_suppliers", [])[:5]
+            markets = industry_hints.get("export_markets", [])[:5]
+            risks = industry_hints.get("risk_factors", [])[:3]
+            growth = industry_hints.get("growth_drivers", [])[:3]
+
+            hints_parts = []
+            if materials:
+                hints_parts.append(f"- 이 업종 주요 원자재: {', '.join(materials)}")
+            if suppliers:
+                hints_parts.append(f"- 이 업종 주요 공급사 유형: {', '.join(suppliers)}")
+            if markets:
+                hints_parts.append(f"- 이 업종 주요 수출국: {', '.join(markets)}")
+            if risks:
+                hints_parts.append(f"- 업종 리스크 요인: {', '.join(risks)}")
+            if growth:
+                hints_parts.append(f"- 업종 성장 동력: {', '.join(growth)}")
+
+            if hints_parts:
+                industry_hints_text = "\n## 업종 특성 힌트 (추론 시 참고)\n" + "\n".join(hints_parts)
+
         system_prompt = PROFILE_EXTRACTION_SYSTEM_PROMPT
         user_prompt = PROFILE_EXTRACTION_USER_PROMPT.format(
             search_results=content[:8000],  # Limit content length
             corp_name=corp_name,
             industry_name=industry_name,
+            industry_hints_text=industry_hints_text,
         )
 
         messages = [
@@ -1542,8 +1697,9 @@ class CorpProfilingPipeline:
             logger.warning("Perplexity API key not configured")
             return {"content": "", "citations": [], "source_quality": "LOW", "raw_response": {}}
 
-        # PRD v1.2: 19개 필드를 위한 종합 쿼리
-        query = build_perplexity_query(corp_name, industry_name)
+        # PRD v1.2: 19개 필드를 위한 종합 쿼리 (업종 힌트 포함)
+        industry_hints = getattr(self, '_industry_hints', None)
+        query = build_perplexity_query(corp_name, industry_name, industry_hints)
 
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
