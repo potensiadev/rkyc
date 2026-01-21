@@ -94,12 +94,14 @@ class IntakeOutput:
     # Validation results
     entity_match_verified: bool
     entity_match_method: str  # "exact_match", "fuzzy_match", "manual_override"
-    entity_discrepancies: list[dict] = field(default_factory=list)
 
     # Date validation
     signal_date: str  # ISO format
     signal_date_verified: bool
     date_validation_method: str  # "timestamp", "article_date", "estimated"
+
+    # Entity discrepancies (Moved here to fix non-default argument following default argument error)
+    entity_discrepancies: list[dict] = field(default_factory=list)
 
     # Source labeling
     sources: list[dict] = field(default_factory=list)  # [{url, credibility, domain, validated}]

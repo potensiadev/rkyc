@@ -90,5 +90,6 @@ celery_app.conf.update(
     },
 )
 
-# Auto-discover tasks in the tasks module
-celery_app.autodiscover_tasks(["app.worker.tasks"])
+# Auto-discover tasks by importing the package directly
+# This avoids RecursionError in autodiscover_tasks when tasks import celery_app
+import app.worker.tasks
