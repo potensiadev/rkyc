@@ -84,8 +84,8 @@ def _parse_supply_chain(data: dict | None) -> SupplyChainSchema:
     if not data:
         return SupplyChainSchema()
     return SupplyChainSchema(
-        key_suppliers=data.get("key_suppliers", []),
-        supplier_countries=data.get("supplier_countries", {}),
+        key_suppliers=data.get("key_suppliers") or [],
+        supplier_countries=data.get("supplier_countries") or {},
         # P0-1 Fix: 다양한 타입을 list[str]로 정규화
         single_source_risk=_normalize_single_source_risk(data.get("single_source_risk")),
         material_import_ratio_pct=data.get("material_import_ratio_pct"),
