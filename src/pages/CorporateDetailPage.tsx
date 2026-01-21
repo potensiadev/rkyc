@@ -537,12 +537,7 @@ export default function CorporateDetailPage() {
                   </h3>
                   {profile.overseas_business && (profile.overseas_business.subsidiaries?.length > 0 || profile.overseas_business.manufacturing_countries?.length > 0) ? (
                     <>
-                  <div>
-                    <h3 className="text-sm font-medium text-foreground mb-2 flex items-center gap-2">
-                      <Factory className="w-4 h-4 text-muted-foreground" />
-                      해외 사업
-                    </h3>
-                    {profile.overseas_business.subsidiaries.length > 0 && (
+                    {profile.overseas_business.subsidiaries?.length > 0 && (
                       <div className="mb-2">
                         <span className="text-xs text-muted-foreground">해외 법인</span>
                         <div className="flex flex-wrap gap-1 mt-1">
@@ -635,7 +630,7 @@ export default function CorporateDetailPage() {
                     ) : (
                       <p className="text-sm text-muted-foreground italic">정보 없음</p>
                     )}
-                  )}
+                  </div>
                 </div>
 
                 {/* Shareholders - P0-2 Fix: 빈 섹션 '정보 없음' */}
