@@ -39,14 +39,14 @@ class ProfileStatusEnum(str, Enum):
 
 class ExecutiveSchema(BaseModel):
     """임원 정보"""
-    name: str
-    position: str
+    name: Optional[str] = None
+    position: Optional[str] = None
     tenure_years: Optional[int] = None
 
 
 class FinancialSnapshotSchema(BaseModel):
     """연도별 재무 스냅샷"""
-    year: int
+    year: Optional[int] = None
     revenue_krw: Optional[int] = None
     operating_profit_krw: Optional[int] = None
     net_profit_krw: Optional[int] = None
@@ -57,15 +57,15 @@ class FinancialSnapshotSchema(BaseModel):
 
 class CompetitorSchema(BaseModel):
     """경쟁사 정보"""
-    name: str
+    name: Optional[str] = None
     market_share_pct: Optional[float] = None
     relationship: Optional[str] = None  # DIRECT, INDIRECT
 
 
 class MacroFactorSchema(BaseModel):
     """거시 요인"""
-    factor: str
-    impact: str  # POSITIVE, NEGATIVE, NEUTRAL
+    factor: Optional[str] = None
+    impact: Optional[str] = None  # POSITIVE, NEGATIVE, NEUTRAL
     description: Optional[str] = None
 
 
@@ -79,8 +79,8 @@ class SupplyChainSchema(BaseModel):
 
 class OverseasSubsidiarySchema(BaseModel):
     """해외 법인"""
-    name: str
-    country: str
+    name: Optional[str] = None
+    country: Optional[str] = None
     business_type: Optional[str] = None
     ownership_pct: Optional[float] = None
 
@@ -93,8 +93,8 @@ class OverseasBusinessSchema(BaseModel):
 
 class ShareholderSchema(BaseModel):
     """주주 정보"""
-    name: str
-    ownership_pct: float
+    name: Optional[str] = None
+    ownership_pct: Optional[float] = None
     is_largest: Optional[bool] = None
     relationship: Optional[str] = None  # FOUNDER, INSTITUTION, FOREIGN, OTHER
 

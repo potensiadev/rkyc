@@ -195,12 +195,37 @@ async def get_corp_profile(
             },
         )
 
-    # Parse JSONB fields to schemas
-    executives = [ExecutiveSchema(**e) for e in (row.executives or [])]
-    financial_history = [FinancialSnapshotSchema(**f) for f in (row.financial_history or [])]
-    competitors = [CompetitorSchema(**c) for c in (row.competitors or [])]
-    macro_factors = [MacroFactorSchema(**m) for m in (row.macro_factors or [])]
-    shareholders = [ShareholderSchema(**s) for s in (row.shareholders or [])]
+    # Parse JSONB fields to schemas with error handling
+    try:
+        executives = [ExecutiveSchema(**e) for e in (row.executives or [])] if row.executives else []
+    except Exception as e:
+        logger.warning(f"Failed to parse executives for {corp_id}: {e}")
+        executives = []
+
+    try:
+        financial_history = [FinancialSnapshotSchema(**f) for f in (row.financial_history or [])] if row.financial_history else []
+    except Exception as e:
+        logger.warning(f"Failed to parse financial_history for {corp_id}: {e}")
+        financial_history = []
+
+    try:
+        competitors = [CompetitorSchema(**c) for c in (row.competitors or [])] if row.competitors else []
+    except Exception as e:
+        logger.warning(f"Failed to parse competitors for {corp_id}: {e}")
+        competitors = []
+
+    try:
+        macro_factors = [MacroFactorSchema(**m) for m in (row.macro_factors or [])] if row.macro_factors else []
+    except Exception as e:
+        logger.warning(f"Failed to parse macro_factors for {corp_id}: {e}")
+        macro_factors = []
+
+    try:
+        shareholders = [ShareholderSchema(**s) for s in (row.shareholders or [])] if row.shareholders else []
+    except Exception as e:
+        logger.warning(f"Failed to parse shareholders for {corp_id}: {e}")
+        shareholders = []
+
     supply_chain = _parse_supply_chain(row.supply_chain)
     overseas_business = _parse_overseas_business(row.overseas_business)
     consensus_metadata = _parse_consensus_metadata(row.consensus_metadata)
@@ -240,6 +265,48 @@ async def get_corp_profile(
         expires_at=row.expires_at,
         is_expired=row.is_expired,
     )
+
+
+@router.get(
+    "/corporations/{corp_id}/profile/raw",
+    summary="기업 프로파일 RAW 데이터 조회 (디버깅용)",
+)
+async def get_corp_profile_raw(
+    corp_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Get raw corp profile data for debugging."""
+    query = text("""
+        SELECT *
+        FROM rkyc_corp_profile
+        WHERE corp_id = :corp_id
+        LIMIT 1
+    """)
+
+    result = await db.execute(query, {"corp_id": corp_id})
+    row = result.fetchone()
+
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Profile not found for corp_id: {corp_id}",
+        )
+
+    # Convert row to dict, handling special types
+    import json
+    data = {}
+    for key in row._mapping.keys():
+        value = getattr(row, key)
+        if isinstance(value, (dict, list)):
+            data[key] = value
+        elif hasattr(value, 'isoformat'):
+            data[key] = value.isoformat()
+        elif isinstance(value, UUID):
+            data[key] = str(value)
+        else:
+            data[key] = value
+
+    return data
 
 
 @router.get(
