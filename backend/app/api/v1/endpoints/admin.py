@@ -161,6 +161,98 @@ async def reset_circuit_breaker(request: CircuitResetRequest):
 
 
 @router.get(
+    "/test/perplexity",
+    summary="Perplexity API 테스트",
+    description="Perplexity API 연결을 직접 테스트합니다.",
+)
+async def test_perplexity():
+    """Perplexity API 직접 테스트"""
+    import httpx
+    from app.core.config import settings
+
+    api_key = settings.PERPLEXITY_API_KEY
+    if not api_key:
+        return {"success": False, "error": "PERPLEXITY_API_KEY not configured"}
+
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            response = client.post(
+                "https://api.perplexity.ai/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "sonar-pro",
+                    "messages": [{"role": "user", "content": "Say hello in Korean"}],
+                    "max_tokens": 50,
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
+            return {
+                "success": True,
+                "model": data.get("model"),
+                "response_preview": str(data.get("choices", [{}])[0].get("message", {}).get("content", ""))[:100],
+                "api_key_prefix": api_key[:10] + "..." if api_key else None,
+            }
+    except httpx.HTTPStatusError as e:
+        return {
+            "success": False,
+            "error": f"HTTP {e.response.status_code}: {e.response.text[:200]}",
+            "api_key_prefix": api_key[:10] + "..." if api_key else None,
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "api_key_prefix": api_key[:10] + "..." if api_key else None,
+        }
+
+
+@router.get(
+    "/test/gemini",
+    summary="Gemini API 테스트",
+    description="Gemini API 연결을 직접 테스트합니다.",
+)
+async def test_gemini():
+    """Gemini API 직접 테스트"""
+    import httpx
+    from app.core.config import settings
+
+    api_key = settings.GOOGLE_API_KEY
+    if not api_key:
+        return {"success": False, "error": "GOOGLE_API_KEY not configured"}
+
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            # Test by listing models
+            response = client.get(
+                f"https://generativelanguage.googleapis.com/v1/models?key={api_key}"
+            )
+            response.raise_for_status()
+            data = response.json()
+            models = [m.get("name") for m in data.get("models", [])[:5]]
+            return {
+                "success": True,
+                "models_available": models,
+                "api_key_prefix": api_key[:10] + "..." if api_key else None,
+            }
+    except httpx.HTTPStatusError as e:
+        return {
+            "success": False,
+            "error": f"HTTP {e.response.status_code}: {e.response.text[:200]}",
+            "api_key_prefix": api_key[:10] + "..." if api_key else None,
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "api_key_prefix": api_key[:10] + "..." if api_key else None,
+        }
+
+
+@router.get(
     "/health/llm",
     summary="LLM Provider 건강 상태",
     description="모든 LLM Provider의 건강 상태를 요약합니다.",
