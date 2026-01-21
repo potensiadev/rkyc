@@ -47,6 +47,81 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================================
+# Helper Functions (PRD Bug Fixes)
+# ============================================================================
+
+
+def safe_json_dumps(value: Any) -> str:
+    """
+    JSON 직렬화 (이중 직렬화 방지) - P0-3 Fix
+
+    Args:
+        value: dict, list, str, or None
+
+    Returns:
+        JSON string (이미 JSON 문자열이면 그대로 반환)
+    """
+    if value is None:
+        return '{}'
+    if isinstance(value, str):
+        # 이미 JSON 문자열인지 확인
+        try:
+            json.loads(value)
+            return value  # 유효한 JSON 문자열이면 그대로 반환
+        except (json.JSONDecodeError, ValueError):
+            # JSON이 아니면 문자열을 JSON으로 직렬화
+            return json.dumps(value, ensure_ascii=False, default=str)
+    return json.dumps(value, ensure_ascii=False, default=str)
+
+
+def parse_datetime_safely(dt_string: str | None) -> datetime | None:
+    """
+    datetime 파싱 ("Z" suffix 지원) - P1-3 Fix
+
+    Python 3.10 이하에서는 fromisoformat()이 "Z" suffix를 지원하지 않음.
+
+    Args:
+        dt_string: ISO format datetime string (e.g., "2026-01-21T12:00:00Z")
+
+    Returns:
+        datetime object or None
+    """
+    if not dt_string:
+        return None
+    try:
+        # "Z"를 "+00:00"으로 치환 (Python 3.10 호환)
+        if isinstance(dt_string, str) and dt_string.endswith("Z"):
+            dt_string = dt_string[:-1] + "+00:00"
+        return datetime.fromisoformat(dt_string)
+    except (ValueError, TypeError):
+        return None
+
+
+def normalize_single_source_risk(value: Any) -> list[str]:
+    """
+    single_source_risk 타입 정규화 - P0-1 Fix
+
+    LLM이 boolean, string, list 등 다양한 타입으로 반환할 수 있음.
+    모두 list[str]로 정규화.
+
+    Args:
+        value: boolean, string, or list
+
+    Returns:
+        list[str]
+    """
+    if value is None:
+        return []
+    if isinstance(value, bool):
+        return ["단일 조달처 위험 있음"] if value else []
+    if isinstance(value, str):
+        return [value] if value.strip() else []
+    if isinstance(value, list):
+        return [str(item) for item in value if item]
+    return []
+
+
+# ============================================================================
 # Constants
 # ============================================================================
 
@@ -291,49 +366,136 @@ PROFILE_EXTRACTION_USER_PROMPT = """## 검색 결과
 기업명: {corp_name}
 업종: {industry_name}
 
-## 출력 스키마
-다음 JSON 형식으로만 응답하세요:
+## 출력 스키마 (PRD v1.2 - 19개 필드)
+다음 JSON 형식으로만 응답하세요. 모든 필드에 대해 value, confidence, source_url, excerpt를 포함해야 합니다.
+확실하지 않은 정보는 value를 null로 설정하세요.
 
 ```json
 {{
   "business_summary": {{
-    "value": "string (100자 이내) 또는 null",
+    "value": "string (100자 이내, 주요 사업 및 제품 설명) 또는 null",
     "confidence": "HIGH|MED|LOW",
     "source_url": "url 또는 null",
     "excerpt": "뒷받침 텍스트 또는 null"
   }},
   "revenue_krw": {{
-    "value": "integer (원화) 또는 null",
+    "value": "integer (연간 매출액, 원화) 또는 null",
     "confidence": "HIGH|MED|LOW",
     "source_url": "url 또는 null",
     "excerpt": "뒷받침 텍스트 또는 null"
   }},
   "export_ratio_pct": {{
-    "value": "integer 0-100 또는 null",
+    "value": "integer 0-100 (수출 비중 %) 또는 null",
+    "confidence": "HIGH|MED|LOW",
+    "source_url": "url 또는 null",
+    "excerpt": "뒷받침 텍스트 또는 null"
+  }},
+  "ceo_name": {{
+    "value": "string (대표이사명) 또는 null",
+    "confidence": "HIGH|MED|LOW",
+    "source_url": "url 또는 null",
+    "excerpt": "뒷받침 텍스트 또는 null"
+  }},
+  "employee_count": {{
+    "value": "integer (임직원 수) 또는 null",
+    "confidence": "HIGH|MED|LOW",
+    "source_url": "url 또는 null",
+    "excerpt": "뒷받침 텍스트 또는 null"
+  }},
+  "founded_year": {{
+    "value": "integer (설립연도, YYYY) 또는 null",
+    "confidence": "HIGH|MED|LOW",
+    "source_url": "url 또는 null",
+    "excerpt": "뒷받침 텍스트 또는 null"
+  }},
+  "headquarters": {{
+    "value": "string (본사 위치) 또는 null",
+    "confidence": "HIGH|MED|LOW",
+    "source_url": "url 또는 null",
+    "excerpt": "뒷받침 텍스트 또는 null"
+  }},
+  "executives": {{
+    "value": [{{"name": "이름", "title": "직함"}}] 또는 null,
+    "confidence": "HIGH|MED|LOW",
+    "source_url": "url 또는 null",
+    "excerpt": "뒷받침 텍스트 또는 null"
+  }},
+  "industry_overview": {{
+    "value": "string (업종 현황 및 시장 동향) 또는 null",
+    "confidence": "HIGH|MED|LOW",
+    "source_url": "url 또는 null",
+    "excerpt": "뒷받침 텍스트 또는 null"
+  }},
+  "business_model": {{
+    "value": "string (수익 모델 및 비즈니스 구조) 또는 null",
     "confidence": "HIGH|MED|LOW",
     "source_url": "url 또는 null",
     "excerpt": "뒷받침 텍스트 또는 null"
   }},
   "country_exposure": {{
-    "value": {{"국가명": 비중(%)}} 또는 null,
+    "value": {{"국가명": 비중(%)}} (국가별 매출/사업 노출도) 또는 null,
     "confidence": "HIGH|MED|LOW",
     "source_url": "url 또는 null",
     "excerpt": "뒷받침 텍스트 또는 null"
   }},
   "key_materials": {{
-    "value": ["원자재1", "원자재2"] 또는 null,
+    "value": ["원자재1", "원자재2"] (주요 원자재) 또는 null,
     "confidence": "HIGH|MED|LOW",
     "source_url": "url 또는 null",
     "excerpt": "뒷받침 텍스트 또는 null"
   }},
   "key_customers": {{
-    "value": ["고객사1", "고객사2"] 또는 null,
+    "value": ["고객사1", "고객사2"] (주요 고객사) 또는 null,
     "confidence": "HIGH|MED|LOW",
     "source_url": "url 또는 null",
     "excerpt": "뒷받침 텍스트 또는 null"
   }},
   "overseas_operations": {{
-    "value": ["베트남 하노이 공장", "중국 상해 법인"] 또는 null,
+    "value": ["베트남 하노이 공장", "중국 상해 법인"] (해외 사업장) 또는 null,
+    "confidence": "HIGH|MED|LOW",
+    "source_url": "url 또는 null",
+    "excerpt": "뒷받침 텍스트 또는 null"
+  }},
+  "supply_chain": {{
+    "value": {{
+      "key_suppliers": ["공급사1", "공급사2"],
+      "supplier_countries": {{"국가명": 비중(%)}},
+      "single_source_risk": ["단일 조달처 위험 품목1", "단일 조달처 위험 품목2"] (단일 공급처에 의존하는 원자재/부품 목록) 또는 [],
+      "material_import_ratio_pct": "integer 0-100 (원자재 수입 비율)"
+    }} 또는 null,
+    "confidence": "HIGH|MED|LOW",
+    "source_url": "url 또는 null",
+    "excerpt": "뒷받침 텍스트 또는 null"
+  }},
+  "overseas_business": {{
+    "value": {{
+      "subsidiaries": [{{"name": "법인명", "country": "국가", "type": "생산/판매/R&D"}}],
+      "manufacturing_countries": ["국가1", "국가2"]
+    }} 또는 null,
+    "confidence": "HIGH|MED|LOW",
+    "source_url": "url 또는 null",
+    "excerpt": "뒷받침 텍스트 또는 null"
+  }},
+  "shareholders": {{
+    "value": [{{"name": "주주명", "ratio_pct": 지분율}}] 또는 null,
+    "confidence": "HIGH|MED|LOW",
+    "source_url": "url 또는 null",
+    "excerpt": "뒷받침 텍스트 또는 null"
+  }},
+  "competitors": {{
+    "value": [{{"name": "경쟁사명", "description": "경쟁 영역"}}] 또는 null,
+    "confidence": "HIGH|MED|LOW",
+    "source_url": "url 또는 null",
+    "excerpt": "뒷받침 텍스트 또는 null"
+  }},
+  "macro_factors": {{
+    "value": [{{"factor": "요인명", "impact": "POSITIVE|NEGATIVE|NEUTRAL", "description": "설명"}}] 또는 null,
+    "confidence": "HIGH|MED|LOW",
+    "source_url": "url 또는 null",
+    "excerpt": "뒷받침 텍스트 또는 null"
+  }},
+  "financial_history": {{
+    "value": [{{"year": 2024, "revenue_krw": 금액, "operating_profit_krw": 금액, "net_profit_krw": 금액}}] (최근 3개년) 또는 null,
     "confidence": "HIGH|MED|LOW",
     "source_url": "url 또는 null",
     "excerpt": "뒷받침 텍스트 또는 null"
@@ -788,6 +950,51 @@ def get_industry_name(industry_code: str) -> str:
     return INDUSTRY_NAMES.get(industry_code, f"업종코드 {industry_code}")
 
 
+def build_perplexity_query(corp_name: str, industry_name: str) -> str:
+    """Build comprehensive Perplexity search query for PRD v1.2 (19 fields)."""
+    return f"""
+{corp_name} ({industry_name}) 기업 종합 정보 (한국 기업, 2026년 기준):
+
+[기본 정보]
+- 대표이사, 설립연도, 본사 위치, 임직원 수
+- 주요 경영진 (이름, 직함)
+
+[사업 현황]
+- 주요 사업 및 제품/서비스 설명
+- 비즈니스 모델 및 수익 구조
+- 업종 현황 및 시장 동향
+
+[재무 정보]
+- 연간 매출액 (최근 3개년)
+- 영업이익, 순이익
+
+[수출 및 해외사업]
+- 수출 비중 (%)
+- 국가별 매출/사업 노출도 (중국, 미국, 베트남 등)
+- 해외 법인 및 공장 (국가, 유형)
+- 해외 생산 국가
+
+[공급망 정보]
+- 주요 공급사
+- 공급사 국가 비중
+- 단일 조달처 위험 여부
+- 원자재 수입 비율 (%)
+- 주요 원자재
+
+[고객 및 경쟁]
+- 주요 고객사
+- 주요 경쟁사
+
+[주주 정보]
+- 주요 주주 및 지분율
+
+[거시 요인]
+- 기업에 영향을 미치는 거시경제/정책 요인
+
+공식 출처(DART, 금감원, 기업 IR 자료, 주요 언론)의 정보만 검색.
+"""
+
+
 # ============================================================================
 # Main Pipeline
 # ============================================================================
@@ -942,13 +1149,32 @@ class CorpProfilingPipeline:
         profile = {
             "profile_id": str(uuid4()),
             "corp_id": corp_id,
+            # Basic info
             "business_summary": raw_profile.get("business_summary", f"{industry_name} 업체"),
             "revenue_krw": raw_profile.get("revenue_krw"),
             "export_ratio_pct": raw_profile.get("export_ratio_pct"),
+            # PRD v1.2 new fields - Basic info
+            "ceo_name": raw_profile.get("ceo_name"),
+            "employee_count": raw_profile.get("employee_count"),
+            "founded_year": raw_profile.get("founded_year"),
+            "headquarters": raw_profile.get("headquarters"),
+            "executives": raw_profile.get("executives", []),
+            # PRD v1.2 new fields - Value chain
+            "industry_overview": raw_profile.get("industry_overview"),
+            "business_model": raw_profile.get("business_model"),
+            "financial_history": raw_profile.get("financial_history", []),
+            "competitors": raw_profile.get("competitors", []),
+            "macro_factors": raw_profile.get("macro_factors", []),
+            # Original fields
             "country_exposure": raw_profile.get("country_exposure", {}),
             "key_materials": raw_profile.get("key_materials", []),
             "key_customers": raw_profile.get("key_customers", []),
             "overseas_operations": raw_profile.get("overseas_operations", []),
+            # PRD v1.2 new fields - Supply chain & Overseas
+            "supply_chain": raw_profile.get("supply_chain", {}),
+            "overseas_business": raw_profile.get("overseas_business", {}),
+            "shareholders": raw_profile.get("shareholders", []),
+            # Metadata
             "profile_confidence": overall_confidence,
             "field_confidences": raw_profile.get("field_confidences", {}),
             "source_urls": raw_profile.get("source_urls", []),
@@ -970,9 +1196,26 @@ class CorpProfilingPipeline:
             "execution_time_ms": orchestrator_result.execution_time_ms,
         }
 
-        # Add consensus metadata if available
+        # P1-1 Fix: consensus_metadata 기본값 추가
         if orchestrator_result.consensus_metadata:
             profile["consensus_metadata"] = orchestrator_result.consensus_metadata.to_dict()
+        else:
+            # 캐시 히트 또는 메타데이터 없는 경우 기본값
+            is_cache_hit = orchestrator_result.fallback_layer == FallbackLayer.CACHE
+            profile["consensus_metadata"] = {
+                "consensus_at": None,
+                "perplexity_success": False,
+                "gemini_success": False,
+                "claude_success": False,
+                "total_fields": 0,
+                "matched_fields": 0,
+                "discrepancy_fields": 0,
+                "enriched_fields": 0,
+                "overall_confidence": "CACHED" if is_cache_hit else overall_confidence,
+                "fallback_layer": orchestrator_result.fallback_layer.value if orchestrator_result.fallback_layer else 0,
+                "retry_count": orchestrator_result.retry_count,
+                "error_messages": orchestrator_result.error_messages or [],
+            }
 
         return profile
 
@@ -996,16 +1239,8 @@ class CorpProfilingPipeline:
             logger.warning("Perplexity API key not configured")
             return {}
 
-        query = f"""
-{corp_name} ({industry_name}) 기업 정보:
-1. 주요 사업 및 제품
-2. 매출 규모 및 재무 현황
-3. 수출 비중 및 주요 수출국
-4. 원자재 조달 및 공급망
-5. 해외 법인 및 공장
-
-2026년 기준 최신 공식 정보 검색. 한국 기업 기준.
-"""
+        # PRD v1.2: 19개 필드를 위한 종합 쿼리
+        query = build_perplexity_query(corp_name, industry_name)
 
         try:
             with httpx.Client(timeout=30.0) as client:
@@ -1289,17 +1524,8 @@ class CorpProfilingPipeline:
             logger.warning("Perplexity API key not configured")
             return {"content": "", "citations": [], "source_quality": "LOW", "raw_response": {}}
 
-        # Unified query (최대 2회 중 1차)
-        query = f"""
-{corp_name} ({industry_name}) 기업 정보:
-1. 주요 사업 및 제품
-2. 매출 규모 및 재무 현황
-3. 수출 비중 및 주요 수출국
-4. 원자재 조달 및 공급망
-5. 해외 법인 및 공장
-
-2026년 기준 최신 공식 정보 검색. 한국 기업 기준.
-"""
+        # PRD v1.2: 19개 필드를 위한 종합 쿼리
+        query = build_perplexity_query(corp_name, industry_name)
 
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
@@ -1440,26 +1666,35 @@ class CorpProfilingPipeline:
         )
 
     async def _save_profile(self, profile: dict, db_session) -> None:
-        """Save profile to database."""
+        """Save profile to database (PRD v1.2 - all 19+ fields)."""
         try:
             from sqlalchemy import text
 
-            # Upsert (insert or update)
+            # Upsert (insert or update) - PRD v1.2 full schema
             query = text("""
                 INSERT INTO rkyc_corp_profile (
                     profile_id, corp_id, business_summary, revenue_krw, export_ratio_pct,
                     country_exposure, key_materials, key_customers, overseas_operations,
+                    ceo_name, employee_count, founded_year, headquarters, executives,
+                    industry_overview, business_model, financial_history,
+                    competitors, macro_factors, supply_chain, overseas_business, shareholders,
+                    consensus_metadata,
                     profile_confidence, field_confidences, source_urls,
                     raw_search_result, field_provenance, extraction_model, extraction_prompt_version,
                     is_fallback, search_failed, validation_warnings, status,
                     fetched_at, expires_at
                 ) VALUES (
-                    :profile_id::uuid, :corp_id, :business_summary, :revenue_krw, :export_ratio_pct,
-                    :country_exposure::jsonb, :key_materials, :key_customers, :overseas_operations,
-                    :profile_confidence::confidence_level, :field_confidences::jsonb, :source_urls,
-                    :raw_search_result::jsonb, :field_provenance::jsonb, :extraction_model, :extraction_prompt_version,
+                    CAST(:profile_id AS uuid), :corp_id, :business_summary, :revenue_krw, :export_ratio_pct,
+                    CAST(:country_exposure AS jsonb), :key_materials, :key_customers, :overseas_operations,
+                    :ceo_name, :employee_count, :founded_year, :headquarters, CAST(:executives AS jsonb),
+                    :industry_overview, :business_model, CAST(:financial_history AS jsonb),
+                    CAST(:competitors AS jsonb), CAST(:macro_factors AS jsonb),
+                    CAST(:supply_chain AS jsonb), CAST(:overseas_business AS jsonb), CAST(:shareholders AS jsonb),
+                    CAST(:consensus_metadata AS jsonb),
+                    CAST(:profile_confidence AS confidence_level), CAST(:field_confidences AS jsonb), :source_urls,
+                    CAST(:raw_search_result AS jsonb), CAST(:field_provenance AS jsonb), :extraction_model, :extraction_prompt_version,
                     :is_fallback, :search_failed, :validation_warnings, :status,
-                    :fetched_at::timestamptz, :expires_at::timestamptz
+                    CAST(:fetched_at AS timestamptz), CAST(:expires_at AS timestamptz)
                 )
                 ON CONFLICT (corp_id) DO UPDATE SET
                     business_summary = EXCLUDED.business_summary,
@@ -1469,6 +1704,20 @@ class CorpProfilingPipeline:
                     key_materials = EXCLUDED.key_materials,
                     key_customers = EXCLUDED.key_customers,
                     overseas_operations = EXCLUDED.overseas_operations,
+                    ceo_name = EXCLUDED.ceo_name,
+                    employee_count = EXCLUDED.employee_count,
+                    founded_year = EXCLUDED.founded_year,
+                    headquarters = EXCLUDED.headquarters,
+                    executives = EXCLUDED.executives,
+                    industry_overview = EXCLUDED.industry_overview,
+                    business_model = EXCLUDED.business_model,
+                    financial_history = EXCLUDED.financial_history,
+                    competitors = EXCLUDED.competitors,
+                    macro_factors = EXCLUDED.macro_factors,
+                    supply_chain = EXCLUDED.supply_chain,
+                    overseas_business = EXCLUDED.overseas_business,
+                    shareholders = EXCLUDED.shareholders,
+                    consensus_metadata = EXCLUDED.consensus_metadata,
                     profile_confidence = EXCLUDED.profile_confidence,
                     field_confidences = EXCLUDED.field_confidences,
                     source_urls = EXCLUDED.source_urls,
@@ -1480,34 +1729,72 @@ class CorpProfilingPipeline:
                     search_failed = EXCLUDED.search_failed,
                     validation_warnings = EXCLUDED.validation_warnings,
                     status = EXCLUDED.status,
-                    fetched_at = EXCLUDED.fetched_at,
-                    expires_at = EXCLUDED.expires_at,
+                    -- P2-2 Fix: 조건부 TTL 업데이트 (데이터 품질이 향상되거나 기존이 fallback인 경우만 TTL 연장)
+                    fetched_at = CASE
+                        WHEN EXCLUDED.is_fallback = false AND rkyc_corp_profile.is_fallback = true
+                            THEN EXCLUDED.fetched_at
+                        WHEN EXCLUDED.profile_confidence IN ('HIGH', 'MED')
+                             AND rkyc_corp_profile.profile_confidence = 'LOW'
+                            THEN EXCLUDED.fetched_at
+                        WHEN rkyc_corp_profile.expires_at IS NULL
+                             OR rkyc_corp_profile.expires_at < NOW()
+                            THEN EXCLUDED.fetched_at
+                        ELSE rkyc_corp_profile.fetched_at
+                    END,
+                    expires_at = CASE
+                        WHEN EXCLUDED.is_fallback = false AND rkyc_corp_profile.is_fallback = true
+                            THEN EXCLUDED.expires_at
+                        WHEN EXCLUDED.profile_confidence IN ('HIGH', 'MED')
+                             AND rkyc_corp_profile.profile_confidence = 'LOW'
+                            THEN EXCLUDED.expires_at
+                        WHEN rkyc_corp_profile.expires_at IS NULL
+                             OR rkyc_corp_profile.expires_at < NOW()
+                            THEN EXCLUDED.expires_at
+                        ELSE rkyc_corp_profile.expires_at
+                    END,
                     updated_at = NOW()
             """)
 
             await db_session.execute(query, {
-                "profile_id": profile["profile_id"],
-                "corp_id": profile["corp_id"],
-                "business_summary": profile["business_summary"],
+                "profile_id": str(profile.get("profile_id", "")),
+                "corp_id": profile.get("corp_id", ""),
+                "business_summary": profile.get("business_summary"),
                 "revenue_krw": profile.get("revenue_krw"),
                 "export_ratio_pct": profile.get("export_ratio_pct"),
-                "country_exposure": json.dumps(profile.get("country_exposure", {})),
+                # P0-3 Fix: safe_json_dumps()로 이중 직렬화 방지
+                "country_exposure": safe_json_dumps(profile.get("country_exposure", {})),
                 "key_materials": profile.get("key_materials", []),
                 "key_customers": profile.get("key_customers", []),
                 "overseas_operations": profile.get("overseas_operations", []),
-                "profile_confidence": profile["profile_confidence"],
-                "field_confidences": json.dumps(profile.get("field_confidences", {})),
+                # PRD v1.2 new fields
+                "ceo_name": profile.get("ceo_name"),
+                "employee_count": profile.get("employee_count"),
+                "founded_year": profile.get("founded_year"),
+                "headquarters": profile.get("headquarters"),
+                "executives": safe_json_dumps(profile.get("executives", [])),
+                "industry_overview": profile.get("industry_overview"),
+                "business_model": profile.get("business_model"),
+                "financial_history": safe_json_dumps(profile.get("financial_history", [])),
+                "competitors": safe_json_dumps(profile.get("competitors", [])),
+                "macro_factors": safe_json_dumps(profile.get("macro_factors", [])),
+                "supply_chain": safe_json_dumps(profile.get("supply_chain", {})),
+                "overseas_business": safe_json_dumps(profile.get("overseas_business", {})),
+                "shareholders": safe_json_dumps(profile.get("shareholders", [])),
+                "consensus_metadata": safe_json_dumps(profile.get("consensus_metadata", {})),
+                # Original fields
+                "profile_confidence": profile.get("profile_confidence", "LOW"),
+                "field_confidences": safe_json_dumps(profile.get("field_confidences", {})),
                 "source_urls": profile.get("source_urls", []),
-                "raw_search_result": json.dumps(profile.get("raw_search_result", {})),
-                "field_provenance": json.dumps(profile.get("field_provenance", {})),
+                "raw_search_result": safe_json_dumps(profile.get("raw_search_result", {})),
+                "field_provenance": safe_json_dumps(profile.get("field_provenance", {})),
                 "extraction_model": profile.get("extraction_model"),
                 "extraction_prompt_version": profile.get("extraction_prompt_version"),
                 "is_fallback": profile.get("is_fallback", False),
                 "search_failed": profile.get("search_failed", False),
                 "validation_warnings": profile.get("validation_warnings", []),
                 "status": profile.get("status", "ACTIVE"),
-                "fetched_at": profile["fetched_at"],
-                "expires_at": profile["expires_at"],
+                "fetched_at": profile.get("fetched_at"),
+                "expires_at": profile.get("expires_at"),
             })
             await db_session.commit()
             logger.info(f"Saved profile for {profile['corp_id']}")

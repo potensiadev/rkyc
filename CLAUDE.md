@@ -249,8 +249,7 @@ SNAPSHOT → DOC_INGEST → EXTERNAL → CONTEXT → SIGNAL → VALIDATION → I
 - [x] 백엔드 폴더 구조 및 플레이스홀더 파일
 - [x] 데이터베이스 스키마 v1 (schema.sql) - 구버전
 - [x] **스키마 재설계 v2 (schema_v2.sql)** - PRD 14장 기준
-- [x] **시드 데이터 v2 (seed_v2.sql)** - 6개 기업 + 29개 시그널
-- [x] **Supabase 프로젝트 생성 및 스키마/시드 적용** (Tokyo 리전)
+- [x] **Supabase 프로젝트 생성 및 스키마 적용** (Tokyo 리전)
 - [x] **Backend API 구현 완료** (FastAPI + SQLAlchemy 2.0)
   - 기업 CRUD API (`/api/v1/corporations`)
   - 시그널 조회 API (`/api/v1/signals`)
@@ -327,11 +326,10 @@ rkyc/
     │   ├── services/
     │   └── worker/
     └── sql/
-        ├── schema.sql       # DDL v1 (구버전)
         ├── schema_v2.sql    # DDL v2 (PRD 14장 기준) ✅
-        ├── seed.sql         # 시드 v1 (구버전)
-        ├── seed_v2.sql      # 시드 v2 (29개 시그널) ✅
-        └── migration_v3_signal_status.sql  # 상태 컬럼 마이그레이션 ✅
+        ├── migration_v3_signal_status.sql  # 상태 컬럼 마이그레이션 ✅
+        ├── migration_v7_corp_profile.sql   # Corp Profile 테이블 ✅
+        └── ...              # 기타 마이그레이션 파일
 ```
 
 ## 세션 로그
@@ -364,46 +362,17 @@ rkyc/
    - rkyc_evidence 별도 테이블
    - rkyc_signal_index (Dashboard 전용)
    - rkyc_internal_snapshot + latest 포인터
-2. seed_v2.sql 작성
-   - 6개 기업 + 업종 마스터
-   - 6개 Internal Snapshot (PRD 7장 스키마)
-   - 5개 External Events
-   - 29개 Signal (DIRECT 17, INDUSTRY 7, ENVIRONMENT 5)
-   - 29개 Evidence (시그널별 1개 이상)
-   - Dashboard Summary 초기 데이터
-3. CLAUDE.md 업데이트
+2. CLAUDE.md 업데이트
    - 핵심 도메인 개념 (PRD 기준)
    - 스키마 테이블 목록
    - Snapshot JSON 스키마
-   - 시드 데이터 현황
-
-### 세션 1-3 (2025-12-31) - Seed 파일 UUID 오류 수정 ✅
-**문제**: seed_v2.sql의 UUID 형식 오류
-- `sig00001-0001-0001-0001-000000000001` 형태 사용
-- Supabase 실행 시 오류: `ERROR: 22P02: invalid input syntax for type uuid`
-
-**원인**: UUID는 16진수(0-9, a-f)만 허용
-- 's', 'i', 'g', 'v', 't' 등 문자열 접두사 사용 불가
-- UUID 형식: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx` (각 x는 hex만)
-
-**해결**: 유효한 UUID 형식으로 전체 수정
-- Signal UUID: `00000001-0001-0001-0001-000000000001` ~ `00000029-...`
-- External Event UUID: `eeeeeeee-0001-0001-0001-000000000001` ~ `eeeeeeee-0005-...`
-- Snapshot UUID: `11111111-0001-...`, `22222222-0001-...` (기업별)
-- 구버전 파일: `seed_v2_deprecated.sql`로 보관
-
-**추가 데이터**:
-- `rkyc_internal_snapshot_latest`: 6개 기업의 최신 스냅샷 포인터
-- `rkyc_external_event_target`: 5개 외부 이벤트-기업 매핑
-
-**검증 쿼리**: seed_v2.sql 말미에 COUNT 확인 쿼리 포함
 
 ### 세션 2 (2025-12-31) - Backend API 구현 ✅
 **목표**: FastAPI Backend 구현 및 Supabase 연결
 
 **완료 항목**:
 1. Supabase 프로젝트 설정 (Tokyo ap-northeast-1)
-   - schema_v2.sql, seed_v2.sql 적용 완료
+   - schema_v2.sql 적용 완료
    - Transaction pooler (포트 6543) 사용
 2. FastAPI Backend 구현
    - `app/core/config.py` - Pydantic Settings v2
@@ -1410,11 +1379,71 @@ backend/app/core/config.py (JWT 설정 제거)
 backend/.env.example (JWT 설정 제거)
 ```
 
+### 세션 16 (2026-01-21) - Corp Profiling Pipeline PRD v1.2 필드 확장 ✅
+**목표**: PROFILING 파이프라인에서 rkyc_corp_profile의 모든 19개 필드 수집
+
+**완료 항목**:
+
+#### 1. seed_v2.sql 참조 삭제
+- CLAUDE.md에서 모든 seed_v2.sql 참조 제거
+- 파일 구조, 세션 로그, 참고 사항 섹션 업데이트
+
+#### 2. Perplexity 검색 쿼리 확장 (PRD v1.2)
+- `build_perplexity_query()` 함수 신규 생성
+- 19개 필드를 위한 종합 검색 쿼리:
+  - 기본 정보: 대표이사, 설립연도, 본사 위치, 임직원 수, 주요 경영진
+  - 사업 현황: 주요 사업, 비즈니스 모델, 업종 현황
+  - 재무 정보: 매출액 (3개년), 영업이익, 순이익
+  - 수출/해외사업: 수출 비중, 국가별 노출도, 해외 법인/공장
+  - 공급망: 주요 공급사, 공급사 국가 비중, 단일 조달처 위험, 원자재 수입 비율
+  - 고객/경쟁: 주요 고객사, 경쟁사
+  - 주주/거시요인: 주요 주주, 거시경제/정책 요인
+
+#### 3. LLM 추출 프롬프트 확장 (PRD v1.2)
+- `PROFILE_EXTRACTION_USER_PROMPT` 업데이트
+- 19개 필드 전체에 대한 JSON 스키마 정의:
+  - `business_summary`, `revenue_krw`, `export_ratio_pct`
+  - `ceo_name`, `employee_count`, `founded_year`, `headquarters`
+  - `executives`, `industry_overview`, `business_model`
+  - `country_exposure`, `key_materials`, `key_customers`
+  - `overseas_operations`, `supply_chain`, `overseas_business`
+  - `shareholders`, `competitors`, `macro_factors`, `financial_history`
+
+#### 4. 프로필 빌드 로직 업데이트
+- `_build_final_profile()` 메서드에 PRD v1.2 필드 추가
+- `_save_profile()` 메서드에 PRD v1.2 필드 추가
+- CAST 문법 사용 (asyncpg 호환)
+
+**수정된 파일**:
+```
+CLAUDE.md (seed_v2.sql 참조 삭제)
+backend/app/worker/pipelines/corp_profiling.py
+  - build_perplexity_query() 함수 추가
+  - PROFILE_EXTRACTION_USER_PROMPT 확장
+  - _build_final_profile() PRD v1.2 필드 추가
+  - _save_profile() PRD v1.2 필드 추가
+```
+
+**PROFILING 파이프라인 실행 흐름**:
+```
+PROFILING Stage (analysis.py Step 3)
+  → CorpProfilingPipeline.execute()
+     → MultiAgentOrchestrator.execute() (4-Layer Fallback)
+        → Layer 1: Perplexity 검색 (build_perplexity_query)
+        → Layer 1.5: Gemini 검증
+        → Layer 2: Claude 합성 / Consensus Engine
+        → Layer 3: Rule-Based Merge
+        → Layer 4: Graceful Degradation
+     → _build_final_profile() (19개 필드 포함)
+     → _save_profile() → rkyc_corp_profile INSERT/UPDATE
+```
+
 ---
 
 ## 참고 사항
 - **인증은 스코프 외** - PRD 2.3에 따라 구현하지 않음 (코드 제거 완료)
-- **schema_v2.sql, seed_v2.sql 사용** (v1은 deprecated)
+- **schema_v2.sql 사용** (스키마 마이그레이션 통해 DB 관리)
+- **테스트 데이터**: Corp Profile은 Worker PROFILING 파이프라인이 자동 생성
 - ADR 문서의 결정 사항 준수
 - Guardrails 규칙 (금지 표현, evidence 필수) 적용
 - Dashboard에서는 rkyc_signal_index 사용 (조인 금지)
@@ -1433,4 +1462,4 @@ backend/.env.example (JWT 설정 제거)
 - **Circuit Breaker**: Perplexity/Gemini 3회/5분, Claude 2회/10분
 
 ---
-*Last Updated: 2026-01-20 (세션 15 완료 - 코드베이스 분석 및 인증 코드 제거)*
+*Last Updated: 2026-01-21 (세션 16 완료 - Corp Profiling Pipeline PRD v1.2 필드 확장)*

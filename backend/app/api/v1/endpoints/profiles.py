@@ -9,7 +9,7 @@ Endpoints:
 
 import logging
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -40,6 +40,45 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+# ============================================================================
+# Helper Functions (PRD Bug Fixes)
+# ============================================================================
+
+
+def _parse_datetime_safely(dt_string: str | None) -> datetime | None:
+    """
+    datetime 파싱 ("Z" suffix 지원) - P1-3 Fix
+
+    Python 3.10 이하에서는 fromisoformat()이 "Z" suffix를 지원하지 않음.
+    """
+    if not dt_string:
+        return None
+    try:
+        # "Z"를 "+00:00"으로 치환 (Python 3.10 호환)
+        if isinstance(dt_string, str) and dt_string.endswith("Z"):
+            dt_string = dt_string[:-1] + "+00:00"
+        return datetime.fromisoformat(dt_string)
+    except (ValueError, TypeError):
+        return None
+
+
+def _normalize_single_source_risk(value: Any) -> list[str]:
+    """
+    single_source_risk 타입 정규화 - P0-1 Fix
+
+    LLM이 boolean, string, list 등 다양한 타입으로 반환할 수 있음.
+    """
+    if value is None:
+        return []
+    if isinstance(value, bool):
+        return ["단일 조달처 위험 있음"] if value else []
+    if isinstance(value, str):
+        return [value] if value.strip() else []
+    if isinstance(value, list):
+        return [str(item) for item in value if item]
+    return []
+
+
 def _parse_supply_chain(data: dict | None) -> SupplyChainSchema:
     """Parse supply_chain JSONB to schema."""
     if not data:
@@ -47,7 +86,8 @@ def _parse_supply_chain(data: dict | None) -> SupplyChainSchema:
     return SupplyChainSchema(
         key_suppliers=data.get("key_suppliers", []),
         supplier_countries=data.get("supplier_countries", {}),
-        single_source_risk=data.get("single_source_risk", []),
+        # P0-1 Fix: 다양한 타입을 list[str]로 정규화
+        single_source_risk=_normalize_single_source_risk(data.get("single_source_risk")),
         material_import_ratio_pct=data.get("material_import_ratio_pct"),
     )
 
@@ -76,7 +116,8 @@ def _parse_consensus_metadata(data: dict | None) -> ConsensusMetadataSchema:
     if not data:
         return ConsensusMetadataSchema()
     return ConsensusMetadataSchema(
-        consensus_at=datetime.fromisoformat(data["consensus_at"]) if data.get("consensus_at") else None,
+        # P1-3 Fix: "Z" suffix 지원
+        consensus_at=_parse_datetime_safely(data.get("consensus_at")),
         perplexity_success=data.get("perplexity_success", False),
         gemini_success=data.get("gemini_success", False),
         claude_success=data.get("claude_success", False),
@@ -118,6 +159,7 @@ async def get_corp_profile(
     db: AsyncSession = Depends(get_db),
 ):
     """Get corp profile by corp_id."""
+    # P1-2 Fix: expires_at NULL 처리
     query = text("""
         SELECT
             profile_id, corp_id, business_summary, revenue_krw, export_ratio_pct,
@@ -128,7 +170,11 @@ async def get_corp_profile(
             consensus_metadata, profile_confidence, field_confidences, source_urls,
             is_fallback, search_failed, validation_warnings, status,
             fetched_at, expires_at,
-            CASE WHEN expires_at < NOW() THEN true ELSE false END as is_expired
+            CASE
+                WHEN expires_at IS NULL THEN false
+                WHEN expires_at < NOW() THEN true
+                ELSE false
+            END as is_expired
         FROM rkyc_corp_profile
         WHERE corp_id = :corp_id
         LIMIT 1
@@ -138,9 +184,15 @@ async def get_corp_profile(
     row = result.fetchone()
 
     if not row:
+        # P2-3 Fix: error_code 필드 추가하여 Frontend에서 에러 분기 가능
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Profile not found for corp_id: {corp_id}. Run analysis to generate profile.",
+            detail={
+                "error_code": "PROFILE_NOT_FOUND",
+                "message": "프로필이 아직 생성되지 않았습니다.",
+                "action": "정보 갱신 버튼을 클릭하여 프로필을 생성해 주세요.",
+                "corp_id": corp_id,
+            },
         )
 
     # Parse JSONB fields to schemas
@@ -210,9 +262,14 @@ async def get_corp_profile_detail(
     db: AsyncSession = Depends(get_db),
 ):
     """Get detailed corp profile with provenance."""
+    # P1-2 Fix: expires_at NULL 처리
     query = text("""
         SELECT *,
-            CASE WHEN expires_at < NOW() THEN true ELSE false END as is_expired
+            CASE
+                WHEN expires_at IS NULL THEN false
+                WHEN expires_at < NOW() THEN true
+                ELSE false
+            END as is_expired
         FROM rkyc_corp_profile
         WHERE corp_id = :corp_id
         LIMIT 1
@@ -222,9 +279,15 @@ async def get_corp_profile_detail(
     row = result.fetchone()
 
     if not row:
+        # P2-3 Fix: error_code 필드 추가
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Profile not found for corp_id: {corp_id}",
+            detail={
+                "error_code": "PROFILE_NOT_FOUND",
+                "message": "프로필이 아직 생성되지 않았습니다.",
+                "action": "정보 갱신 버튼을 클릭하여 프로필을 생성해 주세요.",
+                "corp_id": corp_id,
+            },
         )
 
     # Parse JSONB fields to schemas
@@ -245,7 +308,8 @@ async def get_corp_profile_detail(
             source_url=prov.get("source_url"),
             excerpt=prov.get("excerpt"),
             confidence=ConfidenceLevelEnum(prov.get("confidence", "LOW")),
-            extraction_date=datetime.fromisoformat(prov["extraction_date"]) if prov.get("extraction_date") else None,
+            # P1-3 Fix: "Z" suffix 지원
+            extraction_date=_parse_datetime_safely(prov.get("extraction_date")),
         )
 
     return CorpProfileDetailResponse(
