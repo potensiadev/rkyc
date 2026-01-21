@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { useCorporations, useSignals } from "@/hooks/useApi";
+import { buildSignalCountsByCorpId, getCorpSignalCountsFromMap } from "@/data/signals";
 
 const signalTypeConfig = {
   direct: { label: "직접", className: "bg-primary/10 text-primary" },
@@ -20,16 +21,11 @@ export default function CorporationSearch() {
   const { data: corporations = [], isLoading, error } = useCorporations();
   const { data: signals = [] } = useSignals();
 
-  // 기업별 시그널 카운트 계산
-  const getSignalCounts = (corpId: string) => {
-    const corpSignals = signals.filter(s => s.corporationId === corpId);
-    return {
-      total: corpSignals.length,
-      direct: corpSignals.filter(s => s.signalCategory === 'direct').length,
-      industry: corpSignals.filter(s => s.signalCategory === 'industry').length,
-      environment: corpSignals.filter(s => s.signalCategory === 'environment').length,
-    };
-  };
+  // Precompute signal counts map once when signals change - O(n) build, O(1) lookup
+  const signalCountsMap = useMemo(
+    () => buildSignalCountsByCorpId(signals),
+    [signals]
+  );
 
   // 검색 필터링
   const filteredCorporations = useMemo(() => {
@@ -123,7 +119,7 @@ export default function CorporationSearch() {
             </thead>
             <tbody>
               {filteredCorporations.map((corp) => {
-                const signalCounts = getSignalCounts(corp.id);
+                const signalCounts = getCorpSignalCountsFromMap(signalCountsMap, corp.id);
                 return (
                   <tr
                     key={corp.id}

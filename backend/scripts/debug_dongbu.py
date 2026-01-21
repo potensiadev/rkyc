@@ -14,6 +14,10 @@ os.chdir(os.path.join(os.path.dirname(__file__), '..'))
 from dotenv import load_dotenv
 load_dotenv()
 
+import logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 from app.worker.pipelines.signal_extraction import SignalExtractionPipeline
 from app.worker.llm.external_llm import ExternalLLMService
 

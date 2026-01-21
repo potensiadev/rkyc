@@ -109,6 +109,7 @@ SIGNAL_EXTRACTION_USER_TEMPLATE = """# 분석 대상 기업
 
 ## DIRECT 시그널
 - 내부 스냅샷 + 기업 직접 이벤트 분석
+- **중요**: 내부 재무 데이터에서 **'적자 전환', '영업이익 급감', '부채비율 급증', '자본잠식'** 등 부정적 변화가 확인되면 반드시 RISK 시그널로 추출 (Confidence: HIGH)
 - 내부 데이터 변화는 높은 confidence로 처리
 
 ## INDUSTRY 시그널

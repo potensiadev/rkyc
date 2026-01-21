@@ -70,3 +70,46 @@ export const getIndustryName = (code: string): string => {
   };
   return industries[code] || '기타';
 };
+
+// ============================================================================
+// Corporation Index for O(1) Lookups
+// ============================================================================
+
+/** Map type for corporation ID -> Corporation lookup */
+export type CorporationIndex = Map<string, Corporation>;
+
+/**
+ * Builds an index for O(1) corporation lookups by ID.
+ * Single O(n) pass creates the index.
+ *
+ * @param corporations - Array of Corporation objects to index
+ * @returns Map where keys are corporation IDs
+ *
+ * Complexity: O(n) build time, O(1) lookup time
+ */
+export const buildCorporationIndex = (
+  corporations: Corporation[]
+): CorporationIndex => {
+  const index = new Map<string, Corporation>();
+  for (const corp of corporations) {
+    index.set(corp.id, corp);
+  }
+  return index;
+};
+
+/**
+ * Retrieves a corporation by ID from precomputed index.
+ *
+ * @param index - Precomputed CorporationIndex
+ * @param corpId - Corporation ID to look up
+ * @returns Corporation if found, undefined otherwise
+ *
+ * Complexity: O(1)
+ * Previous (array find): O(n)
+ */
+export const getCorporationById = (
+  index: CorporationIndex,
+  corpId: string
+): Corporation | undefined => {
+  return index.get(corpId);
+};

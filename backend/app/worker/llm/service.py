@@ -32,15 +32,15 @@ logger = logging.getLogger(__name__)
 
 # Configure litellm from settings
 litellm.set_verbose = settings.LLM_VERBOSE
-
+litellm.drop_params = True  # P0-005 fix: Drop unsupported params for compatibility
 
 class LLMService:
     """
     LLM Service with automatic fallback chain.
 
-    Primary: Claude Opus 4.5 (claude-opus-4-5-20251101)
-    Fallback 1: GPT-5.2 Pro
-    Fallback 2: Gemini 3 Pro Preview
+    Primary: Claude 3.5 Sonnet
+    Fallback 1: GPT-4o
+    Fallback 2: Gemini 1.5 Pro
 
     Features:
     - Automatic fallback on failure
@@ -50,20 +50,20 @@ class LLMService:
     """
 
     # Model configuration - 3-stage fallback chain
-    # Updated to use actually existing models (2025-01)
+    # Updated to use actually existing models
     MODELS = [
         {
-            "model": "claude-opus-4-5-20251101",  # Claude Opus 4.5 (primary)
+            "model": "claude-3-5-sonnet-20240620",  # Claude 3.5 Sonnet (Best for reasoning)
             "provider": "anthropic",
             "max_tokens": 4096,
         },
         {
-            "model": "gpt-5.2-pro-2025-12-11",  # GPT-5.2 Pro (fallback 1)
+            "model": "gpt-4o",  # GPT-4o (Fast & Strong fallback)
             "provider": "openai",
             "max_tokens": 4096,
         },
         {
-            "model": "gemini/gemini-3-pro-preview",  # Gemini 3 Pro Preview (fallback 2)
+            "model": "gemini/gemini-1.5-pro",  # Gemini 1.5 Pro (Large context fallback)
             "provider": "google",
             "max_tokens": 4096,
         },
