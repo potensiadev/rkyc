@@ -102,17 +102,17 @@ class ShareholderSchema(BaseModel):
 class ConsensusMetadataSchema(BaseModel):
     """Consensus 메타데이터 (PRD v1.2)"""
     consensus_at: Optional[datetime] = None
-    perplexity_success: bool = False
-    gemini_success: bool = False
-    claude_success: bool = False
-    total_fields: int = 0
-    matched_fields: int = 0
-    discrepancy_fields: int = 0
-    enriched_fields: int = 0
-    overall_confidence: str = "LOW"
-    fallback_layer: int = 0
-    retry_count: int = 0
-    error_messages: list[str] = Field(default_factory=list)
+    perplexity_success: Optional[bool] = False
+    gemini_success: Optional[bool] = False
+    claude_success: Optional[bool] = False
+    total_fields: Optional[int] = 0
+    matched_fields: Optional[int] = 0
+    discrepancy_fields: Optional[int] = 0
+    enriched_fields: Optional[int] = 0
+    overall_confidence: Optional[str] = "LOW"
+    fallback_layer: Optional[str | int] = None  # Can be string (enum name) or int
+    retry_count: Optional[int] = 0
+    error_messages: Optional[list[str]] = Field(default_factory=list)
 
 
 # ============================================================================
@@ -124,7 +124,7 @@ class FieldProvenanceResponse(BaseModel):
     """개별 필드의 출처 정보"""
     source_url: Optional[str] = None
     excerpt: Optional[str] = Field(None, description="출처에서 발췌한 텍스트 (최대 200자)")
-    confidence: ConfidenceLevelEnum
+    confidence: Optional[ConfidenceLevelEnum] = ConfidenceLevelEnum.LOW
     extraction_date: Optional[datetime] = None
 
     class Config:
