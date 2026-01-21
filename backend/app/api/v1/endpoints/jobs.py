@@ -174,3 +174,101 @@ async def list_jobs(
         total=total,
         items=[job_to_response(job) for job in jobs],
     )
+
+
+@router.get("/diagnostics/{corp_id}")
+async def get_pipeline_diagnostics(
+    corp_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    파이프라인 진단 API - 디버깅용
+
+    corp_id에 대한 모든 관련 데이터 상태를 확인합니다:
+    - 최근 Job 상태
+    - Corp Profile 존재 여부
+    - Signal Index 개수
+    """
+    from sqlalchemy import text
+
+    diagnostics = {
+        "corp_id": corp_id,
+        "corporation": None,
+        "recent_jobs": [],
+        "profile": None,
+        "signal_count": 0,
+    }
+
+    # 1. Corporation 존재 확인
+    corp_result = await db.execute(
+        text("SELECT corp_id, corp_name, industry_code FROM corp WHERE corp_id = :corp_id"),
+        {"corp_id": corp_id}
+    )
+    corp_row = corp_result.fetchone()
+    if corp_row:
+        diagnostics["corporation"] = {
+            "corp_id": corp_row.corp_id,
+            "corp_name": corp_row.corp_name,
+            "industry_code": corp_row.industry_code,
+        }
+
+    # 2. 최근 Jobs 조회 (최근 5개)
+    jobs_result = await db.execute(
+        text("""
+            SELECT job_id, job_type, status, progress_step, progress_percent,
+                   error_code, error_message, queued_at, started_at, finished_at
+            FROM rkyc_job
+            WHERE corp_id = :corp_id
+            ORDER BY queued_at DESC
+            LIMIT 5
+        """),
+        {"corp_id": corp_id}
+    )
+    for job_row in jobs_result.fetchall():
+        diagnostics["recent_jobs"].append({
+            "job_id": str(job_row.job_id),
+            "job_type": job_row.job_type,
+            "status": job_row.status,
+            "progress_step": job_row.progress_step,
+            "progress_percent": job_row.progress_percent,
+            "error_code": job_row.error_code,
+            "error_message": job_row.error_message,
+            "queued_at": str(job_row.queued_at) if job_row.queued_at else None,
+            "started_at": str(job_row.started_at) if job_row.started_at else None,
+            "finished_at": str(job_row.finished_at) if job_row.finished_at else None,
+        })
+
+    # 3. Profile 존재 확인
+    profile_result = await db.execute(
+        text("""
+            SELECT profile_id, corp_id, business_summary, profile_confidence,
+                   is_fallback, search_failed, fetched_at, expires_at
+            FROM rkyc_corp_profile
+            WHERE corp_id = :corp_id
+            LIMIT 1
+        """),
+        {"corp_id": corp_id}
+    )
+    profile_row = profile_result.fetchone()
+    if profile_row:
+        diagnostics["profile"] = {
+            "profile_id": str(profile_row.profile_id),
+            "corp_id": profile_row.corp_id,
+            "has_business_summary": bool(profile_row.business_summary),
+            "business_summary_preview": (profile_row.business_summary[:100] + "...") if profile_row.business_summary and len(profile_row.business_summary) > 100 else profile_row.business_summary,
+            "profile_confidence": profile_row.profile_confidence,
+            "is_fallback": profile_row.is_fallback,
+            "search_failed": profile_row.search_failed,
+            "fetched_at": str(profile_row.fetched_at) if profile_row.fetched_at else None,
+            "expires_at": str(profile_row.expires_at) if profile_row.expires_at else None,
+        }
+
+    # 4. Signal 개수 확인
+    signal_result = await db.execute(
+        text("SELECT COUNT(*) as cnt FROM rkyc_signal_index WHERE corp_id = :corp_id"),
+        {"corp_id": corp_id}
+    )
+    signal_row = signal_result.fetchone()
+    diagnostics["signal_count"] = signal_row.cnt if signal_row else 0
+
+    return diagnostics
