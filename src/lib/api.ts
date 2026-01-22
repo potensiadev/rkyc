@@ -675,3 +675,47 @@ export async function triggerImmediateScan(): Promise<SchedulerTriggerResponse> 
     method: 'POST',
   });
 }
+
+
+export interface ApiReportResponse {
+  corporation: {
+    id: string;
+    name: string;
+    business_number: string;
+    industry: string;
+    industry_code: string;
+    ceo: string | null;
+    address: string | null;
+    has_loan: boolean;
+    internal_rating: string | null;
+  };
+  summary_stats: {
+    total: number;
+    direct: number;
+    industry: number;
+    environment: number;
+    risk: number;
+    opportunity: number;
+    neutral: number;
+  };
+  signals: ApiSignalDetail[];
+  evidence_list: ApiEvidence[];
+  loan_insight: {
+    stance: {
+      label: string;
+      level: string;
+      color: string;
+    };
+    narrative: string;
+    key_risks: string[];
+    mitigating_factors: string[];
+    action_items: string[];
+    generated_at: string;
+  } | null;
+  snapshot_data: Record<string, unknown> | null;
+  generated_at: string;
+}
+
+export async function getCorporationReport(corpId: string): Promise<ApiReportResponse> {
+  return fetchApi<ApiReportResponse>(`/api/v1/reports/corporation/${corpId}`);
+}

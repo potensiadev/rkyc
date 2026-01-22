@@ -490,6 +490,22 @@ export function useTriggerImmediateScan() {
   });
 }
 
+// ============================================================
+// Report Hook
+// ============================================================
+
+import { getCorporationReport } from '@/lib/api';
+
+export function useCorporationReport(corpId: string) {
+  return useQuery({
+    queryKey: ['report', corpId],
+    queryFn: () => getCorporationReport(corpId),
+    enabled: !!corpId,
+    // Keep report fresh but allow short cache
+    staleTime: 5 * 60 * 1000
+  });
+}
+
 // API 타입 re-export (페이지에서 직접 사용)
 export type {
   ApiSignalDetail,
@@ -514,4 +530,6 @@ export type {
   SchedulerStatus,
   SchedulerActionResponse,
   SchedulerTriggerResponse,
+  // Report types
+  ApiReportResponse
 };

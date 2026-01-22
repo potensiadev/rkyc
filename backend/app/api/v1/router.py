@@ -4,7 +4,7 @@ Aggregates all API endpoints
 """
 
 from fastapi import APIRouter
-from app.api.v1.endpoints import corporations, signals, jobs, dashboard, documents, profiles, admin, new_kyc, signals_enriched, scheduler, diagnostics
+from app.api.v1.endpoints import corporations, signals, jobs, dashboard, documents, profiles, admin, new_kyc, signals_enriched, scheduler, diagnostics, reports
 
 # Create main API router
 api_router = APIRouter()
@@ -23,3 +23,4 @@ api_router.include_router(admin.router, tags=["admin"])  # PRD v1.2: Circuit Bre
 api_router.include_router(new_kyc.router, prefix="/new-kyc", tags=["new-kyc"])  # 신규 법인 KYC
 api_router.include_router(scheduler.router, prefix="/scheduler", tags=["scheduler"])  # Real-time signal detection control
 api_router.include_router(diagnostics.router, prefix="/diagnostics", tags=["diagnostics"])  # Pipeline diagnostics
+api_router.include_router(reports.router, prefix="/reports", tags=["reports"])  # Full reports with evidence
