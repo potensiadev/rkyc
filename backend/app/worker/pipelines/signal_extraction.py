@@ -7,6 +7,12 @@ Production-grade validation with:
 - Headline length validation
 - Signal type / Event type mapping validation
 - Confidence-based source verification
+
+2026-01-22 해커톤 최적화:
+- 페르소나 기반 판단 (Risk Manager, IB Manager)
+- Chain-of-Thought 8단계
+- Soft Guardrails
+- Few-shot 예시 포함
 """
 
 import json
@@ -19,6 +25,14 @@ from app.worker.llm.service import LLMService
 from app.worker.llm.prompts import (
     SIGNAL_EXTRACTION_SYSTEM,
     format_signal_extraction_prompt,
+    # 해커톤 최적화: 향상된 프롬프트
+    RISK_MANAGER_PERSONA,
+    IB_MANAGER_PERSONA,
+    SOFT_GUARDRAILS,
+    CHAIN_OF_THOUGHT_GUIDE,
+    DIRECT_FEW_SHOT_EXAMPLES,
+    INDUSTRY_FEW_SHOT_EXAMPLES,
+    ENVIRONMENT_FEW_SHOT_EXAMPLES,
 )
 from app.worker.llm.exceptions import AllProvidersFailedError
 
@@ -71,12 +85,102 @@ class SignalExtractionPipeline:
     """
     Stage 5: SIGNAL - Extract risk signals using LLM
 
-    Uses Claude Sonnet 4 (with GPT-4o fallback) to analyze
+    Uses Claude Opus 4.5 (with GPT-4o fallback) to analyze
     unified context and extract risk signals.
+
+    2026-01-22 해커톤 최적화:
+    - 페르소나 기반 판단 (Risk Manager, IB Manager)
+    - Chain-of-Thought 8단계 추론
+    - Soft Guardrails (자기 검증)
+    - Signal Type별 Few-shot 예시
     """
 
     def __init__(self):
         self.llm = LLMService()
+
+    def _build_enhanced_system_prompt(self, corp_name: str, industry_name: str) -> str:
+        """
+        해커톤 최적화: 향상된 시스템 프롬프트 조립
+
+        포함 요소:
+        - 페르소나 (Risk Manager, IB Manager)
+        - Soft Guardrails
+        - Chain-of-Thought 가이드
+        - Signal Type별 Few-shot 예시
+        """
+        return f"""당신은 한국 금융기관의 기업심사 AI 분석가입니다.
+주어진 기업 데이터와 외부 이벤트를 분석하여 리스크(RISK)와 기회(OPPORTUNITY) 시그널을 추출합니다.
+
+# 전문가 페르소나 (두 관점에서 분석)
+{RISK_MANAGER_PERSONA}
+
+{IB_MANAGER_PERSONA}
+
+# 판단 기준
+- RISK 시그널: Risk Manager 관점 - "대출 시 원리금 상환에 문제가 생길 수 있는가?"
+- OPPORTUNITY 시그널: IB Manager 관점 - "투자 시 성장 기회가 있는가?"
+- RISK는 Recall 우선 (놓치지 않기), OPPORTUNITY는 Precision 우선 (확실한 것만)
+
+{SOFT_GUARDRAILS}
+
+{CHAIN_OF_THOUGHT_GUIDE}
+
+# Signal Type별 규칙 및 예시
+
+## DIRECT (기업 직접 영향)
+- 해당 기업에 직접적으로 영향을 미치는 변화
+- event_type: KYC_REFRESH, INTERNAL_RISK_GRADE_CHANGE, OVERDUE_FLAG_ON, LOAN_EXPOSURE_CHANGE, COLLATERAL_CHANGE, OWNERSHIP_CHANGE, GOVERNANCE_CHANGE, FINANCIAL_STATEMENT_UPDATE
+- **규칙**: 기업명 필수, 내부 데이터 HIGH confidence, 정량 정보 필수
+
+{DIRECT_FEW_SHOT_EXAMPLES}
+
+## INDUSTRY (산업 영향)
+- 해당 산업 전체에 영향을 미치는 변화
+- event_type: INDUSTRY_SHOCK만 사용
+- **규칙**: summary 마지막에 "{corp_name}에 미치는 영향" 1문장 필수
+
+{INDUSTRY_FEW_SHOT_EXAMPLES}
+
+## ENVIRONMENT (거시환경 영향)
+- 정책, 규제, 거시경제 변화
+- event_type: POLICY_REGULATION_CHANGE만 사용
+- **규칙**: summary에 "{corp_name}/{industry_name}에 미치는 영향 가능성" 1문장 필수
+
+{ENVIRONMENT_FEW_SHOT_EXAMPLES}
+
+# 출력 형식 (JSON)
+```json
+{{
+  "signals": [
+    {{
+      "signal_type": "DIRECT|INDUSTRY|ENVIRONMENT",
+      "event_type": "<10종 중 하나>",
+      "impact_direction": "RISK|OPPORTUNITY|NEUTRAL",
+      "impact_strength": "HIGH|MED|LOW",
+      "confidence": "HIGH|MED|LOW",
+      "title": "시그널 제목 (50자 이내)",
+      "summary": "상세 설명 (200자 이내, 금지표현 미사용)",
+      "evidence": [
+        {{
+          "evidence_type": "INTERNAL_FIELD|DOC|EXTERNAL",
+          "ref_type": "SNAPSHOT_KEYPATH|DOC_PAGE|URL",
+          "ref_value": "/credit/loan_summary/overdue_flag 또는 URL",
+          "snippet": "관련 텍스트 (100자 이내)"
+        }}
+      ]
+    }}
+  ]
+}}
+```
+
+# 분석 지침
+1. **Chain-of-Thought 8단계** 따라 분석 수행
+2. **내부 스냅샷 먼저**: 연체, 등급, 담보 등 변화 확인 → HIGH confidence
+3. **외부 이벤트 연결**: 기업/산업과의 연관성 분석
+4. **중복 금지**: 동일 사안 여러 시그널 생성 금지
+5. **근거 필수**: evidence 없는 시그널 생성 금지
+6. **RISK는 놓치지 말기**, OPPORTUNITY는 확실한 것만
+"""
 
     def execute(self, context: dict) -> list[dict]:
         """
@@ -100,14 +204,22 @@ class SignalExtractionPipeline:
                 - event_signature: SHA256 hash for deduplication
         """
         corp_id = context.get("corp_id", "")
+        corp_name = context.get("corp_name", "")
+        industry_name = context.get("industry_name", "")
         logger.info(f"SIGNAL stage starting for corp_id={corp_id}")
+
+        # 해커톤 최적화: 향상된 시스템 프롬프트 사용
+        enhanced_system_prompt = self._build_enhanced_system_prompt(
+            corp_name=corp_name,
+            industry_name=industry_name,
+        )
 
         # Format prompt with context data (3-track events)
         user_prompt = format_signal_extraction_prompt(
-            corp_name=context.get("corp_name", ""),
+            corp_name=corp_name,
             corp_reg_no=context.get("corp_reg_no", ""),
             industry_code=context.get("industry_code", ""),
-            industry_name=context.get("industry_name", ""),
+            industry_name=industry_name,
             snapshot_json=json.dumps(
                 context.get("snapshot_json", {}),
                 ensure_ascii=False,
@@ -137,17 +249,17 @@ class SignalExtractionPipeline:
         )
 
         logger.info(
-            f"SIGNAL extraction with 3-track events: "
+            f"SIGNAL extraction with enhanced prompts (hackathon optimized): "
             f"direct={len(context.get('direct_events', []))}, "
             f"industry={len(context.get('industry_events', []))}, "
             f"environment={len(context.get('environment_events', []))}"
         )
 
         try:
-            # Call LLM for signal extraction
+            # Call LLM for signal extraction with enhanced prompt
             signals = self.llm.extract_signals(
                 context=context,
-                system_prompt=SIGNAL_EXTRACTION_SYSTEM,
+                system_prompt=enhanced_system_prompt,
                 user_prompt=user_prompt,
             )
 

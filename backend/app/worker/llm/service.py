@@ -38,7 +38,7 @@ class LLMService:
     """
     LLM Service with automatic fallback chain.
 
-    Primary: Claude 3.5 Sonnet
+    Primary: Claude Opus 4.5 (해커톤 품질 최적화)
     Fallback 1: GPT-4o
     Fallback 2: Gemini 1.5 Pro
 
@@ -47,25 +47,29 @@ class LLMService:
     - Exponential backoff retry
     - JSON response parsing
     - Error classification
+
+    2026-01-22 Update:
+    - Primary를 Claude Opus로 변경 (품질 우선)
+    - max_tokens 8192로 증가 (CoT + 다중 시그널 지원)
     """
 
     # Model configuration - 3-stage fallback chain
-    # Updated to use actually existing models
+    # 해커톤 최적화: Claude Opus (품질 우선, 비용 허용)
     MODELS = [
         {
-            "model": "claude-3-5-sonnet-20240620",  # Claude 3.5 Sonnet (Best for reasoning)
+            "model": "claude-opus-4-5-20251101",  # Claude Opus 4.5 (Best quality for hackathon)
             "provider": "anthropic",
-            "max_tokens": 4096,
+            "max_tokens": 8192,  # Increased for CoT + multi-signal
         },
         {
             "model": "gpt-4o",  # GPT-4o (Fast & Strong fallback)
             "provider": "openai",
-            "max_tokens": 4096,
+            "max_tokens": 8192,
         },
         {
             "model": "gemini/gemini-1.5-pro",  # Gemini 1.5 Pro (Large context fallback)
             "provider": "google",
-            "max_tokens": 4096,
+            "max_tokens": 8192,
         },
     ]
 
