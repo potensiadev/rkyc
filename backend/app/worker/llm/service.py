@@ -67,7 +67,7 @@ class LLMService:
             "max_tokens": 8192,
         },
         {
-            "model": "gemini/gemini-1.5-pro",  # Gemini 1.5 Pro (Large context fallback)
+            "model": "gemini/gemini-2.0-flash",  # Gemini 2.0 Flash (Fast fallback)
             "provider": "google",
             "max_tokens": 8192,
         },

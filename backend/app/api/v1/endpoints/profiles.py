@@ -403,13 +403,27 @@ async def get_corp_profile_detail(
     field_provenance = {}
     raw_provenance = row.field_provenance or {}
     for field_name, prov in raw_provenance.items():
-        field_provenance[field_name] = FieldProvenanceResponse(
-            source_url=prov.get("source_url"),
-            excerpt=prov.get("excerpt"),
-            confidence=ConfidenceLevelEnum(prov.get("confidence", "LOW")),
-            # P1-3 Fix: "Z" suffix 지원
-            extraction_date=_parse_datetime_safely(prov.get("extraction_date")),
-        )
+        # P0 Fix: Handle case where prov is a string (legacy data) instead of dict
+        if isinstance(prov, str):
+            # Legacy format: prov is just a URL string
+            field_provenance[field_name] = FieldProvenanceResponse(
+                source_url=prov,
+                excerpt=None,
+                confidence=ConfidenceLevelEnum.LOW,
+                extraction_date=None,
+            )
+        elif isinstance(prov, dict):
+            field_provenance[field_name] = FieldProvenanceResponse(
+                source_url=prov.get("source_url"),
+                excerpt=prov.get("excerpt"),
+                confidence=ConfidenceLevelEnum(prov.get("confidence", "LOW")),
+                # P1-3 Fix: "Z" suffix 지원
+                extraction_date=_parse_datetime_safely(prov.get("extraction_date")),
+            )
+        else:
+            # Skip invalid provenance entries
+            logger.warning(f"Invalid provenance format for field {field_name}: {type(prov)}")
+            continue
 
     return CorpProfileDetailResponse(
         profile_id=row.profile_id,
