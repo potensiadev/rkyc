@@ -77,10 +77,13 @@ export function EvidenceMap({
 }: EvidenceMapProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
+  // P1-1 Fix: Check if provenance data is empty
+  const hasProvenanceData = fieldProvenance && Object.keys(fieldProvenance).length > 0;
+
   // 신뢰도별 필드 그룹화
-  const fieldsByConfidence = Object.entries(fieldProvenance).reduce(
+  const fieldsByConfidence = Object.entries(fieldProvenance || {}).reduce(
     (acc, [field, prov]) => {
-      const confidence = prov.confidence || 'NONE';
+      const confidence = prov?.confidence || 'NONE';
       if (!acc[confidence]) acc[confidence] = [];
       acc[confidence].push({ field, provenance: prov });
       return acc;
@@ -89,7 +92,7 @@ export function EvidenceMap({
   );
 
   // 통계 계산
-  const totalFields = Object.keys(fieldProvenance).length;
+  const totalFields = Object.keys(fieldProvenance || {}).length;
   const highConfidenceCount = (fieldsByConfidence['HIGH'] || []).length;
   const medConfidenceCount = (fieldsByConfidence['MED'] || []).length;
   const lowConfidenceCount = (fieldsByConfidence['LOW'] || []).length;
@@ -143,8 +146,21 @@ export function EvidenceMap({
       {/* 상세 패널 */}
       {isExpanded && (
         <div className="p-4 space-y-4 animate-in slide-in-from-top-2">
+          {/* P1-1 Fix: Empty state message */}
+          {!hasProvenanceData && (
+            <div className="p-6 text-center bg-muted/30 rounded-lg border border-dashed border-muted-foreground/30">
+              <HelpCircle className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground font-medium">
+                근거 정보가 아직 생성되지 않았습니다
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                상단의 "정보 갱신" 버튼을 클릭하여 AI 분석을 실행하세요.
+              </p>
+            </div>
+          )}
+
           {/* Consensus 메타데이터 */}
-          {consensusMetadata && (
+          {hasProvenanceData && consensusMetadata && (
             <div className="p-3 bg-blue-50/50 rounded-lg border border-blue-100">
               <div className="text-xs font-medium text-blue-800 mb-2">Multi-Agent Consensus</div>
               <div className="grid grid-cols-3 gap-2 text-xs">
@@ -193,91 +209,103 @@ export function EvidenceMap({
           )}
 
           {/* 출처 도메인 */}
-          <div>
-            <div className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1">
-              <Globe className="w-3 h-3" />
-              출처 ({uniqueDomains.length}개 도메인)
+          {hasProvenanceData && (
+            <div>
+              <div className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1">
+                <Globe className="w-3 h-3" />
+                출처 ({uniqueDomains.length}개 도메인)
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {uniqueDomains.slice(0, 8).map((domain, i) => (
+                  <span key={i} className="text-xs bg-muted px-2 py-1 rounded flex items-center gap-1">
+                    <Link2 className="w-3 h-3" />
+                    {domain}
+                  </span>
+                ))}
+                {uniqueDomains.length > 8 && (
+                  <span className="text-xs text-muted-foreground">+{uniqueDomains.length - 8}개</span>
+                )}
+              </div>
             </div>
-            <div className="flex flex-wrap gap-1.5">
-              {uniqueDomains.slice(0, 8).map((domain, i) => (
-                <span key={i} className="text-xs bg-muted px-2 py-1 rounded flex items-center gap-1">
-                  <Link2 className="w-3 h-3" />
-                  {domain}
-                </span>
-              ))}
-              {uniqueDomains.length > 8 && (
-                <span className="text-xs text-muted-foreground">+{uniqueDomains.length - 8}개</span>
-              )}
-            </div>
-          </div>
+          )}
 
           {/* 필드별 근거 테이블 */}
-          <div>
-            <div className="text-xs font-medium text-muted-foreground mb-2">필드별 근거</div>
-            <div className="border border-border rounded-lg overflow-hidden">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="bg-muted/50">
-                    <th className="text-left px-3 py-2 font-medium">필드</th>
-                    <th className="text-left px-3 py-2 font-medium">신뢰도</th>
-                    <th className="text-left px-3 py-2 font-medium">출처</th>
-                    <th className="text-left px-3 py-2 font-medium">근거 발췌</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.entries(fieldProvenance).map(([field, prov]) => {
-                    const confidence = prov.confidence || 'NONE';
-                    const config = confidenceConfig[confidence];
-                    const Icon = config.icon;
-                    const displayName = fieldNameMap[field] || field;
+          {hasProvenanceData && (
+            <div>
+              <div className="text-xs font-medium text-muted-foreground mb-2">필드별 근거</div>
+              <div className="border border-border rounded-lg overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-muted/50">
+                      <th className="text-left px-3 py-2 font-medium">필드</th>
+                      <th className="text-left px-3 py-2 font-medium">신뢰도</th>
+                      <th className="text-left px-3 py-2 font-medium">출처</th>
+                      <th className="text-left px-3 py-2 font-medium">근거 발췌</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(fieldProvenance || {}).map(([field, prov]) => {
+                      const confidence = prov?.confidence || 'NONE';
+                      const config = confidenceConfig[confidence] || confidenceConfig['NONE'];
+                      const Icon = config.icon;
+                      const displayName = fieldNameMap[field] || field;
 
-                    return (
-                      <tr key={field} className="border-t border-border hover:bg-muted/20">
-                        <td className="px-3 py-2 font-medium">{displayName}</td>
-                        <td className="px-3 py-2">
-                          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded ${config.bg} ${config.text}`}>
-                            <Icon className="w-3 h-3" />
-                            {confidence}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2">
-                          {prov.source_url ? (
-                            <a
-                              href={prov.source_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-blue-600 hover:underline flex items-center gap-1 max-w-[150px] truncate"
-                            >
-                              {new URL(prov.source_url).hostname}
-                              <ExternalLink className="w-3 h-3 shrink-0" />
-                            </a>
-                          ) : (
-                            <span className="text-muted-foreground">-</span>
-                          )}
-                        </td>
-                        <td className="px-3 py-2 text-muted-foreground max-w-[200px] truncate">
-                          {prov.excerpt || '-'}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                      return (
+                        <tr key={field} className="border-t border-border hover:bg-muted/20">
+                          <td className="px-3 py-2 font-medium">{displayName}</td>
+                          <td className="px-3 py-2">
+                            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded ${config.bg} ${config.text}`}>
+                              <Icon className="w-3 h-3" />
+                              {confidence}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2">
+                            {prov?.source_url ? (
+                              <a
+                                href={prov.source_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-600 hover:underline flex items-center gap-1 max-w-[150px] truncate"
+                              >
+                                {(() => {
+                                  try {
+                                    return new URL(prov.source_url).hostname;
+                                  } catch {
+                                    return prov.source_url;
+                                  }
+                                })()}
+                                <ExternalLink className="w-3 h-3 shrink-0" />
+                              </a>
+                            ) : (
+                              <span className="text-muted-foreground">-</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-muted-foreground max-w-[200px] truncate">
+                            {prov?.excerpt || '-'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* 범례 */}
-          <div className="flex items-center gap-4 text-[10px] text-muted-foreground pt-2 border-t border-border">
-            <span className="flex items-center gap-1">
-              <CheckCircle className="w-3 h-3 text-green-600" /> HIGH: 공시/IR 자료
-            </span>
-            <span className="flex items-center gap-1">
-              <Info className="w-3 h-3 text-yellow-600" /> MED: 뉴스/기사
-            </span>
-            <span className="flex items-center gap-1">
-              <AlertTriangle className="w-3 h-3 text-orange-600" /> LOW: AI 추정
-            </span>
-          </div>
+          {hasProvenanceData && (
+            <div className="flex items-center gap-4 text-[10px] text-muted-foreground pt-2 border-t border-border">
+              <span className="flex items-center gap-1">
+                <CheckCircle className="w-3 h-3 text-green-600" /> HIGH: 공시/IR 자료
+              </span>
+              <span className="flex items-center gap-1">
+                <Info className="w-3 h-3 text-yellow-600" /> MED: 뉴스/기사
+              </span>
+              <span className="flex items-center gap-1">
+                <AlertTriangle className="w-3 h-3 text-orange-600" /> LOW: AI 추정
+              </span>
+            </div>
+          )}
         </div>
       )}
     </div>

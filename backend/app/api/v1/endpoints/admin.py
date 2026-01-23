@@ -4,16 +4,20 @@ Admin API Endpoints
 PRD v1.2:
 - Circuit Breaker 상태 조회 API
 - 수동 리셋 API
+- P2-2: Profile 재생성 API
 """
 
 from typing import Optional
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.worker.llm.circuit_breaker import (
     get_circuit_breaker_manager,
     CircuitState,
 )
+from app.core.database import get_db
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -295,4 +299,166 @@ async def get_llm_health():
             "degraded": degraded,
             "unavailable": unavailable,
         },
+    }
+
+
+# ============================================================================
+# P2-2: Profile Provenance Regeneration API
+# ============================================================================
+
+
+class ProfileRegenerateRequest(BaseModel):
+    """프로파일 재생성 요청"""
+    corp_id: Optional[str] = None  # None이면 모든 NULL provenance 대상
+
+
+class ProfileRegenerateResponse(BaseModel):
+    """프로파일 재생성 응답"""
+    success: bool
+    message: str
+    affected_count: int
+    corp_ids: list[str]
+
+
+class ProfileProvenanceStatsResponse(BaseModel):
+    """프로파일 Provenance 통계 응답"""
+    total_profiles: int
+    with_provenance: int
+    without_provenance: int
+    expired: int
+    null_provenance_rate: float
+
+
+@router.get(
+    "/profiles/provenance-stats",
+    response_model=ProfileProvenanceStatsResponse,
+    summary="프로파일 Provenance 통계",
+    description="전체 프로파일의 field_provenance 상태를 집계합니다.",
+)
+async def get_provenance_stats(db: AsyncSession = Depends(get_db)):
+    """
+    프로파일 Provenance 통계 조회
+
+    Returns:
+        ProfileProvenanceStatsResponse: Provenance 통계
+    """
+    query = text("""
+        SELECT
+            COUNT(*) as total,
+            COUNT(*) FILTER (WHERE field_provenance IS NOT NULL AND field_provenance != '{}'::jsonb) as with_provenance,
+            COUNT(*) FILTER (WHERE field_provenance IS NULL OR field_provenance = '{}'::jsonb) as without_provenance,
+            COUNT(*) FILTER (WHERE expires_at < NOW()) as expired
+        FROM rkyc_corp_profile
+    """)
+
+    result = await db.execute(query)
+    row = result.fetchone()
+
+    total = row.total or 0
+    without_provenance = row.without_provenance or 0
+    null_rate = (without_provenance / total * 100) if total > 0 else 0
+
+    return ProfileProvenanceStatsResponse(
+        total_profiles=total,
+        with_provenance=row.with_provenance or 0,
+        without_provenance=without_provenance,
+        expired=row.expired or 0,
+        null_provenance_rate=round(null_rate, 2),
+    )
+
+
+@router.post(
+    "/profiles/regenerate-provenance",
+    response_model=ProfileRegenerateResponse,
+    summary="프로파일 Provenance 재생성 트리거",
+    description="NULL/빈 field_provenance를 가진 프로파일의 expires_at을 과거로 설정하여 재생성을 트리거합니다.",
+)
+async def regenerate_provenance(
+    request: ProfileRegenerateRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    프로파일 Provenance 재생성 트리거
+
+    Args:
+        request: 재생성 요청 (corp_id 지정 가능)
+
+    Returns:
+        ProfileRegenerateResponse: 재생성 결과
+    """
+    if request.corp_id:
+        # 특정 기업만
+        query = text("""
+            UPDATE rkyc_corp_profile
+            SET expires_at = NOW() - INTERVAL '1 day', updated_at = NOW()
+            WHERE corp_id = :corp_id
+            RETURNING corp_id
+        """)
+        result = await db.execute(query, {"corp_id": request.corp_id})
+    else:
+        # NULL/빈 provenance 전체
+        query = text("""
+            UPDATE rkyc_corp_profile
+            SET expires_at = NOW() - INTERVAL '1 day', updated_at = NOW()
+            WHERE field_provenance IS NULL OR field_provenance = '{}'::jsonb
+            RETURNING corp_id
+        """)
+        result = await db.execute(query)
+
+    rows = result.fetchall()
+    await db.commit()
+
+    corp_ids = [row.corp_id for row in rows]
+
+    return ProfileRegenerateResponse(
+        success=True,
+        message=f"Marked {len(corp_ids)} profiles for regeneration",
+        affected_count=len(corp_ids),
+        corp_ids=corp_ids[:100],  # 최대 100개만 반환
+    )
+
+
+@router.get(
+    "/profiles/null-provenance",
+    summary="NULL Provenance 프로파일 목록",
+    description="field_provenance가 NULL이거나 빈 프로파일 목록을 조회합니다.",
+)
+async def list_null_provenance_profiles(
+    limit: int = Query(default=50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    NULL Provenance 프로파일 목록 조회
+
+    Args:
+        limit: 조회 개수 (기본 50, 최대 200)
+
+    Returns:
+        dict: 프로파일 목록
+    """
+    query = text("""
+        SELECT corp_id, profile_confidence, is_fallback, expires_at, updated_at
+        FROM rkyc_corp_profile
+        WHERE field_provenance IS NULL OR field_provenance = '{}'::jsonb
+        ORDER BY updated_at DESC
+        LIMIT :limit
+    """)
+
+    result = await db.execute(query, {"limit": limit})
+    rows = result.fetchall()
+
+    profiles = [
+        {
+            "corp_id": row.corp_id,
+            "profile_confidence": row.profile_confidence,
+            "is_fallback": row.is_fallback,
+            "expires_at": row.expires_at.isoformat() if row.expires_at else None,
+            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+        }
+        for row in rows
+    ]
+
+    return {
+        "count": len(profiles),
+        "profiles": profiles,
     }

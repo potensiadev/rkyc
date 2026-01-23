@@ -78,6 +78,8 @@ class ContextPipeline:
 
             # Profile data for ENVIRONMENT signal grounding
             "profile_data": external_data.get("profile_data", {}),
+            # Direct profile reference for InsightPipeline
+            "profile": external_data.get("profile_data", {}).get("profile", None),
 
             # Derived hints from snapshot
             "derived_hints": self._extract_derived_hints(snapshot_json),

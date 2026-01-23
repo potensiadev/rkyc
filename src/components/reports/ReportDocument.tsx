@@ -41,8 +41,79 @@ const ReportDocument = ({
 
   if (isLoading) {
     return (
-      <div className="flex justify-center items-center py-20">
-        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      <div className="report-document bg-white text-foreground font-sans animate-pulse">
+        {/* Header Skeleton */}
+        <div className="border-b-2 border-border pb-8 mb-8">
+          <div className="text-center space-y-4">
+            <div className="h-8 bg-muted rounded w-3/4 mx-auto" />
+            <div className="h-6 bg-muted rounded w-1/3 mx-auto" />
+            <div className="space-y-2 mt-4">
+              <div className="h-4 bg-muted rounded w-1/4 mx-auto" />
+              <div className="h-4 bg-muted rounded w-1/3 mx-auto" />
+            </div>
+            <div className="h-10 bg-muted rounded w-2/3 mx-auto mt-6" />
+          </div>
+        </div>
+
+        {/* Summary Skeleton */}
+        <div className="mb-8 space-y-4">
+          <div className="h-6 bg-muted rounded w-1/4" />
+          <div className="h-4 bg-muted rounded w-full" />
+          <div className="h-4 bg-muted rounded w-5/6" />
+          <div className="h-4 bg-muted rounded w-4/5" />
+        </div>
+
+        {/* Company Overview Skeleton */}
+        <div className="mb-8 space-y-4">
+          <div className="h-6 bg-muted rounded w-1/5" />
+          <div className="space-y-2">
+            <div className="flex gap-4">
+              <div className="h-4 bg-muted rounded w-20" />
+              <div className="h-4 bg-muted rounded w-32" />
+            </div>
+            <div className="flex gap-4">
+              <div className="h-4 bg-muted rounded w-20" />
+              <div className="h-4 bg-muted rounded w-40" />
+            </div>
+            <div className="flex gap-4">
+              <div className="h-4 bg-muted rounded w-20" />
+              <div className="h-4 bg-muted rounded w-24" />
+            </div>
+          </div>
+        </div>
+
+        {/* Signal Summary Skeleton */}
+        <div className="mb-8 space-y-4">
+          <div className="h-6 bg-muted rounded w-1/4" />
+          <div className="space-y-4 pl-4 border-l-2 border-muted">
+            <div className="space-y-2">
+              <div className="h-4 bg-muted rounded w-1/3" />
+              <div className="h-4 bg-muted rounded w-full" />
+            </div>
+            <div className="space-y-2">
+              <div className="h-4 bg-muted rounded w-1/3" />
+              <div className="h-4 bg-muted rounded w-5/6" />
+            </div>
+            <div className="space-y-2">
+              <div className="h-4 bg-muted rounded w-1/3" />
+              <div className="h-4 bg-muted rounded w-4/5" />
+            </div>
+          </div>
+        </div>
+
+        {/* Timeline Skeleton */}
+        <div className="mb-8 space-y-4">
+          <div className="h-6 bg-muted rounded w-1/4" />
+          <div className="space-y-3">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="flex gap-4 border-b border-muted pb-3">
+                <div className="h-4 bg-muted rounded w-24" />
+                <div className="h-4 bg-muted rounded w-16" />
+                <div className="h-4 bg-muted rounded flex-1" />
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
@@ -109,9 +180,9 @@ const ReportDocument = ({
   };
 
   return (
-    <div className="bg-white text-foreground font-sans print:p-0">
+    <div className="report-document bg-white text-foreground font-sans print:p-0" style={{ fontFamily: 'Pretendard, "Malgun Gothic", "맑은 고딕", sans-serif' }}>
       {/* Report Header / Cover */}
-      <div className="border-b-2 border-border pb-8 mb-8">
+      <div className="border-b-2 border-border pb-8 mb-8 break-inside-avoid">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-foreground mb-4">
             rKYC 기업 시그널 분석 보고서
@@ -131,7 +202,7 @@ const ReportDocument = ({
 
       {/* Executive Summary */}
       {sectionsToShow.summary && (
-        <section className="mb-8">
+        <section className="mb-8 break-inside-avoid">
           <h2 className="text-lg font-semibold text-foreground mb-4 pb-2 border-b border-border">
             요약 (Executive Summary)
           </h2>
@@ -154,7 +225,7 @@ const ReportDocument = ({
 
       {/* Company Overview */}
       {sectionsToShow.companyOverview && (
-        <section className="mb-8">
+        <section className="mb-8 break-inside-avoid">
           <h2 className="text-lg font-semibold text-foreground mb-4 pb-2 border-b border-border">
             기업 개요
           </h2>
@@ -191,7 +262,7 @@ const ReportDocument = ({
 
       {/* Signal Summary by Type */}
       {sectionsToShow.signalTypeSummary && (
-        <section className="mb-8">
+        <section className="mb-8" style={{ pageBreakInside: 'avoid' }}>
           <h2 className="text-lg font-semibold text-foreground mb-4 pb-2 border-b border-border">
             시그널 유형별 요약
           </h2>
@@ -206,7 +277,7 @@ const ReportDocument = ({
               <div className="text-sm text-muted-foreground space-y-1">
                 <p>감지 건수: {signalCounts.direct}건</p>
                 {directSignals.length > 0 ? (
-                  <p className="line-clamp-2">{directSignals[0].summary || directSignals[0].title}</p>
+                  <p>{directSignals[0].summary || directSignals[0].title}</p>
                 ) : (
                   <p className="text-muted-foreground/50">감지된 직접 시그널이 없습니다.</p>
                 )}
@@ -223,7 +294,7 @@ const ReportDocument = ({
               <div className="text-sm text-muted-foreground space-y-1">
                 <p>감지 건수: {signalCounts.industry}건</p>
                 {industrySignals.length > 0 ? (
-                  <p className="line-clamp-2">{industrySignals[0].summary || industrySignals[0].title}</p>
+                  <p>{industrySignals[0].summary || industrySignals[0].title}</p>
                 ) : (
                   <p className="text-muted-foreground/50">감지된 산업 시그널이 없습니다.</p>
                 )}
@@ -240,7 +311,7 @@ const ReportDocument = ({
               <div className="text-sm text-muted-foreground space-y-1">
                 <p>감지 건수: {signalCounts.environment}건</p>
                 {environmentSignals.length > 0 ? (
-                  <p className="line-clamp-2">{environmentSignals[0].summary || environmentSignals[0].title}</p>
+                  <p>{environmentSignals[0].summary || environmentSignals[0].title}</p>
                 ) : (
                   <p className="text-muted-foreground/50">감지된 환경 시그널이 없습니다.</p>
                 )}
@@ -309,7 +380,7 @@ const ReportDocument = ({
                     <p className="text-foreground font-medium text-sm leading-snug">
                       "{evidence.snippet || evidence.ref_value}"
                     </p>
-                    <p className="text-xs text-muted-foreground truncate max-w-[500px]">
+                    <p className="text-xs text-muted-foreground break-all">
                       출처: {evidence.ref_value}
                     </p>
                   </div>
@@ -331,7 +402,7 @@ const ReportDocument = ({
 
       {/* Loan Reference Insight - AI Risk Manager Opinion */}
       {(corporation.has_loan || sectionsToShow.loanInsight) && loan_insight && (
-        <section className="mb-8 break-inside-avoid">
+        <section className="mb-8">
           <h2 className="text-lg font-semibold text-foreground mb-4 pb-2 border-b border-border flex items-center justify-between">
             <span>여신 참고 관점 요약 (AI Risk Opinion)</span>
             <Badge
@@ -433,7 +504,7 @@ const ReportDocument = ({
 
       {/* Disclaimer */}
       {sectionsToShow.disclaimer && (
-        <section className="mt-12 pt-6 border-t-2 border-border">
+        <section className="mt-12 pt-6 border-t-2 border-border" style={{ pageBreakInside: 'avoid' }}>
           <div className="bg-muted p-4 rounded text-xs text-muted-foreground leading-relaxed">
             본 보고서는 rKYC 시스템이 감지한 시그널을 기반으로 생성된 참고 자료입니다.
             자동 판단, 점수화, 예측 또는 조치를 의미하지 않으며,

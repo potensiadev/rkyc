@@ -11,7 +11,6 @@ import {
   Building2,
   Landmark,
   Users,
-  Link2,
   Loader2,
   FileDown,
   RefreshCw,
@@ -22,6 +21,7 @@ import {
   Shield,
   ExternalLink,
   AlertCircle,
+  AlertTriangle,
   CheckCircle,
   Info,
   ChevronDown,
@@ -29,14 +29,17 @@ import {
   FileText,
   Target,
   Zap,
+  Search,
+  FileWarning,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useState, useEffect } from "react";
 import ReportPreviewModal from "@/components/reports/ReportPreviewModal";
-import { useCorporation, useSignals, useCorporationSnapshot, useCorpProfile, useCorpProfileDetail, useRefreshCorpProfile, useJobStatus } from "@/hooks/useApi";
+import { useCorporation, useSignals, useCorporationSnapshot, useCorpProfile, useCorpProfileDetail, useRefreshCorpProfile, useJobStatus, useLoanInsight } from "@/hooks/useApi";
 import type { ProfileConfidence, CorpProfile } from "@/types/profile";
 import { useQueryClient } from "@tanstack/react-query";
+import { getCorporationReport } from "@/lib/api";
 import { EvidenceBackedField } from "@/components/profile/EvidenceBackedField";
 import { EvidenceMap } from "@/components/profile/EvidenceMap";
 import { RiskIndicators } from "@/components/profile/RiskIndicators";
@@ -77,16 +80,30 @@ export default function CorporateDetailPage() {
   const { data: snapshot, isLoading: isLoadingSnapshot } = useCorporationSnapshot(corporateId || "");
   const { data: profile, isLoading: isLoadingProfile, error: profileError, refetch: refetchProfile } = useCorpProfile(corporateId || "");
   // 상세 프로필 (field_provenance 포함) - 기본 뷰 / 상세 뷰 토글용
-  const { data: profileDetail, refetch: refetchProfileDetail } = useCorpProfileDetail(corporateId || "");
+  // P1-3 Fix: Add error handling for profileDetail
+  const { data: profileDetail, error: profileDetailError, refetch: refetchProfileDetail } = useCorpProfileDetail(corporateId || "");
+  // Loan Insight (사전 생성된 AI 분석)
+  const { data: loanInsight, isLoading: isLoadingLoanInsight, error: loanInsightError } = useLoanInsight(corporateId || "");
   const refreshProfile = useRefreshCorpProfile();
   const [showDetailedView, setShowDetailedView] = useState(false);
+
+  // 보고서 데이터 프리페칭 (hover 시 미리 로드)
+  const prefetchReport = () => {
+    if (corporateId) {
+      queryClient.prefetchQuery({
+        queryKey: ['report', corporateId],
+        queryFn: () => getCorporationReport(corporateId),
+        staleTime: 10 * 60 * 1000, // 10분
+      });
+    }
+  };
 
   // Job 상태 폴링
   const { data: jobStatus } = useJobStatus(refreshJobId || '', {
     enabled: !!refreshJobId && refreshStatus === 'running',
   });
 
-  // Job 완료 시 프로필 다시 로드
+  // Job 완료 시 프로필 + Loan Insight 다시 로드
   useEffect(() => {
     if (jobStatus?.status === 'DONE') {
       setRefreshStatus('done');
@@ -94,6 +111,8 @@ export default function CorporateDetailPage() {
       // 프로필 쿼리 무효화하여 다시 로드 (기본 + 상세)
       queryClient.invalidateQueries({ queryKey: ['corporation', corporateId, 'profile'] });
       queryClient.invalidateQueries({ queryKey: ['corporation', corporateId, 'profile', 'detail'] });
+      // Loan Insight도 갱신
+      queryClient.invalidateQueries({ queryKey: ['loan-insight', corporateId] });
     } else if (jobStatus?.status === 'FAILED') {
       setRefreshStatus('failed');
       setRefreshJobId(null);
@@ -169,16 +188,16 @@ export default function CorporateDetailPage() {
             <ArrowLeft className="w-4 h-4 mr-2" />
             이전 페이지
           </Button>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" className="gap-2">
-              <Link2 className="w-4 h-4" />
-              공유 링크
-            </Button>
-            <Button size="sm" className="gap-2" onClick={() => setShowPreviewModal(true)}>
-              <FileDown className="w-4 h-4" />
-              PDF 내보내기
-            </Button>
-          </div>
+          <Button
+            size="sm"
+            className="gap-2"
+            onClick={() => setShowPreviewModal(true)}
+            onMouseEnter={prefetchReport}
+            onFocus={prefetchReport}
+          >
+            <FileDown className="w-4 h-4" />
+            PDF 내보내기
+          </Button>
         </div>
 
         {/* Report Document Style */}
@@ -199,29 +218,46 @@ export default function CorporateDetailPage() {
             </div>
           </div>
 
-          {/* Executive Summary */}
+          {/* Executive Summary - LLM 생성 또는 Fallback */}
           <section>
-            <h2 className="text-base font-semibold text-foreground mb-3 pb-2 border-b border-border">
-              요약 (Executive Summary)
+            <h2 className="text-base font-semibold text-foreground mb-3 pb-2 border-b border-border flex items-center justify-between">
+              <span>요약 (Executive Summary)</span>
+              {loanInsight && (
+                <span className={`text-xs px-2 py-1 rounded ${
+                  loanInsight.stance.level === 'CAUTION' ? 'bg-red-50 text-red-600 border border-red-200' :
+                  loanInsight.stance.level === 'MONITORING' ? 'bg-orange-50 text-orange-600 border border-orange-200' :
+                  loanInsight.stance.level === 'STABLE' ? 'bg-green-50 text-green-600 border border-green-200' :
+                  loanInsight.stance.level === 'POSITIVE' ? 'bg-blue-50 text-blue-600 border border-blue-200' :
+                  'bg-gray-50 text-gray-600 border border-gray-200'
+                }`}>
+                  {loanInsight.stance.label}
+                </span>
+              )}
             </h2>
             <div className="text-sm text-muted-foreground space-y-2 leading-relaxed">
-              <p>
-                <strong className="text-foreground">{corporation.name}</strong>은(는) {corporation.industry} 분야에서
-                사업을 영위하는 기업입니다.
-                {corporation.headquarters ? `본사는 ${corporation.headquarters}에 소재하고 있습니다.` : ''}
-              </p>
-              {corporation.bankRelationship.hasRelationship && (
-                <p>
-                  당행과는 여신 {corporation.bankRelationship.loanBalance}, 수신 {corporation.bankRelationship.depositBalance} 규모의
-                  거래 관계를 유지하고 있습니다.
-                  {corporation.bankRelationship.fxTransactions && ` 외환 거래 규모는 ${corporation.bankRelationship.fxTransactions}입니다.`}
-                </p>
+              {/* LLM 생성 Executive Summary 우선 사용 */}
+              {loanInsight?.executive_summary ? (
+                <p className="text-foreground">{loanInsight.executive_summary}</p>
+              ) : (
+                /* Fallback: 기존 하드코딩 템플릿 */
+                <>
+                  <p>
+                    <strong className="text-foreground">{corporation.name}</strong>은(는) {corporation.industry} 분야에서
+                    사업을 영위하는 기업입니다.
+                    {corporation.headquarters ? ` 본사는 ${corporation.headquarters}에 소재하고 있습니다.` : ''}
+                  </p>
+                  {corporation.bankRelationship.hasRelationship && (
+                    <p>
+                      당행과는 여신 {corporation.bankRelationship.loanBalance}, 수신 {corporation.bankRelationship.depositBalance} 규모의
+                      거래 관계를 유지하고 있습니다.
+                    </p>
+                  )}
+                </>
               )}
-              <p>
-                최근 직접 시그널 {signalCounts.direct}건, 산업 시그널 {signalCounts.industry}건,
-                환경 시그널 {signalCounts.environment}건이 감지되었습니다.
+              {/* 시그널 카운트는 항상 표시 */}
+              <p className="text-xs text-muted-foreground">
+                탐지된 시그널: 직접 {signalCounts.direct}건, 산업 {signalCounts.industry}건, 환경 {signalCounts.environment}건
               </p>
-              <p>아래 내용은 담당자의 검토를 위해 정리된 참고 자료입니다.</p>
             </div>
           </section>
 
@@ -253,90 +289,258 @@ export default function CorporateDetailPage() {
 
           <Separator />
 
-          {/* Bank Relationship - Snapshot API 데이터 사용 */}
+          {/* Bank Relationship - 2행 압축 레이아웃 */}
           {(snapshot?.snapshot_json?.credit?.has_loan || corporation.bankRelationship.hasRelationship) && (
             <section>
               <h2 className="text-base font-semibold text-foreground mb-3 pb-2 border-b border-border flex items-center gap-2">
                 <Landmark className="w-4 h-4" />
                 당행 거래 현황
               </h2>
-              <div className="grid grid-cols-3 gap-4 text-sm">
-                <div className="bg-muted/50 rounded p-3">
-                  <div className="text-muted-foreground text-xs mb-1">수신 잔액</div>
-                  <div className="font-medium">{corporation.bankRelationship.depositBalance || "-"}</div>
-                </div>
-                <div className="bg-muted/50 rounded p-3">
-                  <div className="text-muted-foreground text-xs mb-1">여신 잔액</div>
-                  <div className="font-medium">
-                    {snapshot?.snapshot_json?.credit?.loan_summary?.total_exposure_krw
-                      ? `${(snapshot.snapshot_json.credit.loan_summary.total_exposure_krw / 100000000).toFixed(0)}억원`
-                      : corporation.bankRelationship.loanBalance || "-"}
-                  </div>
-                </div>
-                <div className="bg-muted/50 rounded p-3">
-                  <div className="text-muted-foreground text-xs mb-1">외환 거래</div>
-                  <div className="font-medium">{corporation.bankRelationship.fxTransactions || "-"}</div>
-                </div>
-              </div>
-              {/* 담보 정보 (Snapshot API) */}
-              {snapshot?.snapshot_json?.collateral?.has_collateral && (
-                <div className="mt-3 p-3 bg-muted/30 rounded">
-                  <div className="text-xs text-muted-foreground mb-2">담보 현황</div>
-                  <div className="flex items-center gap-4 text-sm">
-                    <span className="font-medium">
-                      {snapshot.snapshot_json.collateral.total_collateral_value_krw
-                        ? `${(snapshot.snapshot_json.collateral.total_collateral_value_krw / 100000000).toFixed(0)}억원`
-                        : "-"}
-                    </span>
-                    <div className="flex gap-1">
-                      {snapshot.snapshot_json.collateral.collateral_types?.map((type, i) => (
-                        <span key={i} className="text-xs bg-muted px-2 py-0.5 rounded">{type}</span>
-                      ))}
+              {/* 연체 시 전체 카드에 경고 스타일 */}
+              <div className={`rounded-lg border ${snapshot?.snapshot_json?.credit?.loan_summary?.overdue_flag ? 'border-red-200 bg-red-50/30' : 'border-border bg-muted/30'}`}>
+                {/* 1행: 금액 정보 + 담보 */}
+                <div className="flex items-center justify-between px-4 py-3 text-sm border-b border-border/50">
+                  <div className="flex items-center gap-6">
+                    <div>
+                      <span className="text-muted-foreground text-xs">수신</span>
+                      <span className="ml-2 font-medium">{corporation.bankRelationship.depositBalance || "-"}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground text-xs">여신</span>
+                      <span className="ml-2 font-medium">
+                        {snapshot?.snapshot_json?.credit?.loan_summary?.total_exposure_krw
+                          ? `${(snapshot.snapshot_json.credit.loan_summary.total_exposure_krw / 100000000).toFixed(0)}억원`
+                          : corporation.bankRelationship.loanBalance || "-"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground text-xs">외환</span>
+                      <span className="ml-2 font-medium">{corporation.bankRelationship.fxTransactions || "-"}</span>
                     </div>
                   </div>
+                  {/* 담보 정보 (한글화) */}
+                  {snapshot?.snapshot_json?.collateral?.has_collateral && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground text-xs">담보</span>
+                      {snapshot.snapshot_json.collateral.total_collateral_value_krw && (
+                        <span className="font-medium">
+                          {`${(snapshot.snapshot_json.collateral.total_collateral_value_krw / 100000000).toFixed(0)}억원`}
+                        </span>
+                      )}
+                      <div className="flex gap-1">
+                        {snapshot.snapshot_json.collateral.collateral_types?.map((type, i) => {
+                          const typeMap: Record<string, string> = {
+                            'REAL_ESTATE': '부동산',
+                            'DEPOSIT': '예금',
+                            'SECURITIES': '유가증권',
+                            'INVENTORY': '재고',
+                            'EQUIPMENT': '기계설비',
+                            'RECEIVABLES': '매출채권',
+                            'GUARANTEE': '보증',
+                          };
+                          return (
+                            <span key={i} className="text-xs bg-muted px-1.5 py-0.5 rounded">
+                              {typeMap[type] || type}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
-              {/* KYC 상태 (Snapshot API) */}
-              {snapshot?.snapshot_json?.corp?.kyc_status && (
-                <div className="mt-3 p-3 bg-muted/30 rounded">
-                  <div className="text-xs text-muted-foreground mb-2">KYC 상태</div>
-                  <div className="flex items-center gap-4 text-sm">
-                    <span className={`px-2 py-0.5 rounded text-xs ${snapshot.snapshot_json.corp.kyc_status.is_kyc_completed
-                        ? 'bg-green-100 text-green-700'
-                        : 'bg-yellow-100 text-yellow-700'
-                      }`}>
-                      {snapshot.snapshot_json.corp.kyc_status.is_kyc_completed ? 'KYC 완료' : 'KYC 미완료'}
-                    </span>
-                    <span className={`px-2 py-0.5 rounded text-xs ${snapshot.snapshot_json.corp.kyc_status.internal_risk_grade === 'HIGH'
-                        ? 'bg-red-100 text-red-700'
-                        : snapshot.snapshot_json.corp.kyc_status.internal_risk_grade === 'MED'
-                          ? 'bg-yellow-100 text-yellow-700'
-                          : 'bg-green-100 text-green-700'
-                      }`}>
-                      내부등급: {snapshot.snapshot_json.corp.kyc_status.internal_risk_grade}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      최종 갱신: {snapshot.snapshot_json.corp.kyc_status.last_kyc_updated}
-                    </span>
+                {/* 2행: 상태 배지들 + 갱신일 */}
+                <div className="flex items-center justify-between px-4 py-2.5">
+                  <div className="flex items-center gap-2">
+                    {/* KYC 상태 */}
+                    {snapshot?.snapshot_json?.corp?.kyc_status && (
+                      <>
+                        <span className={`px-2 py-0.5 rounded text-xs ${snapshot.snapshot_json.corp.kyc_status.is_kyc_completed
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-yellow-100 text-yellow-700'
+                          }`}>
+                          {snapshot.snapshot_json.corp.kyc_status.is_kyc_completed ? 'KYC완료' : 'KYC미완료'}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded text-xs ${snapshot.snapshot_json.corp.kyc_status.internal_risk_grade === 'HIGH'
+                            ? 'bg-red-100 text-red-700'
+                            : snapshot.snapshot_json.corp.kyc_status.internal_risk_grade === 'MED'
+                              ? 'bg-yellow-100 text-yellow-700'
+                              : 'bg-green-100 text-green-700'
+                          }`}>
+                          {snapshot.snapshot_json.corp.kyc_status.internal_risk_grade === 'HIGH' ? '고위험' :
+                           snapshot.snapshot_json.corp.kyc_status.internal_risk_grade === 'MED' ? '중위험' : '저위험'}
+                        </span>
+                      </>
+                    )}
+                    {/* 연체 발생 */}
+                    {snapshot?.snapshot_json?.credit?.loan_summary?.overdue_flag && (
+                      <span className="px-2 py-0.5 rounded text-xs bg-red-500 text-white font-medium">
+                        연체발생
+                      </span>
+                    )}
+                    {/* 부가서비스 */}
+                    {corporation.bankRelationship.retirementPension && (
+                      <span className="text-xs text-muted-foreground">퇴직연금</span>
+                    )}
+                    {corporation.bankRelationship.payrollService && (
+                      <span className="text-xs text-muted-foreground">급여이체</span>
+                    )}
+                    {corporation.bankRelationship.corporateCard && (
+                      <span className="text-xs text-muted-foreground">법인카드</span>
+                    )}
                   </div>
+                  {/* 갱신일 */}
+                  {snapshot?.snapshot_json?.corp?.kyc_status?.last_kyc_updated && (
+                    <span className="text-xs text-muted-foreground">
+                      갱신: {snapshot.snapshot_json.corp.kyc_status.last_kyc_updated}
+                    </span>
+                  )}
                 </div>
-              )}
-              <div className="flex gap-2 mt-3">
-                {corporation.bankRelationship.retirementPension && (
-                  <span className="text-xs bg-muted px-2 py-1 rounded">퇴직연금</span>
-                )}
-                {corporation.bankRelationship.payrollService && (
-                  <span className="text-xs bg-muted px-2 py-1 rounded">급여이체</span>
-                )}
-                {corporation.bankRelationship.corporateCard && (
-                  <span className="text-xs bg-muted px-2 py-1 rounded">법인카드</span>
-                )}
-                {snapshot?.snapshot_json?.credit?.loan_summary?.overdue_flag && (
-                  <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded">연체 발생</span>
-                )}
               </div>
             </section>
           )}
+
+          <Separator />
+
+          {/* ============================================================ */}
+          {/* Loan Insight Section - AI 여신 참고 의견 */}
+          {/* ============================================================ */}
+          <section>
+            <h2 className="text-base font-semibold text-foreground mb-3 pb-2 border-b border-border flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <FileWarning className="w-4 h-4" />
+                여신 참고 관점 요약 (AI Risk Opinion)
+              </span>
+              {loanInsight && (
+                <span className={`text-xs px-2 py-1 rounded ${
+                  loanInsight.stance.level === 'CAUTION' ? 'bg-red-50 text-red-600 border border-red-200' :
+                  loanInsight.stance.level === 'MONITORING' ? 'bg-orange-50 text-orange-600 border border-orange-200' :
+                  loanInsight.stance.level === 'STABLE' ? 'bg-green-50 text-green-600 border border-green-200' :
+                  loanInsight.stance.level === 'POSITIVE' ? 'bg-blue-50 text-blue-600 border border-blue-200' :
+                  'bg-gray-50 text-gray-600 border border-gray-200'
+                }`}>
+                  {loanInsight.stance.label}
+                </span>
+              )}
+            </h2>
+
+            {isLoadingLoanInsight ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground mr-2" />
+                <span className="text-sm text-muted-foreground">AI 분석 결과를 불러오는 중...</span>
+              </div>
+            ) : loanInsightError ? (
+              <div className="bg-muted/30 rounded-lg p-4 text-center">
+                <AlertCircle className="w-5 h-5 text-orange-500 mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground">AI 분석이 아직 생성되지 않았습니다.</p>
+                <p className="text-xs text-muted-foreground mt-1">"정보 갱신" 버튼을 클릭하면 자동 생성됩니다.</p>
+              </div>
+            ) : loanInsight ? (
+              <div className="bg-slate-50 rounded-lg p-5 border border-slate-200 space-y-5">
+                {/* 2x2 Grid: 리스크/기회 요인 */}
+                <div className="grid grid-cols-2 gap-6">
+                  {/* Risk Drivers */}
+                  <div>
+                    <h3 className="text-sm font-semibold text-red-700 mb-3 flex items-center">
+                      <AlertTriangle className="w-4 h-4 mr-2" />
+                      핵심 리스크 요인
+                    </h3>
+                    <ul className="space-y-2">
+                      {loanInsight.key_risks.length > 0 ? (
+                        loanInsight.key_risks.map((risk, idx) => (
+                          <li key={idx} className="text-sm text-foreground/80 flex items-start">
+                            <span className="text-red-500 mr-2">•</span>
+                            {risk}
+                          </li>
+                        ))
+                      ) : (
+                        <li className="text-sm text-muted-foreground italic">식별된 심각한 리스크가 없습니다.</li>
+                      )}
+                    </ul>
+                  </div>
+
+                  {/* Key Opportunities */}
+                  <div>
+                    <h3 className="text-sm font-semibold text-green-700 mb-3 flex items-center">
+                      <TrendingUp className="w-4 h-4 mr-2" />
+                      핵심 기회 요인
+                    </h3>
+                    <ul className="space-y-2">
+                      {(loanInsight.key_opportunities?.length > 0) ? (
+                        loanInsight.key_opportunities.map((opp, idx) => (
+                          <li key={idx} className="text-sm text-foreground/80 flex items-start">
+                            <span className="text-green-500 mr-2">•</span>
+                            {opp}
+                          </li>
+                        ))
+                      ) : (
+                        <li className="text-sm text-muted-foreground italic">식별된 기회 요인이 없습니다.</li>
+                      )}
+                    </ul>
+                  </div>
+                </div>
+
+                {/* Mitigating Factors - 상쇄 요인이 있을 때만 표시 */}
+                {loanInsight.mitigating_factors.length > 0 && (
+                  <div className="pt-4 border-t border-slate-200">
+                    <h3 className="text-sm font-semibold text-blue-700 mb-3 flex items-center">
+                      <CheckCircle className="w-4 h-4 mr-2" />
+                      리스크 상쇄 요인
+                    </h3>
+                    <ul className="space-y-2">
+                      {loanInsight.mitigating_factors.map((factor, idx) => (
+                        <li key={idx} className="text-sm text-foreground/80 flex items-start">
+                          <span className="text-blue-500 mr-2">•</span>
+                          {factor}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Action Items */}
+                <div className="pt-4 border-t border-slate-200">
+                  <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center">
+                    <Search className="w-4 h-4 mr-2" />
+                    심사역 확인 체크리스트
+                  </h3>
+                  <div className="space-y-2 bg-white p-3 rounded border border-slate-200">
+                    {loanInsight.action_items.length > 0 ? (
+                      loanInsight.action_items.map((item, idx) => (
+                        <div key={idx} className="flex items-start text-sm">
+                          <div className="mr-3 pt-0.5">
+                            <div className="w-4 h-4 border-2 border-slate-300 rounded-sm"></div>
+                          </div>
+                          <span className="text-foreground/90">{item}</span>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-sm text-muted-foreground">추가 확인이 필요한 특이사항이 없습니다.</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Metadata */}
+                <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t border-slate-200">
+                  <span>
+                    시그널 {loanInsight.signal_count}건 분석 (위험 {loanInsight.risk_count}, 기회 {loanInsight.opportunity_count})
+                  </span>
+                  <span className="flex items-center gap-2">
+                    {loanInsight.is_fallback && (
+                      <span className="text-orange-500">Rule-based</span>
+                    )}
+                    {loanInsight.generation_model && (
+                      <span>모델: {loanInsight.generation_model}</span>
+                    )}
+                    <span>생성: {new Date(loanInsight.generated_at).toLocaleDateString('ko-KR')}</span>
+                  </span>
+                </div>
+
+                <p className="italic text-xs text-muted-foreground text-right">
+                  * 본 의견은 AI 모델이 생성한 참고 자료이며, 은행의 공식 심사 의견을 대체하지 않습니다.
+                </p>
+              </div>
+            ) : null}
+          </section>
 
           <Separator />
 
@@ -350,7 +554,7 @@ export default function CorporateDetailPage() {
                 외부 정보 프로필
               </h2>
               <div className="flex items-center gap-2">
-                {profile && (
+                {profile && profile.profile_confidence !== 'LOW' && (
                   <span className={`text-xs px-2 py-1 rounded ${getConfidenceBadge(profile.profile_confidence).bg} ${getConfidenceBadge(profile.profile_confidence).text}`}>
                     {getConfidenceBadge(profile.profile_confidence).label}
                   </span>
@@ -456,29 +660,33 @@ export default function CorporateDetailPage() {
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div className="space-y-2">
                     <div className="flex">
-                      <span className="w-28 text-muted-foreground">연간 매출</span>
+                      <span className="w-28 flex-shrink-0 text-muted-foreground">연간 매출</span>
                       <span className="font-medium">{profile.revenue_krw ? formatKRW(profile.revenue_krw) : '-'}</span>
                     </div>
                     <div className="flex">
-                      <span className="w-28 text-muted-foreground">수출 비중</span>
+                      <span className="w-28 flex-shrink-0 text-muted-foreground">수출 비중</span>
                       <span className="font-medium">{typeof profile.export_ratio_pct === 'number' ? `${profile.export_ratio_pct}%` : '-'}</span>
                     </div>
                     <div className="flex">
-                      <span className="w-28 text-muted-foreground">임직원 수</span>
+                      <span className="w-28 flex-shrink-0 text-muted-foreground">임직원 수</span>
                       <span>{profile.employee_count ? `${profile.employee_count.toLocaleString()}명` : '-'}</span>
                     </div>
                   </div>
                   <div className="space-y-2">
                     <div className="flex">
-                      <span className="w-28 text-muted-foreground">비즈니스 모델</span>
-                      <span>{profile.business_model || '-'}</span>
-                    </div>
-                    <div className="flex">
-                      <span className="w-28 text-muted-foreground">본사 위치</span>
+                      <span className="w-28 flex-shrink-0 text-muted-foreground">본사 위치</span>
                       <span>{profile.headquarters || '-'}</span>
                     </div>
                   </div>
                 </div>
+
+                {/* Business Model - 긴 텍스트를 위한 별도 섹션 */}
+                {profile.business_model && (
+                  <div className="text-sm">
+                    <span className="text-muted-foreground">비즈니스 모델</span>
+                    <p className="mt-1 text-foreground leading-relaxed">{profile.business_model}</p>
+                  </div>
+                )}
 
                 {/* Country Exposure - P0-2 Fix: 빈 섹션 처리 */}
                 <div>
@@ -724,14 +932,15 @@ export default function CorporateDetailPage() {
                 {/* ============================================================ */}
                 {/* 상세 뷰: Evidence Map + Risk Indicators */}
                 {/* ============================================================ */}
-                {showDetailedView && profileDetail && (
+                {showDetailedView && (
                   <div className="space-y-6 pt-4 border-t border-border">
+                    {/* P1-3 Fix: Show EvidenceMap even if profileDetail is loading or has error */}
                     {/* Evidence Map - 근거-주장 연결 */}
                     <EvidenceMap
-                      fieldProvenance={profileDetail.field_provenance || {}}
-                      fieldConfidences={profileDetail.field_confidences || {}}
-                      sourceUrls={profileDetail.source_urls || []}
-                      consensusMetadata={profileDetail.consensus_metadata ? {
+                      fieldProvenance={profileDetail?.field_provenance || {}}
+                      fieldConfidences={profileDetail?.field_confidences || {}}
+                      sourceUrls={profileDetail?.source_urls || []}
+                      consensusMetadata={profileDetail?.consensus_metadata ? {
                         perplexity_success: profileDetail.consensus_metadata.perplexity_success,
                         gemini_success: profileDetail.consensus_metadata.gemini_success,
                         claude_success: profileDetail.consensus_metadata.claude_success,
@@ -743,29 +952,33 @@ export default function CorporateDetailPage() {
                     />
 
                     {/* Risk Indicators - 조기경보 + 체크리스트 */}
-                    <RiskIndicators
-                      profile={profileDetail as unknown as CorpProfile}
-                      industryCode={corporation?.industryCode}
-                    />
+                    {profileDetail && (
+                      <RiskIndicators
+                        profile={profileDetail as unknown as CorpProfile}
+                        industryCode={corporation?.industryCode}
+                      />
+                    )}
 
                     {/* 메타데이터 상세 */}
-                    <div className="p-3 bg-muted/30 rounded-lg">
-                      <div className="text-xs text-muted-foreground space-y-1">
-                        <div className="flex items-center gap-4">
-                          <span>추출 모델: {profileDetail.extraction_model || '-'}</span>
-                          <span>프롬프트 버전: {profileDetail.extraction_prompt_version || '-'}</span>
-                        </div>
-                        <div className="flex items-center gap-4">
-                          <span>생성: {profileDetail.created_at ? new Date(profileDetail.created_at).toLocaleString('ko-KR') : '-'}</span>
-                          <span>수정: {profileDetail.updated_at ? new Date(profileDetail.updated_at).toLocaleString('ko-KR') : '-'}</span>
-                        </div>
-                        {profileDetail.validation_warnings && profileDetail.validation_warnings.length > 0 && (
-                          <div className="mt-2 text-orange-600">
-                            검증 경고: {profileDetail.validation_warnings.join(', ')}
+                    {profileDetail && (
+                      <div className="p-3 bg-muted/30 rounded-lg">
+                        <div className="text-xs text-muted-foreground space-y-1">
+                          <div className="flex items-center gap-4">
+                            <span>추출 모델: {profileDetail.extraction_model || '-'}</span>
+                            <span>프롬프트 버전: {profileDetail.extraction_prompt_version || '-'}</span>
                           </div>
-                        )}
+                          <div className="flex items-center gap-4">
+                            <span>생성: {profileDetail.created_at ? new Date(profileDetail.created_at).toLocaleString('ko-KR') : '-'}</span>
+                            <span>수정: {profileDetail.updated_at ? new Date(profileDetail.updated_at).toLocaleString('ko-KR') : '-'}</span>
+                          </div>
+                          {profileDetail.validation_warnings && profileDetail.validation_warnings.length > 0 && (
+                            <div className="mt-2 text-orange-600">
+                              검증 경고: {profileDetail.validation_warnings.join(', ')}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                 )}
               </div>

@@ -1292,6 +1292,21 @@ class CorpProfilingPipeline:
         ]
         ttl_days = FALLBACK_TTL_DAYS if is_fallback else PROFILE_TTL_DAYS
 
+        # P0-1 Fix: Merge provenance from orchestrator AND provenance_tracker
+        merged_provenance = {}
+        # First, add orchestrator provenance
+        if orchestrator_result.provenance:
+            merged_provenance.update(orchestrator_result.provenance)
+        # Then, merge provenance_tracker (overwrite if exists with more detail)
+        tracker_provenance = self.provenance_tracker.to_json()
+        if tracker_provenance:
+            merged_provenance.update(tracker_provenance)
+        # Also check raw_profile for any provenance data
+        if raw_profile.get("field_provenance"):
+            for field, prov in raw_profile.get("field_provenance", {}).items():
+                if field not in merged_provenance:
+                    merged_provenance[field] = prov
+
         profile = {
             "profile_id": str(uuid4()),
             "corp_id": corp_id,
@@ -1325,7 +1340,7 @@ class CorpProfilingPipeline:
             "field_confidences": raw_profile.get("field_confidences", {}),
             "source_urls": raw_profile.get("source_urls", []),
             "raw_search_result": raw_profile.get("raw_search_result", {}),
-            "field_provenance": orchestrator_result.provenance,
+            "field_provenance": merged_provenance,  # P0-1 Fix: Use merged provenance
             "extraction_model": raw_profile.get("extraction_model", "orchestrator"),
             "extraction_prompt_version": PROMPT_VERSION,
             "is_fallback": is_fallback,
@@ -1547,7 +1562,17 @@ class CorpProfilingPipeline:
                         confidence=field_data.get("confidence", "LOW"),
                     )
                 else:
+                    # P0-2 Fix: Record provenance even for simple values
                     profile[field_name] = field_data
+                    # Only record if value is not empty
+                    if field_data and field_data not in [[], {}, "", 0]:
+                        self.provenance_tracker.record(
+                            field_name=field_name,
+                            value=field_data,
+                            source_url=None,  # Unknown source
+                            excerpt=None,
+                            confidence="LOW",  # Default to LOW for unstructured responses
+                        )
 
             # Add metadata
             profile["_uncertainty_notes"] = result.get("_uncertainty_notes", [])
@@ -1677,6 +1702,24 @@ class CorpProfilingPipeline:
                     "profile_confidence": row.profile_confidence,
                     "is_fallback": row.is_fallback,
                     "is_expired": False,
+                    # P0-3 Fix: Include field_provenance and other audit fields
+                    "field_provenance": row.field_provenance or {},
+                    "field_confidences": row.field_confidences or {},
+                    "source_urls": list(row.source_urls or []),
+                    # PRD v1.2 fields
+                    "ceo_name": row.ceo_name if hasattr(row, 'ceo_name') else None,
+                    "employee_count": row.employee_count if hasattr(row, 'employee_count') else None,
+                    "founded_year": row.founded_year if hasattr(row, 'founded_year') else None,
+                    "headquarters": row.headquarters if hasattr(row, 'headquarters') else None,
+                    "executives": row.executives if hasattr(row, 'executives') else [],
+                    "industry_overview": row.industry_overview if hasattr(row, 'industry_overview') else None,
+                    "business_model": row.business_model if hasattr(row, 'business_model') else None,
+                    "supply_chain": row.supply_chain if hasattr(row, 'supply_chain') else {},
+                    "overseas_business": row.overseas_business if hasattr(row, 'overseas_business') else {},
+                    "shareholders": row.shareholders if hasattr(row, 'shareholders') else [],
+                    "competitors": row.competitors if hasattr(row, 'competitors') else [],
+                    "macro_factors": row.macro_factors if hasattr(row, 'macro_factors') else [],
+                    "consensus_metadata": row.consensus_metadata if hasattr(row, 'consensus_metadata') else None,
                 }
         except Exception as e:
             logger.warning(f"Cache lookup failed: {e}")

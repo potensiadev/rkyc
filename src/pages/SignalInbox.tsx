@@ -5,7 +5,7 @@ import { DemoPanel } from "@/components/demo/DemoPanel";
 import { SchedulerPanel } from "@/components/demo/SchedulerPanel";
 import { SIGNAL_TYPE_CONFIG, SIGNAL_IMPACT_CONFIG, SIGNAL_STRENGTH_CONFIG } from "@/types/signal";
 import { formatRelativeTime } from "@/data/signals";
-import { useSignals, useSignalStats } from "@/hooks/useApi";
+import { useSignals, useSignalStats, useLoanInsightSummaries, ApiLoanInsightSummary } from "@/hooks/useApi";
 import {
   AlertCircle,
   TrendingUp,
@@ -70,6 +70,18 @@ export default function SignalInbox() {
   // API에서 데이터 로드
   const { data: signals = [], isLoading, error } = useSignals();
   const { data: stats } = useSignalStats();
+  const { data: insightSummaries } = useLoanInsightSummaries();
+
+  // corp_id -> insight summary 맵 생성
+  const insightMap = useMemo(() => {
+    const map = new Map<string, ApiLoanInsightSummary>();
+    if (insightSummaries?.insights) {
+      insightSummaries.insights.forEach((insight) => {
+        map.set(insight.corp_id, insight);
+      });
+    }
+    return map;
+  }, [insightSummaries]);
 
   const filteredSignals = useMemo(() => {
     return signals.filter((signal) => {
@@ -182,6 +194,7 @@ export default function SignalInbox() {
               signal={signal}
               index={idx}
               onClick={handleRowClick}
+              loanInsight={insightMap.get(signal.corporationId)}
             />
           ))}
         </GravityGrid>

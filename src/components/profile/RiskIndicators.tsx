@@ -341,9 +341,6 @@ export function RiskIndicators({ profile, industryCode }: RiskIndicatorsProps) {
         <div className="flex items-center gap-2 mb-3">
           <CheckSquare className="w-4 h-4 text-primary" />
           <span className="text-sm font-medium">담당자 체크리스트</span>
-          <span className="text-xs text-muted-foreground">
-            ({checklist.filter(c => c.completed).length}/{checklist.length} 완료)
-          </span>
         </div>
         <div className="space-y-2">
           {checklist.map((item) => (

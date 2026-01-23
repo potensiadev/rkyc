@@ -1,16 +1,25 @@
-import { useState, useRef } from "react";
+import { useState, useRef, lazy, Suspense } from "react";
 import {
   Dialog,
   DialogContent,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { FileDown, Link2, X } from "lucide-react";
-import ReportDocument from "./ReportDocument";
+import { FileDown, Loader2, X } from "lucide-react";
 import ExportSettingsPanel from "./ExportSettingsPanel";
 import PDFExportModal from "./PDFExportModal";
-import ShareLinkModal from "./ShareLinkModal";
 import { useCorporation } from "@/hooks/useApi";
+
+// Lazy load ReportDocument for better initial load
+const ReportDocument = lazy(() => import("./ReportDocument"));
+
+// Fallback component while ReportDocument loads
+const ReportLoadingFallback = () => (
+  <div className="flex flex-col items-center justify-center py-20 space-y-4">
+    <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+    <p className="text-sm text-muted-foreground">보고서 컴포넌트 로딩 중...</p>
+  </div>
+);
 
 interface ReportPreviewModalProps {
   open: boolean;
@@ -42,7 +51,6 @@ const ReportPreviewModal = ({
     disclaimer: true,
   });
   const [showPDFModal, setShowPDFModal] = useState(false);
-  const [showShareModal, setShowShareModal] = useState(false);
 
   const handleSectionChange = (section: keyof typeof sections, checked: boolean) => {
     setSections(prev => ({ ...prev, [section]: checked }));
@@ -51,7 +59,7 @@ const ReportPreviewModal = ({
   return (
     <>
       <Dialog open={open} onOpenChange={onClose}>
-        <DialogContent className="max-w-7xl h-[90vh] p-0 gap-0">
+        <DialogContent className="max-w-7xl h-[90vh] p-0 gap-0" hideCloseButton>
           {/* Top Bar */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-border">
             <div>
@@ -61,15 +69,6 @@ const ReportPreviewModal = ({
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowShareModal(true)}
-                className="gap-2"
-              >
-                <Link2 className="h-4 w-4" />
-                공유 링크 생성
-              </Button>
               <Button
                 size="sm"
                 onClick={() => setShowPDFModal(true)}
@@ -93,12 +92,15 @@ const ReportPreviewModal = ({
             {/* Left: PDF Preview */}
             <div className="flex-1 bg-muted/50 p-8 overflow-auto">
               <div className="max-w-[210mm] mx-auto bg-white shadow-lg rounded-sm">
-                <div className="p-12" ref={reportRef}>
+                {/* p-8 instead of p-12 for better A4 fit, data-report-content for PDF capture */}
+                <div className="p-8" style={{ maxWidth: '680px', margin: '0 auto' }} ref={reportRef} data-report-content>
                   <ScrollArea className="h-full">
-                    <ReportDocument
-                      corporationId={corporationId}
-                      sectionsToShow={sections}
-                    />
+                    <Suspense fallback={<ReportLoadingFallback />}>
+                      <ReportDocument
+                        corporationId={corporationId}
+                        sectionsToShow={sections}
+                      />
+                    </Suspense>
                   </ScrollArea>
                 </div>
               </div>
@@ -123,12 +125,6 @@ const ReportPreviewModal = ({
         onClose={() => setShowPDFModal(false)}
         fileName={fileName}
         contentRef={reportRef}
-      />
-
-      <ShareLinkModal
-        open={showShareModal}
-        onClose={() => setShowShareModal(false)}
-        companyName={companyName}
       />
     </>
   );

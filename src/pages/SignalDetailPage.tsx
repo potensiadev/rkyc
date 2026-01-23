@@ -728,9 +728,12 @@ function RelatedSignalItem({ signal }: { signal: ApiRelatedSignal }) {
       to={`/signals/${signal.signal_id}`}
       className="block p-2 bg-muted/30 rounded text-sm hover:bg-muted transition-colors"
     >
-      <div className="flex items-center justify-between mb-1">
-        <span className="font-medium truncate">{signal.title}</span>
-        <Badge variant={signal.impact_direction === "RISK" ? "destructive" : signal.impact_direction === "OPPORTUNITY" ? "default" : "secondary"} className="text-[10px] py-0">
+      <div className="flex items-center gap-2 mb-1">
+        <span className="font-medium truncate flex-1 min-w-0">{signal.title}</span>
+        <Badge
+          variant={signal.impact_direction === "RISK" ? "destructive" : signal.impact_direction === "OPPORTUNITY" ? "default" : "secondary"}
+          className="text-[10px] py-0 flex-shrink-0 whitespace-nowrap"
+        >
           {signal.impact_direction === "RISK" ? "리스크" : signal.impact_direction === "OPPORTUNITY" ? "기회" : "중립"}
         </Badge>
       </div>
@@ -830,9 +833,12 @@ function SimpleRelatedSignalItem({ signal }: { signal: {
       to={`/signals/${signal.id}`}
       className="block p-2 bg-muted/30 rounded text-sm hover:bg-muted transition-colors"
     >
-      <div className="flex items-center justify-between mb-1">
-        <span className="font-medium truncate">{signal.title}</span>
-        <Badge variant={signal.impact === "risk" ? "destructive" : signal.impact === "opportunity" ? "default" : "secondary"} className="text-[10px] py-0">
+      <div className="flex items-center gap-2 mb-1">
+        <span className="font-medium truncate flex-1 min-w-0">{signal.title}</span>
+        <Badge
+          variant={signal.impact === "risk" ? "destructive" : signal.impact === "opportunity" ? "default" : "secondary"}
+          className="text-[10px] py-0 flex-shrink-0 whitespace-nowrap"
+        >
           {signal.impact === "risk" ? "리스크" : signal.impact === "opportunity" ? "기회" : "중립"}
         </Badge>
       </div>
