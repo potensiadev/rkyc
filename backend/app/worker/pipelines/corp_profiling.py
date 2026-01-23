@@ -319,6 +319,245 @@ class PerplexityResponseParser:
 
 
 # ============================================================================
+# OpenAI Structured Summarization (정보 손실 방지)
+# ============================================================================
+
+STRUCTURED_SUMMARY_SYSTEM_PROMPT = """당신은 금융기관 기업심사 문서를 구조화하는 전문가입니다.
+
+## 핵심 원칙: 정보 손실 방지
+1. **모든 숫자는 반드시 보존**: 금액, 비율, 연도, 인원수 등
+2. **모든 고유명사 보존**: 회사명, 인명, 국가명, 지역명
+3. **출처 URL 보존**: 모든 URL을 그대로 유지
+4. **추측 금지**: 원문에 없는 정보 추가 금지
+
+## 숫자 표기 규칙
+- 금액: 원화 그대로 (예: 3,200억원, 1조 2,000억원)
+- 비율: % 포함 (예: 82%, 45.3%)
+- 연도: YYYY 형식 (예: 2024, 2025)
+- 인원: 명 단위 (예: 850명, 1,200명)
+"""
+
+STRUCTURED_SUMMARY_USER_PROMPT = """다음 검색 결과를 구조화된 형식으로 요약하세요.
+
+## 원본 텍스트
+{raw_content}
+
+## 출처 URL 목록
+{source_urls}
+
+## 출력 형식 (JSON)
+반드시 다음 JSON 형식으로만 응답하세요. 정보가 없으면 null, 빈 배열/객체로 표시:
+
+```json
+{{
+  "numbers": {{
+    "revenue_krw": "원문 그대로 (예: 3,200억원)",
+    "revenue_krw_int": 정수 (예: 320000000000),
+    "export_ratio_pct": 정수 0-100,
+    "founded_year": 정수 YYYY
+  }},
+  "names": {{
+    "ceo_name": "대표이사명",
+    "key_customers": ["고객사1", "고객사2"],
+    "key_suppliers": ["공급사1", "공급사2"],
+    "competitors": ["경쟁사1", "경쟁사2"],
+    "shareholders": [{{"name": "주주명", "ratio_pct": 지분율}}]
+  }},
+  "geography": {{
+    "country_exposure": {{"중국": 45, "미국": 25}},
+    "overseas_operations": ["베트남 하노이 공장", "중국 상해 법인"],
+    "export_countries": ["중국", "미국", "베트남"]
+  }},
+  "supply_chain": {{
+    "key_materials": ["원자재1", "원자재2"],
+    "supplier_countries": {{"국내": 60, "중국": 25, "일본": 15}},
+    "single_source_risk": ["단일 의존 품목"],
+    "material_import_ratio_pct": 정수 0-100
+  }},
+  "narrative": {{
+    "business_summary": "3-5문장 요약. 숫자와 고유명사 포함 필수.",
+    "business_model": "비즈니스 모델 설명",
+    "industry_overview": "산업 현황"
+  }},
+  "sources": {{
+    "urls": ["출처 URL 전체 목록"],
+    "excerpts": {{"필드명": "해당 필드의 근거 문장"}}
+  }}
+}}
+```
+
+JSON만 출력하세요."""
+
+
+def summarize_with_preservation(
+    raw_content: str,
+    source_urls: list[str],
+    llm_service,
+) -> dict:
+    """
+    OpenAI를 사용하여 검색 결과를 구조화하면서 정보 손실을 방지.
+
+    Args:
+        raw_content: Perplexity 검색 원본 텍스트
+        source_urls: 출처 URL 목록
+        llm_service: LLM 서비스 인스턴스
+
+    Returns:
+        구조화된 요약 결과 (numbers, names, geography, supply_chain, narrative, sources)
+    """
+    if not llm_service or not raw_content:
+        return {}
+
+    try:
+        user_prompt = STRUCTURED_SUMMARY_USER_PROMPT.format(
+            raw_content=raw_content[:10000],  # 토큰 제한
+            source_urls="\n".join(source_urls) if source_urls else "없음",
+        )
+
+        messages = [
+            {"role": "system", "content": STRUCTURED_SUMMARY_SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt},
+        ]
+
+        result = llm_service.call_with_json_response(
+            messages=messages,
+            temperature=0.1,
+        )
+
+        logger.info(f"Structured summarization completed: {list(result.keys()) if result else 'empty'}")
+        return result or {}
+
+    except Exception as e:
+        logger.error(f"Structured summarization failed: {e}")
+        return {}
+
+
+def merge_phase_results(
+    phase1: dict,
+    phase2: dict,
+    phase3: dict,
+) -> dict:
+    """
+    3-Phase 검색 결과를 하나의 프로필로 병합.
+
+    우선순위: Phase별 전문 필드 우선
+    - Phase 1: 기본 정보, 재무
+    - Phase 2: 해외 사업
+    - Phase 3: 공급망, 고객, 경쟁사
+
+    Args:
+        phase1: Phase 1 구조화 결과
+        phase2: Phase 2 구조화 결과
+        phase3: Phase 3 구조화 결과
+
+    Returns:
+        병합된 프로필
+    """
+    merged = {
+        "source_urls": [],
+        "raw_content": {},
+        "field_provenance": {},
+    }
+
+    # Phase 1 필드 (기본 정보, 재무)
+    # Note: employee_count, headquarters는 기업개요에서 표시하므로 프로필에서 제외
+    p1_numbers = phase1.get("numbers", {})
+    p1_names = phase1.get("names", {})
+    p1_narrative = phase1.get("narrative", {})
+
+    merged["revenue_krw"] = p1_numbers.get("revenue_krw_int")
+    merged["founded_year"] = p1_numbers.get("founded_year")
+    merged["ceo_name"] = p1_names.get("ceo_name")
+    merged["business_summary"] = p1_narrative.get("business_summary")
+    merged["business_model"] = p1_narrative.get("business_model")
+
+    # Phase 1 financial_history (최근 3개년)
+    if phase1.get("financial_history"):
+        merged["financial_history"] = phase1.get("financial_history")
+
+    # Phase 2 필드 (해외 사업)
+    p2_numbers = phase2.get("numbers", {})
+    p2_geography = phase2.get("geography", {})
+
+    merged["export_ratio_pct"] = p2_numbers.get("export_ratio_pct") or p1_numbers.get("export_ratio_pct")
+    merged["country_exposure"] = p2_geography.get("country_exposure", {})
+    merged["overseas_operations"] = p2_geography.get("overseas_operations", [])
+
+    # overseas_business 구조화
+    if p2_geography.get("overseas_operations"):
+        merged["overseas_business"] = {
+            "subsidiaries": [],
+            "manufacturing_countries": p2_geography.get("export_countries", []),
+        }
+        for op in p2_geography.get("overseas_operations", []):
+            if isinstance(op, str):
+                # "베트남 하노이 공장" 형태 파싱
+                merged["overseas_business"]["subsidiaries"].append({
+                    "name": op,
+                    "country": op.split()[0] if op else "",
+                    "type": "생산" if "공장" in op else "판매",
+                })
+
+    # Phase 3 필드 (공급망, 고객, 경쟁사)
+    p3_names = phase3.get("names", {})
+    p3_supply = phase3.get("supply_chain", {})
+
+    merged["key_materials"] = p3_supply.get("key_materials", [])
+    merged["key_customers"] = p3_names.get("key_customers", [])
+
+    # supply_chain 구조화
+    merged["supply_chain"] = {
+        "key_suppliers": p3_names.get("key_suppliers", []),
+        "supplier_countries": p3_supply.get("supplier_countries", {}),
+        "single_source_risk": normalize_single_source_risk(p3_supply.get("single_source_risk")),
+        "material_import_ratio_pct": p3_supply.get("material_import_ratio_pct"),
+    }
+
+    # shareholders
+    merged["shareholders"] = p3_names.get("shareholders", [])
+
+    # competitors
+    competitors_raw = p3_names.get("competitors", [])
+    merged["competitors"] = [
+        {"name": c, "description": ""} if isinstance(c, str) else c
+        for c in competitors_raw
+    ]
+
+    # macro_factors (Phase 3에서 추출)
+    if phase3.get("macro_factors"):
+        merged["macro_factors"] = phase3.get("macro_factors")
+
+    # 출처 URL 병합 (중복 제거)
+    all_urls = []
+    for phase in [phase1, phase2, phase3]:
+        sources = phase.get("sources", {})
+        all_urls.extend(sources.get("urls", []))
+    merged["source_urls"] = list(set(all_urls))
+
+    # Provenance 병합
+    for phase_name, phase_data in [("phase1", phase1), ("phase2", phase2), ("phase3", phase3)]:
+        excerpts = phase_data.get("sources", {}).get("excerpts", {})
+        for field, excerpt in excerpts.items():
+            if excerpt and field not in merged["field_provenance"]:
+                merged["field_provenance"][field] = {
+                    "source_url": None,
+                    "excerpt": excerpt[:200] if excerpt else None,
+                    "confidence": "MED",
+                    "phase": phase_name,
+                }
+
+    # Raw content 보관
+    merged["raw_content"] = {
+        "phase1": phase1.get("narrative", {}).get("business_summary", ""),
+        "phase2": str(phase2.get("geography", {})),
+        "phase3": str(phase3.get("supply_chain", {})),
+    }
+
+    logger.info(f"Merged 3-phase results: {len(merged['source_urls'])} URLs, fields={list(merged.keys())}")
+    return merged
+
+
+# ============================================================================
 # Layer 2: Extraction Guardrails - Prompts
 # ============================================================================
 
@@ -1066,9 +1305,137 @@ async def get_industry_hints(industry_code: str, llm_service=None) -> dict:
         }
 
 
+# ============================================================================
+# 3-Phase Query Builder (Option B)
+# ============================================================================
+
+
+def build_phase1_query(corp_name: str, industry_name: str) -> str:
+    """
+    Phase 1: 기본 정보 + 재무 + 사업 개요
+
+    추출 대상: revenue_krw, ceo_name, business_summary, founded_year,
+              executives, business_model
+    Note: employee_count, headquarters는 기업개요에서 표시하므로 프로필에서 제외
+    """
+    return f"""{corp_name} 기업 기본 정보 (한국 기업, 2026년 기준):
+
+다음 정보를 정확한 수치와 함께 찾아주세요:
+
+1. **기본 정보**
+   - 대표이사 성명
+   - 설립연도 (YYYY)
+   - 주요 경영진 (CFO, COO 등)
+
+2. **재무 정보** (가장 최근 연도 기준)
+   - 연간 매출액 (원화, 정확한 숫자)
+   - 영업이익 (원화)
+   - 순이익 (원화)
+   - 최근 3개년 매출 추이
+
+3. **사업 개요**
+   - 주요 사업 내용 및 제품/서비스
+   - 비즈니스 모델 (B2B/B2C, 수익 구조)
+   - 산업 내 포지션 (시장점유율, 순위)
+   - 핵심 경쟁력
+
+공식 출처(DART 공시, 사업보고서, 기업 IR, 금감원)에서 검색해주세요.
+출처 URL을 반드시 포함해주세요."""
+
+
+def build_phase2_query(corp_name: str, industry_name: str, industry_hints: dict = None) -> str:
+    """
+    Phase 2: 해외 사업 + 국가별 노출
+
+    추출 대상: export_ratio_pct, country_exposure, overseas_operations,
+              overseas_business
+    """
+    markets_hint = ""
+    if industry_hints:
+        markets = industry_hints.get("export_markets", [])[:5]
+        if markets:
+            markets_hint = f"\n(참고: {industry_name} 업종 주요 수출국: {', '.join(markets)})"
+
+    return f"""{corp_name} 해외 사업 현황 (한국 기업, 2026년 기준):
+
+다음 정보를 정확한 수치와 함께 찾아주세요:
+
+1. **수출 현황**
+   - 수출 비중 (전체 매출 대비 %)
+   - 내수 vs 수출 비율
+
+2. **국가별 매출 비중** (구체적 수치 필수){markets_hint}
+   - 중국: X%
+   - 미국: X%
+   - 베트남: X%
+   - 일본: X%
+   - 유럽: X%
+   - 기타: X%
+
+3. **해외 법인/공장**
+   - 해외 법인명 및 소재 국가
+   - 해외 생산 공장 위치
+   - 법인 유형 (생산/판매/R&D)
+
+4. **해외 사업 전략**
+   - 주요 수출 제품
+   - 해외 시장 확대 계획
+
+공식 출처(DART 공시, 사업보고서, IR 자료, 언론 보도)에서 검색해주세요.
+출처 URL을 반드시 포함해주세요."""
+
+
+def build_phase3_query(corp_name: str, industry_name: str, industry_hints: dict = None) -> str:
+    """
+    Phase 3: 공급망 + 고객 + 경쟁사 + 주주
+
+    추출 대상: supply_chain, key_materials, key_customers, key_suppliers,
+              competitors, shareholders, macro_factors
+    """
+    materials_hint = ""
+    if industry_hints:
+        materials = industry_hints.get("typical_materials", [])[:5]
+        suppliers = industry_hints.get("typical_suppliers", [])[:3]
+        if materials:
+            materials_hint = f"\n(참고: {industry_name} 업종 주요 원자재: {', '.join(materials)})"
+
+    return f"""{corp_name} 공급망 및 이해관계자 (한국 기업, 2026년 기준):
+
+다음 정보를 정확한 수치와 함께 찾아주세요:
+
+1. **공급망 정보** (가장 중요!){materials_hint}
+   - 주요 공급사 회사명 (구체적 회사명)
+   - 공급사 국가별 비중 (국내 vs 해외)
+   - 주요 원자재/부품 목록
+   - 원자재 수입 비율 (%)
+   - 단일 조달처 위험 품목 (특정 공급사 의존 품목)
+
+2. **고객 정보**
+   - 주요 고객사 (B2B인 경우 회사명)
+   - 매출 비중 상위 고객
+
+3. **경쟁 환경**
+   - 주요 경쟁사 (국내/해외)
+   - 경쟁 영역 및 차별점
+   - 시장점유율 비교
+
+4. **주주 정보**
+   - 최대주주 및 지분율 (%)
+   - 주요 주주 명단 및 지분율
+
+5. **거시 요인**
+   - 이 기업에 영향을 미치는 정책/규제
+   - 산업 트렌드 영향 (긍정/부정)
+
+공식 출처(DART 공시, 사업보고서, 애널리스트 리포트)에서 검색해주세요.
+출처 URL을 반드시 포함해주세요."""
+
+
 def build_perplexity_query(corp_name: str, industry_name: str, industry_hints: dict = None) -> str:
     """
     Build comprehensive Perplexity search query for PRD v1.2.
+
+    DEPRECATED: Use build_phase1/2/3_query instead for better results.
 
     Args:
         corp_name: 기업명
@@ -1392,7 +1759,122 @@ class CorpProfilingPipeline:
         industry_name: str,
         api_key: Optional[str],
     ) -> dict:
-        """Sync wrapper for Perplexity search (for orchestrator injection)."""
+        """
+        Sync wrapper for Perplexity search using 3-Phase strategy.
+
+        Option B: 쿼리 분할 (3-Phase)
+        - Phase 1: 기본 정보 + 재무
+        - Phase 2: 해외 사업
+        - Phase 3: 공급망 + 고객 + 경쟁사
+        """
+        import httpx
+        import concurrent.futures
+
+        api_key = api_key or getattr(settings, "PERPLEXITY_API_KEY", None)
+        if not api_key:
+            logger.warning("Perplexity API key not configured")
+            return {}
+
+        industry_hints = getattr(self, '_industry_hints', None)
+
+        # Build 3-Phase queries
+        queries = {
+            "phase1": build_phase1_query(corp_name, industry_name),
+            "phase2": build_phase2_query(corp_name, industry_name, industry_hints),
+            "phase3": build_phase3_query(corp_name, industry_name, industry_hints),
+        }
+
+        def execute_single_query(phase_name: str, query: str) -> tuple[str, dict]:
+            """Execute a single Perplexity query."""
+            try:
+                with httpx.Client(timeout=45.0) as client:
+                    response = client.post(
+                        "https://api.perplexity.ai/chat/completions",
+                        headers={
+                            "Authorization": f"Bearer {api_key}",
+                            "Content-Type": "application/json",
+                        },
+                        json={
+                            "model": "sonar-pro",
+                            "messages": [
+                                {
+                                    "role": "system",
+                                    "content": "금융기관 기업심사 전문가입니다. 정확한 수치와 출처를 포함하여 답변합니다.",
+                                },
+                                {"role": "user", "content": query},
+                            ],
+                            "temperature": 0.1,
+                            "max_tokens": 2500,
+                        },
+                    )
+                    response.raise_for_status()
+                    raw_response = response.json()
+                    parsed = self.parser.parse_response(raw_response)
+                    logger.info(f"{phase_name} search completed: {len(parsed.get('content', ''))} chars")
+                    return phase_name, parsed
+            except Exception as e:
+                logger.error(f"{phase_name} search failed: {e}")
+                return phase_name, {"content": "", "citations": [], "error": str(e)}
+
+        # Execute 3 phases in parallel
+        logger.info(f"Starting 3-Phase Perplexity search for {corp_name}")
+        phase_results = {}
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+            futures = {
+                executor.submit(execute_single_query, phase, query): phase
+                for phase, query in queries.items()
+            }
+
+            for future in concurrent.futures.as_completed(futures):
+                phase_name, result = future.result()
+                phase_results[phase_name] = result
+
+        # Summarize each phase with OpenAI (structured preservation)
+        summarized = {}
+        for phase_name in ["phase1", "phase2", "phase3"]:
+            parsed = phase_results.get(phase_name, {})
+            content = parsed.get("content", "")
+            citations = parsed.get("citations", [])
+
+            if content and self._llm_service:
+                try:
+                    summary = summarize_with_preservation(content, citations, self._llm_service)
+                    summarized[phase_name] = summary
+                    logger.info(f"{phase_name} summarization completed")
+                except Exception as e:
+                    logger.warning(f"{phase_name} summarization failed: {e}")
+                    summarized[phase_name] = {"narrative": {"business_summary": content[:500]}}
+            else:
+                summarized[phase_name] = {"narrative": {"business_summary": content[:500] if content else ""}}
+
+        # Merge 3-phase results
+        merged_profile = merge_phase_results(
+            summarized.get("phase1", {}),
+            summarized.get("phase2", {}),
+            summarized.get("phase3", {}),
+        )
+
+        # Add raw search results for audit
+        merged_profile["raw_search_result"] = {
+            "phase1_content": phase_results.get("phase1", {}).get("content", "")[:2000],
+            "phase2_content": phase_results.get("phase2", {}).get("content", "")[:2000],
+            "phase3_content": phase_results.get("phase3", {}).get("content", "")[:2000],
+        }
+
+        logger.info(f"3-Phase search completed for {corp_name}: {len(merged_profile.get('source_urls', []))} sources")
+        return merged_profile
+
+    def _sync_perplexity_search_legacy(
+        self,
+        corp_name: str,
+        industry_name: str,
+        api_key: Optional[str],
+    ) -> dict:
+        """
+        Legacy single-query Perplexity search.
+        DEPRECATED: Use _sync_perplexity_search (3-Phase) instead.
+        """
         import httpx
 
         api_key = api_key or getattr(settings, "PERPLEXITY_API_KEY", None)

@@ -11,7 +11,11 @@ from datetime import datetime
 
 from app.core.database import get_db
 from app.models.signal import Signal, Evidence, SignalIndex
-from app.schemas.report import FullReportResponse, CorporationInfo, ReportSignalSummary, LoanInsightResponse, LoanInsightStance
+from app.schemas.report import (
+    FullReportResponse, CorporationInfo, ReportSignalSummary,
+    LoanInsightResponse, LoanInsightStance,
+    ReportCorpProfile, ReportSupplyChain, ReportOverseasBusiness
+)
 from app.schemas.signal import SignalDetailResponse, EvidenceResponse, SignalStatusEnum
 
 router = APIRouter()
@@ -168,15 +172,19 @@ async def get_corporation_report(
     # 6. Fetch Pre-generated Loan Insight from DB (NO LLM call)
     loan_insight = await _fetch_loan_insight_from_db(db, corp_id)
 
-    # 7. Limit flattened evidences to top 10 for report summary
+    # 7. Fetch Corp Profile (공급망, 해외사업, 거시요인 등)
+    corp_profile = await _fetch_corp_profile_from_db(db, corp_id)
+
+    # 8. Limit flattened evidences to top 10 for report summary
     flattened_evidences = flattened_evidences[:10]
 
     return FullReportResponse(
         corporation=corp_info,
         summary_stats=ReportSignalSummary(**summary_stats),
         signals=signals_response,
-        evidence_list=flattened_evidences, # This now contains actual objects
+        evidence_list=flattened_evidences,
         loan_insight=loan_insight,
+        corp_profile=corp_profile,
         generated_at=datetime.now()
     )
 
@@ -225,4 +233,95 @@ async def _fetch_loan_insight_from_db(
         key_risks=row.key_risks or [],
         mitigating_factors=row.mitigating_factors or [],
         action_items=row.action_items or [],
+    )
+
+
+async def _fetch_corp_profile_from_db(
+    db: AsyncSession,
+    corp_id: str,
+) -> Optional[ReportCorpProfile]:
+    """
+    Fetch Corp Profile from DB for report.
+    Returns None if not found.
+    """
+    result = await db.execute(
+        text("""
+            SELECT
+                business_summary, revenue_krw, export_ratio_pct,
+                country_exposure, key_materials, key_customers,
+                supply_chain, overseas_business,
+                competitors, macro_factors, shareholders,
+                profile_confidence
+            FROM rkyc_corp_profile
+            WHERE corp_id = :corp_id
+        """),
+        {"corp_id": corp_id},
+    )
+    row = result.fetchone()
+
+    if not row:
+        return None
+
+    # Parse supply_chain JSONB
+    supply_chain = None
+    if row.supply_chain:
+        sc = row.supply_chain
+        supply_chain = ReportSupplyChain(
+            key_suppliers=sc.get("key_suppliers", []) if sc else [],
+            supplier_countries=sc.get("supplier_countries", {}) if sc else {},
+            single_source_risk=sc.get("single_source_risk", []) if sc else [],
+            material_import_ratio_pct=sc.get("material_import_ratio_pct") if sc else None,
+        )
+
+    # Parse overseas_business JSONB
+    overseas_business = None
+    if row.overseas_business:
+        ob = row.overseas_business
+        overseas_business = ReportOverseasBusiness(
+            subsidiaries=ob.get("subsidiaries", []) if ob else [],
+            manufacturing_countries=ob.get("manufacturing_countries", []) if ob else [],
+        )
+
+    # Parse competitors (may be list of strings or list of dicts)
+    competitors = []
+    if row.competitors:
+        for c in row.competitors:
+            if isinstance(c, str):
+                competitors.append(c)
+            elif isinstance(c, dict):
+                competitors.append(c.get("name", str(c)))
+
+    # Parse macro_factors
+    macro_factors = []
+    if row.macro_factors:
+        for mf in row.macro_factors:
+            if isinstance(mf, dict):
+                macro_factors.append({
+                    "factor": mf.get("factor", ""),
+                    "impact": mf.get("impact", "NEUTRAL"),
+                })
+
+    # Parse shareholders
+    shareholders = []
+    if row.shareholders:
+        for sh in row.shareholders:
+            if isinstance(sh, dict):
+                shareholders.append({
+                    "name": sh.get("name", ""),
+                    "ownership_pct": sh.get("ownership_pct", 0),
+                })
+
+    return ReportCorpProfile(
+        business_summary=row.business_summary,
+        revenue_krw=row.revenue_krw,
+        export_ratio_pct=row.export_ratio_pct,
+        country_exposure=row.country_exposure or [],
+        key_materials=row.key_materials or [],
+        key_customers=row.key_customers or [],
+        supply_chain=supply_chain,
+        overseas_business=overseas_business,
+        competitors=competitors,
+        macro_factors=macro_factors,
+        shareholders=shareholders,
+        profile_confidence=row.profile_confidence,
     )

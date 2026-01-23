@@ -677,6 +677,34 @@ export async function triggerImmediateScan(): Promise<SchedulerTriggerResponse> 
 }
 
 
+// Report Corp Profile (공급망, 해외사업, 거시요인)
+export interface ApiReportSupplyChain {
+  key_suppliers: string[];
+  supplier_countries: Record<string, number>;
+  single_source_risk: string[];
+  material_import_ratio_pct: number | null;
+}
+
+export interface ApiReportOverseasBusiness {
+  subsidiaries: { name: string; country: string }[];
+  manufacturing_countries: string[];
+}
+
+export interface ApiReportCorpProfile {
+  business_summary: string | null;
+  revenue_krw: number | null;
+  export_ratio_pct: number | null;
+  country_exposure: string[];
+  key_materials: string[];
+  key_customers: string[];
+  supply_chain: ApiReportSupplyChain | null;
+  overseas_business: ApiReportOverseasBusiness | null;
+  competitors: string[];
+  macro_factors: { factor: string; impact: string }[];
+  shareholders: { name: string; ownership_pct: number }[];
+  profile_confidence: string | null;
+}
+
 export interface ApiReportResponse {
   corporation: {
     id: string;
@@ -712,6 +740,7 @@ export interface ApiReportResponse {
     action_items: string[];
     generated_at: string;
   } | null;
+  corp_profile: ApiReportCorpProfile | null;  // NEW: 공급망, 해외사업 등
   snapshot_data: Record<string, unknown> | null;
   generated_at: string;
 }
