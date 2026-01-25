@@ -5,20 +5,45 @@ PRD v1.2 결정 사항:
 - Gemini는 검색 불가 (검색 → 검증/보완 역할로 변경)
 - Perplexity 결과 검증 + 생성형 보완 (GEMINI_INFERRED)
 - 교차 검증을 통한 신뢰도 향상
+
+P0-4 Fix: 예외 타입별 분기 처리로 변경
+- JSON 파싱 오류, API 오류, 네트워크 오류 구분
+- 재시도 불가능한 오류는 propagate
 """
 
 import json
 import logging
+import time
 from typing import Optional
 from datetime import datetime
 
 import litellm
 from litellm import completion
+from litellm.exceptions import (
+    AuthenticationError,
+    RateLimitError,
+    APIError,
+    Timeout,
+    ServiceUnavailableError,
+)
 
 from app.core.config import settings
 from app.worker.llm.exceptions import AllProvidersFailedError
+from app.worker.pipelines.corp_profiling import sanitize_input_for_prompt
 
 logger = logging.getLogger(__name__)
+
+
+# P0-4: 에러 타입 상수
+class GeminiErrorType:
+    """Gemini 에러 분류"""
+    JSON_PARSE = "json_parse_error"
+    AUTH = "auth_error"
+    RATE_LIMIT = "rate_limited"
+    TIMEOUT = "timeout"
+    SERVICE_UNAVAILABLE = "service_unavailable"
+    API_ERROR = "api_error"
+    UNKNOWN = "unknown_error"
 
 
 class GeminiAdapter:
@@ -82,6 +107,10 @@ class GeminiAdapter:
                 - enriched_fields: 보완된 필드 (source: GEMINI_INFERRED)
                 - discrepancies: 불일치 필드 목록
         """
+        # P1-8 Fix: Prompt Injection 방어
+        corp_name = sanitize_input_for_prompt(corp_name, "corp_name")
+        industry_name = sanitize_input_for_prompt(industry_name, "industry_name")
+
         system_prompt = self._build_validation_prompt()
         user_prompt = self._build_user_prompt(perplexity_result, corp_name, industry_name)
 
@@ -90,47 +119,141 @@ class GeminiAdapter:
             {"role": "user", "content": user_prompt},
         ]
 
-        try:
-            response = completion(
-                model=self.MODEL,
-                messages=messages,
-                temperature=1.0,  # Gemini 3 requires temperature=1.0 to avoid infinite loops
-                max_tokens=2048,
-                response_format={"type": "json_object"},
-            )
+        # P2-5: 재시도 로직 구현
+        last_error = None
+        for attempt in range(self.MAX_RETRIES + 1):
+            try:
+                response = completion(
+                    model=self.MODEL,
+                    messages=messages,
+                    temperature=1.0,  # Gemini 3 requires temperature=1.0 to avoid infinite loops
+                    max_tokens=2048,
+                    response_format={"type": "json_object"},
+                )
 
-            content = response.choices[0].message.content
-            result = json.loads(content)
+                content = response.choices[0].message.content
+                result = json.loads(content)
 
-            # 모든 enriched 필드에 source 표시
-            if "enriched_fields" in result:
-                for field_name, field_data in result["enriched_fields"].items():
-                    if isinstance(field_data, dict):
-                        field_data["source"] = "GEMINI_INFERRED"
-                    else:
-                        result["enriched_fields"][field_name] = {
-                            "value": field_data,
-                            "source": "GEMINI_INFERRED",
-                            "confidence": "LOW",  # 생성형 보완은 기본 LOW
-                        }
+                # 모든 enriched 필드에 source 표시
+                if "enriched_fields" in result:
+                    for field_name, field_data in result["enriched_fields"].items():
+                        if isinstance(field_data, dict):
+                            field_data["source"] = "GEMINI_INFERRED"
+                        else:
+                            result["enriched_fields"][field_name] = {
+                                "value": field_data,
+                                "source": "GEMINI_INFERRED",
+                                "confidence": "LOW",  # 생성형 보완은 기본 LOW
+                            }
 
-            logger.info(
-                f"[Gemini] Validation complete: "
-                f"validated={len(result.get('validated_fields', []))}, "
-                f"enriched={len(result.get('enriched_fields', {}))}, "
-                f"discrepancies={len(result.get('discrepancies', []))}"
-            )
+                logger.info(
+                    f"[Gemini] Validation complete (attempt {attempt + 1}): "
+                    f"validated={len(result.get('validated_fields', []))}, "
+                    f"enriched={len(result.get('enriched_fields', {}))}, "
+                    f"discrepancies={len(result.get('discrepancies', []))}"
+                )
 
-            return result
+                return result
 
-        except Exception as e:
-            logger.error(f"[Gemini] Validation failed: {e}")
-            return {
-                "validated_fields": [],
-                "enriched_fields": {},
-                "discrepancies": [],
-                "error": str(e),
-            }
+            # P0-4 Fix: 예외 타입별 분기 처리
+            except json.JSONDecodeError as e:
+                logger.warning(f"[Gemini] JSON parse failed (attempt {attempt + 1}): {e}")
+                last_error = e
+                if attempt < self.MAX_RETRIES:
+                    time.sleep(1 * (attempt + 1))  # 지수 백오프
+                    continue
+                return {
+                    "validated_fields": [],
+                    "enriched_fields": {},
+                    "discrepancies": [],
+                    "error": str(e),
+                    "error_type": GeminiErrorType.JSON_PARSE,
+                    "retryable": False,  # 모든 재시도 소진
+                    "attempts": attempt + 1,
+                }
+            except AuthenticationError as e:
+                # 인증 오류는 재시도 불가 → propagate하여 Circuit Breaker가 처리
+                logger.error(f"[Gemini] Authentication failed: {e}")
+                raise  # 재시도 불가능한 오류는 상위로 전파
+            except RateLimitError as e:
+                retry_after = getattr(e, "retry_after", 60)
+                logger.warning(f"[Gemini] Rate limited (attempt {attempt + 1}), retry after {retry_after}s")
+                last_error = e
+                if attempt < self.MAX_RETRIES:
+                    time.sleep(min(retry_after, 30))  # 최대 30초 대기
+                    continue
+                return {
+                    "validated_fields": [],
+                    "enriched_fields": {},
+                    "discrepancies": [],
+                    "error": str(e),
+                    "error_type": GeminiErrorType.RATE_LIMIT,
+                    "retryable": False,
+                    "attempts": attempt + 1,
+                }
+            except Timeout as e:
+                logger.warning(f"[Gemini] Request timeout (attempt {attempt + 1})")
+                last_error = e
+                if attempt < self.MAX_RETRIES:
+                    time.sleep(2 * (attempt + 1))
+                    continue
+                return {
+                    "validated_fields": [],
+                    "enriched_fields": {},
+                    "discrepancies": [],
+                    "error": str(e),
+                    "error_type": GeminiErrorType.TIMEOUT,
+                    "retryable": False,
+                    "attempts": attempt + 1,
+                }
+            except ServiceUnavailableError as e:
+                logger.warning(f"[Gemini] Service unavailable (attempt {attempt + 1})")
+                last_error = e
+                if attempt < self.MAX_RETRIES:
+                    time.sleep(5 * (attempt + 1))
+                    continue
+                return {
+                    "validated_fields": [],
+                    "enriched_fields": {},
+                    "discrepancies": [],
+                    "error": str(e),
+                    "error_type": GeminiErrorType.SERVICE_UNAVAILABLE,
+                    "retryable": False,
+                    "attempts": attempt + 1,
+                }
+            except APIError as e:
+                logger.error(f"[Gemini] API error: {e}")
+                return {
+                    "validated_fields": [],
+                    "enriched_fields": {},
+                    "discrepancies": [],
+                    "error": str(e),
+                    "error_type": GeminiErrorType.API_ERROR,
+                    "retryable": False,
+                }
+            except (KeyboardInterrupt, SystemExit):
+                # P0-4: 시스템 종료 시그널은 반드시 전파
+                raise
+            except Exception as e:
+                logger.error(f"[Gemini] Unexpected error: {type(e).__name__}: {e}")
+                return {
+                    "validated_fields": [],
+                    "enriched_fields": {},
+                    "discrepancies": [],
+                    "error": str(e),
+                    "error_type": GeminiErrorType.UNKNOWN,
+                    "retryable": False,
+                }
+
+        # 모든 재시도 실패 (도달하지 않는 코드이지만 안전장치)
+        return {
+            "validated_fields": [],
+            "enriched_fields": {},
+            "discrepancies": [],
+            "error": str(last_error) if last_error else "Unknown error after retries",
+            "error_type": GeminiErrorType.UNKNOWN,
+            "retryable": False,
+        }
 
     def enrich_missing_fields(
         self,
@@ -149,6 +272,10 @@ class GeminiAdapter:
         Returns:
             dict: 보완된 필드 (source: GEMINI_INFERRED)
         """
+        # P1-8 Fix: Prompt Injection 방어
+        corp_name = sanitize_input_for_prompt(corp_name, "corp_name")
+        industry_name = sanitize_input_for_prompt(industry_name, "industry_name")
+
         # null인 필드 식별
         null_fields = [
             key for key, value in profile.items()
@@ -222,8 +349,23 @@ null 필드만 포함하세요. 기존 값이 있는 필드는 수정하지 마�
 
             return enriched
 
+        # P0-4 Fix: 예외 타입별 분기 처리
+        except json.JSONDecodeError as e:
+            logger.warning(f"[Gemini] Enrichment JSON parse failed: {e}")
+            return {}
+        except AuthenticationError as e:
+            logger.error(f"[Gemini] Enrichment auth failed: {e}")
+            raise  # 재시도 불가능
+        except RateLimitError as e:
+            logger.warning(f"[Gemini] Enrichment rate limited: {e}")
+            return {}
+        except (Timeout, ServiceUnavailableError) as e:
+            logger.warning(f"[Gemini] Enrichment service error: {e}")
+            return {}
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception as e:
-            logger.error(f"[Gemini] Enrichment failed: {e}")
+            logger.error(f"[Gemini] Enrichment unexpected error: {type(e).__name__}: {e}")
             return {}
 
     def _build_validation_prompt(self) -> str:

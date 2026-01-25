@@ -305,13 +305,27 @@ class CircuitBreaker:
                 },
             )
 
-    def reset(self):
-        """수동 리셋"""
+    def reset(self, reset_metrics: bool = True):
+        """수동 리셋
+
+        Args:
+            reset_metrics: True면 메트릭도 함께 리셋 (P2-4)
+        """
         with self._lock:
             self._transition_to_closed()
             self.failure_count = 0
+            self.success_count = 0
+            self.last_failure_at = None
+            self.last_success_at = None
+
+            # P2-4: 메트릭 리셋 옵션
+            if reset_metrics:
+                self.metrics = CircuitMetrics()
+                logger.info(f"[CircuitBreaker:{self.provider}] Manually reset to CLOSED (metrics cleared)")
+            else:
+                logger.info(f"[CircuitBreaker:{self.provider}] Manually reset to CLOSED (metrics preserved)")
+
             self._save_to_redis()
-            logger.info(f"[CircuitBreaker:{self.provider}] Manually reset to CLOSED")
 
     def _check_state_transition(self):
         """상태 전이 확인 (lock 내부에서 호출)"""

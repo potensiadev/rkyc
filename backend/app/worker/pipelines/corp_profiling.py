@@ -25,12 +25,16 @@ Pipeline Flow:
 7. Conditional query selection
 """
 
+import asyncio
 import logging
 import hashlib
 import json
 import re
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, UTC
+from enum import Enum
 from typing import Any, Optional
 from uuid import UUID, uuid4
 
@@ -51,12 +55,23 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 
+def _json_serializer(obj: Any) -> str:
+    """P1-6 Fix: JSON 직렬화 커스텀 핸들러"""
+    if isinstance(obj, UUID):
+        return str(obj)
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    if hasattr(obj, '__dict__'):
+        return obj.__dict__
+    return str(obj)
+
+
 def safe_json_dumps(value: Any) -> str:
     """
-    JSON 직렬화 (이중 직렬화 방지) - P0-3 Fix
+    JSON 직렬화 (이중 직렬화 방지) - P0-3 Fix, P1-6 타입별 처리 개선
 
     Args:
-        value: dict, list, str, or None
+        value: dict, list, str, UUID, datetime, or None
 
     Returns:
         JSON string (이미 JSON 문자열이면 그대로 반환)
@@ -70,30 +85,96 @@ def safe_json_dumps(value: Any) -> str:
             return value  # 유효한 JSON 문자열이면 그대로 반환
         except (json.JSONDecodeError, ValueError):
             # JSON이 아니면 문자열을 JSON으로 직렬화
-            return json.dumps(value, ensure_ascii=False, default=str)
-    return json.dumps(value, ensure_ascii=False, default=str)
+            return json.dumps(value, ensure_ascii=False, default=_json_serializer)
+    return json.dumps(value, ensure_ascii=False, default=_json_serializer)
 
 
-def parse_datetime_safely(dt_string: str | None) -> datetime | None:
+# P1-8 Fix: Prompt Injection 방어를 위한 금지 패턴
+_PROMPT_INJECTION_PATTERNS = [
+    r"ignore\s+(?:the\s+)?(?:above|previous)\s+instructions?",
+    r"disregard\s+(?:the\s+)?(?:above|previous)",
+    r"forget\s+(?:everything|all)",
+    r"you\s+are\s+now\s+a",
+    r"new\s+instructions?:",
+    r"system\s*:",
+    r"</?(?:system|user|assistant)>",
+    r"\[/?(?:INST|SYS)\]",
+    r"```\s*(?:python|javascript|bash|sh)\s*\n",  # 코드 블록 시작
+    r"\\n\\n---\\n\\n",  # 구분자 주입
+]
+
+
+def sanitize_input_for_prompt(text: str, field_name: str = "input") -> str:
+    """
+    P1-8 Fix: LLM 프롬프트에 사용되는 사용자 입력을 안전하게 처리
+
+    Args:
+        text: 사용자 입력 (기업명, 업종명 등)
+        field_name: 필드명 (로깅용)
+
+    Returns:
+        Sanitized text (위험 패턴 제거)
+
+    Raises:
+        ValueError: 입력이 너무 길거나 의심스러운 패턴 포함 시
+    """
+    if not text:
+        return ""
+
+    # 1. 길이 제한 (기업명/업종명은 100자면 충분)
+    if len(text) > 100:
+        logger.warning(f"[PromptSanitizer] {field_name} too long ({len(text)}), truncating")
+        text = text[:100]
+
+    # 2. 위험 패턴 탐지
+    import re
+    for pattern in _PROMPT_INJECTION_PATTERNS:
+        if re.search(pattern, text, re.IGNORECASE):
+            logger.error(f"[PromptSanitizer] Prompt injection detected in {field_name}: {text[:50]}...")
+            raise ValueError(f"Suspicious input detected in {field_name}")
+
+    # 3. 특수문자 정규화 (제어문자 제거, 줄바꿈 → 공백)
+    text = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", text)  # 제어문자 제거
+    text = re.sub(r"\s+", " ", text).strip()  # 연속 공백/줄바꿈 정규화
+
+    return text
+
+
+def parse_datetime_safely(dt_string: str | datetime | None) -> datetime | None:
     """
     datetime 파싱 ("Z" suffix 지원) - P1-3 Fix
 
     Python 3.10 이하에서는 fromisoformat()이 "Z" suffix를 지원하지 않음.
+    이 함수를 사용하여 다양한 형식의 datetime 문자열을 안전하게 파싱.
 
     Args:
         dt_string: ISO format datetime string (e.g., "2026-01-21T12:00:00Z")
+                  또는 이미 datetime 객체
 
     Returns:
         datetime object or None
+
+    Usage:
+        # 외부 API 응답 파싱
+        fetched_at = parse_datetime_safely(response.get("fetched_at"))
+
+        # 캐시 데이터 파싱
+        expires_at = parse_datetime_safely(cached_profile.get("expires_at"))
     """
     if not dt_string:
         return None
+
+    # 이미 datetime 객체면 그대로 반환
+    if isinstance(dt_string, datetime):
+        return dt_string
+
     try:
         # "Z"를 "+00:00"으로 치환 (Python 3.10 호환)
         if isinstance(dt_string, str) and dt_string.endswith("Z"):
             dt_string = dt_string[:-1] + "+00:00"
         return datetime.fromisoformat(dt_string)
-    except (ValueError, TypeError):
+    except (ValueError, TypeError) as e:
+        logger.warning(f"[parse_datetime_safely] Failed to parse '{dt_string}': {e}")
         return None
 
 
@@ -181,6 +262,24 @@ PROMPT_VERSION = "v1.0"
 # ============================================================================
 
 
+# P2-6: Validation Severity 레벨
+class ValidationSeverity(str, Enum):
+    """Validation 결과의 심각도 레벨"""
+    CRITICAL = "CRITICAL"  # 검증 실패, 프로필 사용 불가
+    ERROR = "ERROR"        # 오류 있음, 일부 필드 수정됨
+    WARNING = "WARNING"    # 경고, 검토 권고
+
+
+@dataclass
+class ValidationIssue:
+    """P2-6: 개별 검증 이슈"""
+    severity: ValidationSeverity
+    field: str
+    message: str
+    original_value: Any = None
+    corrected_value: Any = None
+
+
 @dataclass
 class FieldProvenance:
     """Track source of each extracted field."""
@@ -202,11 +301,45 @@ class FieldProvenance:
 
 @dataclass
 class ValidationResult:
-    """Profile validation result."""
+    """Profile validation result (P2-6: severity 레벨 추가)."""
     is_valid: bool
     errors: list[str]
     warnings: list[str]
     corrected_profile: Optional[dict] = None
+    issues: list[ValidationIssue] = field(default_factory=list)  # P2-6
+
+    @property
+    def max_severity(self) -> Optional[ValidationSeverity]:
+        """가장 높은 심각도 레벨 반환"""
+        if not self.issues:
+            return None
+        severities = [i.severity for i in self.issues]
+        if ValidationSeverity.CRITICAL in severities:
+            return ValidationSeverity.CRITICAL
+        if ValidationSeverity.ERROR in severities:
+            return ValidationSeverity.ERROR
+        if ValidationSeverity.WARNING in severities:
+            return ValidationSeverity.WARNING
+        return None
+
+    def to_dict(self) -> dict:
+        """직렬화"""
+        return {
+            "is_valid": self.is_valid,
+            "errors": self.errors,
+            "warnings": self.warnings,
+            "max_severity": self.max_severity.value if self.max_severity else None,
+            "issues": [
+                {
+                    "severity": i.severity.value,
+                    "field": i.field,
+                    "message": i.message,
+                    "original_value": i.original_value,
+                    "corrected_value": i.corrected_value,
+                }
+                for i in self.issues
+            ],
+        }
 
 
 @dataclass
@@ -244,23 +377,47 @@ class PerplexityResponseParser:
             raw_response: Raw Perplexity API response
             exclude_blogs: If True, filter out blog/community URLs from citations
         """
+        # P2-1 Fix: 안전한 기본값 초기화
         content = ""
         citations = []
+        filtered_count = 0
 
-        if "choices" in raw_response:
-            choices = raw_response.get("choices", [])
-            if choices:
-                content = choices[0].get("message", {}).get("content", "")
+        # P2-1 Fix: raw_response가 None이거나 dict가 아닌 경우 처리
+        if not isinstance(raw_response, dict):
+            logger.warning(f"[PerplexityParser] Invalid response type: {type(raw_response)}")
+            return {
+                "content": "",
+                "citations": [],
+                "filtered_blog_count": 0,
+                "source_quality": "LOW",
+                "raw_response": raw_response,
+                "parse_error": "Invalid response format",
+            }
+
+        # choices 필드에서 content 추출
+        choices = raw_response.get("choices", [])
+        if choices and isinstance(choices, list) and len(choices) > 0:
+            first_choice = choices[0]
+            if isinstance(first_choice, dict):
+                message = first_choice.get("message", {})
+                if isinstance(message, dict):
+                    content = message.get("content", "") or ""
 
         # Perplexity provides citations in the response
-        citations = raw_response.get("citations", [])
+        # P2-1 Fix: citations가 list가 아닌 경우 처리
+        raw_citations = raw_response.get("citations")
+        if isinstance(raw_citations, list):
+            citations = raw_citations
+        elif raw_citations is not None:
+            logger.warning(f"[PerplexityParser] Unexpected citations type: {type(raw_citations)}")
+            citations = []
 
         # Extract URLs from content if citations not provided
         if not citations:
             citations = self._extract_urls_from_content(content)
 
         # Filter out blog/community URLs if requested
-        if exclude_blogs:
+        if exclude_blogs and citations:
             original_count = len(citations)
             citations = self._filter_excluded_domains(citations)
             filtered_count = original_count - len(citations)
@@ -272,7 +429,7 @@ class PerplexityResponseParser:
         return {
             "content": content,
             "citations": citations,
-            "filtered_blog_count": filtered_count if exclude_blogs else 0,
+            "filtered_blog_count": filtered_count,
             "source_quality": source_quality,
             "raw_response": raw_response,
         }
@@ -600,6 +757,31 @@ class CorpProfileValidator:
         if not profile.get("business_summary"):
             errors.append("business_summary is required")
 
+        # P1-7 Fix: Nested object validation
+        # Rule 8: supply_chain validation
+        supply_chain = profile.get("supply_chain")
+        if supply_chain and isinstance(supply_chain, dict):
+            sc_errors = self._validate_supply_chain(supply_chain)
+            errors.extend(sc_errors)
+            if sc_errors:
+                corrected["supply_chain"] = None
+
+        # Rule 9: overseas_business validation
+        overseas_business = profile.get("overseas_business")
+        if overseas_business and isinstance(overseas_business, dict):
+            ob_errors = self._validate_overseas_business(overseas_business)
+            errors.extend(ob_errors)
+            if ob_errors:
+                corrected["overseas_business"] = None
+
+        # Rule 10: financial_history validation
+        financial_history = profile.get("financial_history")
+        if financial_history and isinstance(financial_history, list):
+            fh_errors = self._validate_financial_history(financial_history)
+            errors.extend(fh_errors)
+            if fh_errors:
+                corrected["financial_history"] = None
+
         return ValidationResult(
             is_valid=len(errors) == 0,
             errors=errors,
@@ -648,6 +830,95 @@ class CorpProfileValidator:
             return "Profile has insufficient data - most fields are empty"
         return None
 
+    # P1-7 Fix: Nested object validation methods
+    def _validate_supply_chain(self, supply_chain: dict) -> list[str]:
+        """Validate supply_chain nested object structure."""
+        errors = []
+
+        # key_suppliers should be a list of strings
+        key_suppliers = supply_chain.get("key_suppliers")
+        if key_suppliers is not None and not isinstance(key_suppliers, list):
+            errors.append("supply_chain.key_suppliers must be a list")
+
+        # supplier_countries should be a dict with numeric values (percentages)
+        supplier_countries = supply_chain.get("supplier_countries")
+        if supplier_countries is not None:
+            if not isinstance(supplier_countries, dict):
+                errors.append("supply_chain.supplier_countries must be a dict")
+            else:
+                for country, pct in supplier_countries.items():
+                    if not isinstance(pct, (int, float)):
+                        errors.append(f"supply_chain.supplier_countries[{country}] must be numeric")
+                    elif not (0 <= pct <= 100):
+                        errors.append(f"supply_chain.supplier_countries[{country}] out of range: {pct}")
+
+        # single_source_risk should be boolean
+        single_source_risk = supply_chain.get("single_source_risk")
+        if single_source_risk is not None and not isinstance(single_source_risk, bool):
+            errors.append("supply_chain.single_source_risk must be boolean")
+
+        # raw_material_import_ratio should be numeric 0-100
+        import_ratio = supply_chain.get("raw_material_import_ratio")
+        if import_ratio is not None:
+            if not isinstance(import_ratio, (int, float)):
+                errors.append("supply_chain.raw_material_import_ratio must be numeric")
+            elif not (0 <= import_ratio <= 100):
+                errors.append(f"supply_chain.raw_material_import_ratio out of range: {import_ratio}")
+
+        return errors
+
+    def _validate_overseas_business(self, overseas_business: dict) -> list[str]:
+        """Validate overseas_business nested object structure."""
+        errors = []
+
+        # subsidiaries should be a list
+        subsidiaries = overseas_business.get("subsidiaries")
+        if subsidiaries is not None:
+            if not isinstance(subsidiaries, list):
+                errors.append("overseas_business.subsidiaries must be a list")
+            else:
+                for i, sub in enumerate(subsidiaries):
+                    if not isinstance(sub, dict):
+                        errors.append(f"overseas_business.subsidiaries[{i}] must be a dict")
+                    else:
+                        # Each subsidiary should have country and name
+                        if not sub.get("country"):
+                            errors.append(f"overseas_business.subsidiaries[{i}].country is required")
+                        if not sub.get("name"):
+                            errors.append(f"overseas_business.subsidiaries[{i}].name is required")
+
+        # manufacturing_countries should be a list of strings
+        manufacturing_countries = overseas_business.get("manufacturing_countries")
+        if manufacturing_countries is not None and not isinstance(manufacturing_countries, list):
+            errors.append("overseas_business.manufacturing_countries must be a list")
+
+        return errors
+
+    def _validate_financial_history(self, financial_history: list) -> list[str]:
+        """Validate financial_history list structure."""
+        errors = []
+
+        for i, entry in enumerate(financial_history):
+            if not isinstance(entry, dict):
+                errors.append(f"financial_history[{i}] must be a dict")
+                continue
+
+            # year should be a reasonable year
+            year = entry.get("year")
+            if year is not None:
+                if not isinstance(year, int):
+                    errors.append(f"financial_history[{i}].year must be an integer")
+                elif not (1900 <= year <= 2100):
+                    errors.append(f"financial_history[{i}].year out of range: {year}")
+
+            # revenue, operating_profit, net_profit should be numeric
+            for field in ["revenue", "operating_profit", "net_profit"]:
+                value = entry.get(field)
+                if value is not None and not isinstance(value, (int, float)):
+                    errors.append(f"financial_history[{i}].{field} must be numeric")
+
+        return errors
+
 
 # ============================================================================
 # Layer 4: Audit Trail - ProvenanceTracker
@@ -655,10 +926,11 @@ class CorpProfileValidator:
 
 
 class ProvenanceTracker:
-    """Track provenance for all extracted fields."""
+    """Track provenance for all extracted fields (P2-7: timestamp 자동 추가)."""
 
     def __init__(self):
         self.provenance: dict[str, FieldProvenance] = {}
+        self._created_at = datetime.now(UTC)  # P2-7: 트래커 생성 시간
 
     def record(
         self,
@@ -678,11 +950,48 @@ class ProvenanceTracker:
             extraction_date=datetime.now(UTC),
         )
 
+    def track_field(
+        self,
+        field_name: str,
+        value: Any,
+        source: str = "UNKNOWN",
+        source_url: Optional[str] = None,
+        excerpt: Optional[str] = None,
+        confidence: str = "LOW",
+    ):
+        """P2-7: track_field() - 간편 기록 메서드 (timestamp 자동 추가)
+
+        Args:
+            field_name: 필드명
+            value: 값
+            source: 소스 타입 (PERPLEXITY, GEMINI_INFERRED, etc.)
+            source_url: 출처 URL
+            excerpt: 발췌 텍스트
+            confidence: 신뢰도 (HIGH/MED/LOW)
+        """
+        now = datetime.now(UTC)
+        self.provenance[field_name] = FieldProvenance(
+            field_name=field_name,
+            value=value,
+            source_url=source_url,
+            excerpt=excerpt,
+            confidence=confidence,
+            extraction_date=now,
+        )
+        logger.debug(f"[ProvenanceTracker] Tracked {field_name} from {source} at {now.isoformat()}")
+
     def to_json(self) -> dict:
-        """Export provenance for storage."""
+        """Export provenance for storage (P2-7: 메타데이터 포함)."""
         return {
-            name: prov.to_dict()
-            for name, prov in self.provenance.items()
+            "_metadata": {
+                "tracker_created_at": self._created_at.isoformat(),
+                "last_updated_at": datetime.now(UTC).isoformat(),
+                "field_count": len(self.provenance),
+            },
+            "fields": {
+                name: prov.to_dict()
+                for name, prov in self.provenance.items()
+            },
         }
 
     def get_unattributed_fields(self) -> list[str]:
@@ -699,14 +1008,77 @@ class ProvenanceTracker:
             for name, prov in self.provenance.items()
         }
 
+    def get_extraction_timeline(self) -> list[dict]:
+        """P2-7: 필드 추출 타임라인 반환 (시간순 정렬)"""
+        timeline = [
+            {
+                "field": name,
+                "extracted_at": prov.extraction_date.isoformat(),
+                "confidence": prov.confidence,
+            }
+            for name, prov in self.provenance.items()
+        ]
+        return sorted(timeline, key=lambda x: x["extracted_at"])
+
 
 # ============================================================================
 # Confidence Determination
 # ============================================================================
 
 
+# P2-8: 소스별 신뢰도 가중치 (외부화)
+# 숫자가 높을수록 신뢰도 높음
+CONFIDENCE_SOURCE_WEIGHTS: dict[str, int] = {
+    # 공시/공공 데이터 (최고 신뢰도)
+    "DART": 100,
+    "KRX": 100,
+    "GOVERNMENT": 95,
+
+    # 검증된 외부 검색
+    "PERPLEXITY_VERIFIED": 85,
+    "PERPLEXITY": 80,
+
+    # LLM 검증/보완
+    "GEMINI_VALIDATED": 75,
+    "CLAUDE_SYNTHESIZED": 70,
+    "GEMINI_INFERRED": 50,
+
+    # Fallback
+    "RULE_BASED": 30,
+    "INDUSTRY_DEFAULT": 20,
+    "UNKNOWN": 10,
+}
+
+# P2-8: 신뢰도 레벨 임계값
+CONFIDENCE_LEVEL_THRESHOLDS: dict[str, int] = {
+    "HIGH": 80,   # weight >= 80 → HIGH
+    "MED": 50,    # 50 <= weight < 80 → MED
+    "LOW": 0,     # weight < 50 → LOW
+}
+
+
+def get_confidence_from_source(source: str) -> str:
+    """P2-8: 소스에서 신뢰도 레벨 결정"""
+    weight = CONFIDENCE_SOURCE_WEIGHTS.get(source.upper(), 10)
+    if weight >= CONFIDENCE_LEVEL_THRESHOLDS["HIGH"]:
+        return "HIGH"
+    if weight >= CONFIDENCE_LEVEL_THRESHOLDS["MED"]:
+        return "MED"
+    return "LOW"
+
+
 class ConfidenceDeterminer:
-    """Determine field-level and overall profile confidence."""
+    """Determine field-level and overall profile confidence (P2-8: 가중치 외부화)."""
+
+    # P2-8: 필수 필드별 가중치 (overall confidence 계산용)
+    REQUIRED_FIELD_WEIGHTS: dict[str, float] = {
+        "business_summary": 1.5,  # 필수 중 가장 중요
+        "export_ratio_pct": 1.2,
+        "country_exposure": 1.2,
+        "key_materials": 1.0,
+        "overseas_operations": 1.0,
+        "revenue_krw": 0.8,
+    }
 
     def determine_overall_confidence(
         self,
@@ -714,12 +1086,13 @@ class ConfidenceDeterminer:
         required_fields: list[str],
     ) -> str:
         """
-        Overall profile confidence based on field confidences.
+        Overall profile confidence based on field confidences (P2-8: 가중치 적용).
 
         Rules:
         - If any required field is LOW, overall is at most MED
         - If >50% of fields are null/empty, overall is LOW
         - If all required fields are HIGH, overall is HIGH
+        - P2-8: 가중치 기반 스코어링 추가
         """
         if not field_confidences:
             return "LOW"
@@ -741,7 +1114,32 @@ class ConfidenceDeterminer:
         if all(c == "HIGH" for c in required_confidences):
             return "HIGH"
 
+        # P2-8: 가중치 기반 스코어링
+        total_weight = 0.0
+        weighted_score = 0.0
+        for field, conf in field_confidences.items():
+            weight = self.REQUIRED_FIELD_WEIGHTS.get(field, 0.5)
+            total_weight += weight
+            if conf == "HIGH":
+                weighted_score += weight * 1.0
+            elif conf == "MED":
+                weighted_score += weight * 0.6
+            else:  # LOW
+                weighted_score += weight * 0.2
+
+        if total_weight > 0:
+            avg_score = weighted_score / total_weight
+            if avg_score >= 0.8:
+                return "HIGH"
+            if avg_score >= 0.5:
+                return "MED"
+
         return "MED"
+
+    @staticmethod
+    def get_source_weight(source: str) -> int:
+        """P2-8: 소스의 가중치 반환"""
+        return CONFIDENCE_SOURCE_WEIGHTS.get(source.upper(), 10)
 
 
 # ============================================================================
@@ -969,7 +1367,9 @@ INDUSTRY_NAMES = {
 }
 
 # 업종별 힌트 캐시 (메모리 캐시, 서버 재시작 시 초기화)
+# P1-4 Fix: Thread-safety를 위한 Lock 추가
 _industry_hints_cache: dict[str, dict] = {}
+_industry_hints_lock = threading.Lock()
 
 
 def get_industry_name(industry_code: str) -> str:
@@ -1010,10 +1410,11 @@ async def get_industry_hints(industry_code: str, llm_service=None) -> dict:
     Returns:
         dict with typical_materials, typical_suppliers, export_markets, etc.
     """
-    # 캐시 확인
-    if industry_code in _industry_hints_cache:
-        logger.debug(f"Industry hints cache hit for {industry_code}")
-        return _industry_hints_cache[industry_code]
+    # P1-4 Fix: Thread-safe 캐시 조회
+    with _industry_hints_lock:
+        if industry_code in _industry_hints_cache:
+            logger.debug(f"Industry hints cache hit for {industry_code}")
+            return _industry_hints_cache[industry_code]
 
     industry_name = get_industry_name(industry_code)
 
@@ -1048,8 +1449,9 @@ async def get_industry_hints(industry_code: str, llm_service=None) -> dict:
         else:
             hints = json.loads(response)
 
-        # 캐시에 저장
-        _industry_hints_cache[industry_code] = hints
+        # P1-4 Fix: Thread-safe 캐시 저장
+        with _industry_hints_lock:
+            _industry_hints_cache[industry_code] = hints
         logger.info(f"Generated and cached industry hints for {industry_code}")
 
         return hints
@@ -1075,6 +1477,10 @@ def build_perplexity_query(corp_name: str, industry_name: str, industry_hints: d
         industry_name: 업종명
         industry_hints: 업종별 힌트 (LLM 생성 또는 캐시)
     """
+    # P1-8 Fix: Prompt Injection 방어
+    corp_name = sanitize_input_for_prompt(corp_name, "corp_name")
+    industry_name = sanitize_input_for_prompt(industry_name, "industry_name")
+
     # 업종 힌트가 있으면 쿼리에 포함
     materials_hint = ""
     markets_hint = ""
@@ -1150,7 +1556,13 @@ class CorpProfilingPipeline:
     - Layer 4: Graceful Degradation
 
     Sits between DOC_INGEST and EXTERNAL stages.
+
+    P0-1 Fix: Orchestrator는 동기 함수이므로 run_in_executor로 래핑하여
+    async context에서 Event Loop 블로킹 방지.
     """
+
+    # Thread pool for sync orchestrator execution (P0-1 Fix)
+    _executor: Optional[ThreadPoolExecutor] = None
 
     def __init__(self, orchestrator: Optional[MultiAgentOrchestrator] = None):
         self.parser = PerplexityResponseParser()
@@ -1165,6 +1577,13 @@ class CorpProfilingPipeline:
         self._llm_service = None
         self._db_session = None
         self._perplexity_api_key = None
+
+        # Initialize thread pool for sync operations (P0-1 Fix)
+        if CorpProfilingPipeline._executor is None:
+            CorpProfilingPipeline._executor = ThreadPoolExecutor(
+                max_workers=4,
+                thread_name_prefix="orchestrator_"
+            )
 
     async def execute(
         self,
@@ -1204,9 +1623,15 @@ class CorpProfilingPipeline:
             logger.warning(f"Failed to generate industry hints: {e}")
             self._industry_hints = {}
 
+        # P0-2 Fix: 캐시 조회 결과를 orchestrator에 전달 (더블 조회 방지)
+        # 캐시 조회는 execute()에서 한 번만 수행하고 그 결과를 람다로 전달
+        cached_profile_for_orchestrator = None  # execute()에서 조회 후 전달
+
         # Configure orchestrator with injectable functions
+        # Note: cache lookup은 아래 execute() 호출 전에 수행되므로,
+        # 여기서는 None을 반환하고 existing_profile로 전달
         self.orchestrator.set_cache_lookup(
-            lambda cn, ic: self._sync_get_cached_profile(corp_id, db_session)
+            lambda cn, ic: None  # P0-2: orchestrator 내부 캐시 조회 비활성화
         )
         self.orchestrator.set_perplexity_search(
             lambda cn, ind: self._sync_perplexity_search(cn, ind, perplexity_api_key)
@@ -1218,15 +1643,21 @@ class CorpProfilingPipeline:
         )
 
         # Get existing profile for potential enrichment (but don't use as cache if skip_cache)
+        # P0-2 Fix: 캐시 조회는 여기서 한 번만 수행, orchestrator에는 결과 전달
         existing_profile = None if skip_cache else await self._get_cached_profile(corp_id, db_session)
 
-        # Execute orchestrator (4-layer fallback)
-        orchestrator_result = self.orchestrator.execute(
-            corp_name=corp_name,
-            industry_name=industry_name,
-            industry_code=industry_code,
-            existing_profile=existing_profile,
-            skip_cache=skip_cache,
+        # P0-1 Fix: Execute orchestrator in thread pool to avoid blocking event loop
+        # Orchestrator는 동기 함수이므로 run_in_executor로 래핑
+        loop = asyncio.get_event_loop()
+        orchestrator_result = await loop.run_in_executor(
+            self._executor,
+            lambda: self.orchestrator.execute(
+                corp_name=corp_name,
+                industry_name=industry_name,
+                industry_code=industry_code,
+                existing_profile=existing_profile,
+                skip_cache=skip_cache,
+            )
         )
 
         # Build final profile with orchestrator result
@@ -1342,14 +1773,15 @@ class CorpProfilingPipeline:
             "execution_time_ms": orchestrator_result.execution_time_ms,
         }
 
-        # P1-1 Fix: consensus_metadata 기본값 추가
+        # P1-2 Fix: consensus_metadata 기본값 - consensus_at에 현재 시간 사용
         if orchestrator_result.consensus_metadata:
             profile["consensus_metadata"] = orchestrator_result.consensus_metadata.to_dict()
         else:
             # 캐시 히트 또는 메타데이터 없는 경우 기본값
             is_cache_hit = orchestrator_result.fallback_layer == FallbackLayer.CACHE
             profile["consensus_metadata"] = {
-                "consensus_at": None,
+                # P1-2 Fix: None 대신 현재 시간 사용 (Frontend 파싱 오류 방지)
+                "consensus_at": datetime.now(UTC).isoformat(),
                 "perplexity_success": False,
                 "gemini_success": False,
                 "claude_success": False,

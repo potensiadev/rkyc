@@ -14,14 +14,22 @@ Anti-Hallucination 4-Layer Defense:
 - Extraction Guardrails (confidence scoring)
 - Validation Layer (Gemini cross-check)
 - Audit Trail (full provenance)
+
+Sprint 1 Enhancement (ADR-009):
+- Parallel Perplexity + Gemini execution using asyncio
+- 25% speedup target (40s → 30s)
 """
 
+import asyncio
+import hashlib
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Optional, Any
+from typing import Optional, Any, Callable
+from uuid import uuid4
 
 from app.worker.llm.circuit_breaker import (
     CircuitBreakerManager,
@@ -58,6 +66,7 @@ class OrchestratorResult:
     consensus_metadata: Optional[ConsensusMetadata] = None
     provenance: dict = field(default_factory=dict)
     execution_time_ms: int = 0
+    trace_id: str = ""  # P2-2: 분산 추적용 Trace ID
 
     def to_dict(self) -> dict:
         """결과를 딕셔너리로 변환"""
@@ -69,6 +78,7 @@ class OrchestratorResult:
             "consensus_metadata": self.consensus_metadata.to_dict() if self.consensus_metadata else None,
             "provenance": self.provenance,
             "execution_time_ms": self.execution_time_ms,
+            "trace_id": self.trace_id,
         }
 
 
@@ -116,11 +126,22 @@ class MultiAgentOrchestrator:
 
     실행 순서:
     1. Cache 확인 (Layer 0)
-    2. Perplexity 검색 + Gemini 검증 (Layer 1 + 1.5)
+    2. Perplexity 검색 + Gemini 검증 (Layer 1 + 1.5) - **병렬 실행 (ADR-009)**
     3. Claude 합성 (Layer 2) - Consensus Engine 사용
     4. Rule-Based Merge (Layer 3)
     5. Graceful Degradation (Layer 4)
+
+    Sprint 1 Enhancement:
+    - Layer 1 + 1.5 병렬 실행으로 25% 속도 향상
+    - ThreadPoolExecutor를 사용한 sync-to-async 변환
     """
+
+    # Provider별 동시 요청 제한 (Rate Limit 보호)
+    PROVIDER_CONCURRENCY_LIMITS = {
+        "perplexity": 5,
+        "gemini": 10,
+        "claude": 3,
+    }
 
     def __init__(
         self,
@@ -128,28 +149,47 @@ class MultiAgentOrchestrator:
         consensus_engine: Optional[ConsensusEngine] = None,
         gemini_adapter: Optional[GeminiAdapter] = None,
         rule_config: Optional[RuleBasedMergeConfig] = None,
+        max_workers: int = 4,
     ):
         self.circuit_breaker = circuit_breaker_manager or get_circuit_breaker_manager()
         self.consensus_engine = consensus_engine or get_consensus_engine()
         self.gemini = gemini_adapter or get_gemini_adapter()
         self.rule_config = rule_config or RuleBasedMergeConfig()
 
-        # Perplexity search function will be injected
-        self._perplexity_search_fn = None
-        self._claude_synthesis_fn = None
-        self._cache_lookup_fn = None
+        # Thread pool for parallel execution (ADR-009)
+        self._executor = ThreadPoolExecutor(max_workers=max_workers)
 
-    def set_perplexity_search(self, fn):
+        # Perplexity search function will be injected
+        self._perplexity_search_fn: Optional[Callable] = None
+        self._claude_synthesis_fn: Optional[Callable] = None
+        self._cache_lookup_fn: Optional[Callable] = None
+
+        # Gemini parallel search function (optional, for Layer 1 parallel mode)
+        self._gemini_search_fn: Optional[Callable] = None
+
+        # Parallel mode flag (default: True for Sprint 1)
+        self.parallel_mode = True
+
+    def set_perplexity_search(self, fn: Callable):
         """Perplexity 검색 함수 주입"""
         self._perplexity_search_fn = fn
 
-    def set_claude_synthesis(self, fn):
+    def set_claude_synthesis(self, fn: Callable):
         """Claude 합성 함수 주입"""
         self._claude_synthesis_fn = fn
 
-    def set_cache_lookup(self, fn):
+    def set_cache_lookup(self, fn: Callable):
         """캐시 조회 함수 주입"""
         self._cache_lookup_fn = fn
+
+    def set_gemini_search(self, fn: Callable):
+        """Gemini 검색 함수 주입 (병렬 모드용)"""
+        self._gemini_search_fn = fn
+
+    def set_parallel_mode(self, enabled: bool):
+        """병렬 실행 모드 설정"""
+        self.parallel_mode = enabled
+        logger.info(f"[Orchestrator] Parallel mode: {enabled}")
 
     def execute(
         self,
@@ -175,7 +215,14 @@ class MultiAgentOrchestrator:
         start_time = time.time()
         error_messages = []
         retry_count = 0
+
+        # P2-2: Trace ID 생성 (corp_name + timestamp 기반 해시)
+        trace_seed = f"{corp_name}:{industry_code}:{time.time_ns()}"
+        trace_id = hashlib.md5(trace_seed.encode()).hexdigest()[:12]
+        logger.info(f"[Orchestrator][{trace_id}] Starting execution for {corp_name} ({industry_code})")
+
         provenance = {
+            "trace_id": trace_id,
             "started_at": datetime.now().isoformat(),
             "corp_name": corp_name,
             "industry_code": industry_code,
@@ -184,13 +231,31 @@ class MultiAgentOrchestrator:
         }
 
         # Layer 0: Cache (skip if force refresh)
+        # P0-2 Fix: existing_profile이 이미 전달되었으면 캐시 히트로 처리 (더블 조회 방지)
         if skip_cache:
             logger.info(f"[Orchestrator] Cache skipped (force refresh) for {corp_name}")
             provenance["cache_skipped"] = True
             cached_profile = None
+        elif existing_profile:
+            # P0-2: 호출자가 이미 캐시를 조회해서 전달함 -> 캐시 히트
+            logger.info(f"[Orchestrator] Using pre-fetched cache for {corp_name}")
+            provenance["layers_attempted"].append("CACHE")
+            provenance["cache_hit"] = True
+            logger.info(f"[Orchestrator][{trace_id}] Cache hit (pre-fetched)")
+            return OrchestratorResult(
+                profile=existing_profile,
+                fallback_layer=FallbackLayer.CACHE,
+                retry_count=0,
+                error_messages=[],
+                provenance=provenance,
+                execution_time_ms=int((time.time() - start_time) * 1000),
+                trace_id=trace_id,
+            )
         else:
+            # Fallback: 주입된 캐시 조회 함수 사용 (호환성 유지)
             cached_profile = self._try_cache(corp_name, industry_code, provenance)
         if cached_profile:
+            logger.info(f"[Orchestrator][{trace_id}] Cache hit (lookup)")
             return OrchestratorResult(
                 profile=cached_profile,
                 fallback_layer=FallbackLayer.CACHE,
@@ -198,6 +263,7 @@ class MultiAgentOrchestrator:
                 error_messages=[],
                 provenance=provenance,
                 execution_time_ms=int((time.time() - start_time) * 1000),
+                trace_id=trace_id,
             )
 
         # Layer 1 + 1.5: Perplexity + Gemini
@@ -229,6 +295,7 @@ class MultiAgentOrchestrator:
                 retry_count += 1
 
                 if consensus_result and consensus_result.get("profile"):
+                    logger.info(f"[Orchestrator][{trace_id}] Layer 2 success (Claude synthesis)")
                     return OrchestratorResult(
                         profile=consensus_result["profile"],
                         fallback_layer=FallbackLayer.CLAUDE_SYNTHESIS,
@@ -237,6 +304,7 @@ class MultiAgentOrchestrator:
                         consensus_metadata=consensus_result.get("metadata"),
                         provenance=provenance,
                         execution_time_ms=int((time.time() - start_time) * 1000),
+                        trace_id=trace_id,
                     )
             except (CircuitOpenError, AllProvidersFailedError) as e:
                 error_messages.append(f"Layer 2: {str(e)}")
@@ -254,6 +322,7 @@ class MultiAgentOrchestrator:
         )
 
         if rule_based_profile and self._is_profile_sufficient(rule_based_profile):
+            logger.info(f"[Orchestrator][{trace_id}] Layer 3 success (Rule-based merge)")
             return OrchestratorResult(
                 profile=rule_based_profile,
                 fallback_layer=FallbackLayer.RULE_BASED,
@@ -261,6 +330,7 @@ class MultiAgentOrchestrator:
                 error_messages=error_messages,
                 provenance=provenance,
                 execution_time_ms=int((time.time() - start_time) * 1000),
+                trace_id=trace_id,
             )
 
         # Layer 4: Graceful Degradation
@@ -274,7 +344,7 @@ class MultiAgentOrchestrator:
 
         error_messages.append("All layers failed - using graceful degradation")
         logger.warning(
-            f"[Orchestrator] Graceful degradation for {corp_name}: "
+            f"[Orchestrator][{trace_id}] Graceful degradation for {corp_name}: "
             f"errors={len(error_messages)}"
         )
 
@@ -285,6 +355,7 @@ class MultiAgentOrchestrator:
             error_messages=error_messages,
             provenance=provenance,
             execution_time_ms=int((time.time() - start_time) * 1000),
+            trace_id=trace_id,
         )
 
     # =========================================================================
@@ -316,7 +387,7 @@ class MultiAgentOrchestrator:
         return None
 
     # =========================================================================
-    # Layer 1 + 1.5: Perplexity + Gemini
+    # Layer 1 + 1.5: Perplexity + Gemini (병렬 실행 - ADR-009)
     # =========================================================================
 
     def _try_perplexity_gemini(
@@ -329,10 +400,178 @@ class MultiAgentOrchestrator:
         """
         Perplexity 검색 + Gemini 검증
 
+        ADR-009 Enhancement:
+        - parallel_mode=True: Perplexity + Gemini 동시 실행 (25% speedup)
+        - parallel_mode=False: 기존 순차 실행 (Gemini는 Perplexity 결과 검증)
+
         Returns:
             (perplexity_result, gemini_validation)
         """
         provenance["layers_attempted"].append("PERPLEXITY_GEMINI")
+        provenance["parallel_mode"] = self.parallel_mode
+
+        if self.parallel_mode:
+            return self._try_perplexity_gemini_parallel(
+                corp_name, industry_name, provenance, error_messages
+            )
+        else:
+            return self._try_perplexity_gemini_sequential(
+                corp_name, industry_name, provenance, error_messages
+            )
+
+    def _try_perplexity_gemini_parallel(
+        self,
+        corp_name: str,
+        industry_name: str,
+        provenance: dict,
+        error_messages: list[str],
+    ) -> tuple[Optional[dict], Optional[dict]]:
+        """
+        병렬 모드: Perplexity + Gemini 동시 실행
+
+        ADR-009 Sprint 1 구현:
+        - ThreadPoolExecutor로 두 API를 동시 호출
+        - 둘 다 완료 후 Consensus Engine으로 결과 병합
+        - 개별 실패는 허용 (Graceful Degradation)
+        """
+        import concurrent.futures
+
+        start_time = time.time()
+        perplexity_result = None
+        gemini_result = None
+        futures = {}
+
+        # 병렬 실행할 태스크 준비
+        if self.circuit_breaker.is_available("perplexity") and self._perplexity_search_fn:
+            futures["perplexity"] = self._executor.submit(
+                self._safe_perplexity_search, corp_name, industry_name
+            )
+        else:
+            if not self.circuit_breaker.is_available("perplexity"):
+                error_messages.append("Perplexity circuit breaker is OPEN")
+                provenance["perplexity_circuit_open"] = True
+            else:
+                logger.warning("[Orchestrator] Perplexity search function not configured")
+
+        # Gemini도 병렬로 독립 검색 (검증이 아닌 보완 역할)
+        if self.circuit_breaker.is_available("gemini"):
+            futures["gemini"] = self._executor.submit(
+                self._safe_gemini_enrich, corp_name, industry_name
+            )
+        else:
+            error_messages.append("Gemini circuit breaker is OPEN")
+            provenance["gemini_circuit_open"] = True
+
+        # 모든 태스크 완료 대기 (최대 45초)
+        done, not_done = concurrent.futures.wait(
+            futures.values(),
+            timeout=45.0,
+            return_when=concurrent.futures.ALL_COMPLETED
+        )
+
+        # 결과 수집
+        if "perplexity" in futures:
+            try:
+                perplexity_result = futures["perplexity"].result(timeout=1.0)
+                if perplexity_result and not perplexity_result.get("error"):
+                    self.circuit_breaker.record_success("perplexity")
+                    provenance["perplexity_success"] = True
+                    logger.info(f"[Orchestrator] Perplexity parallel search success for {corp_name}")
+                elif perplexity_result and perplexity_result.get("error"):
+                    error_messages.append(f"Perplexity: {perplexity_result.get('error')}")
+                    provenance["perplexity_error"] = perplexity_result.get("error")
+            except concurrent.futures.TimeoutError:
+                error_messages.append("Perplexity: timeout")
+                provenance["perplexity_error"] = "timeout"
+                self.circuit_breaker.record_failure("perplexity", "timeout")
+            except Exception as e:
+                error_messages.append(f"Perplexity: {str(e)}")
+                provenance["perplexity_error"] = str(e)
+                self.circuit_breaker.record_failure("perplexity", str(e))
+
+        if "gemini" in futures:
+            try:
+                gemini_result = futures["gemini"].result(timeout=1.0)
+                if gemini_result and not gemini_result.get("error"):
+                    self.circuit_breaker.record_success("gemini")
+                    provenance["gemini_parallel_success"] = True
+                    logger.info(f"[Orchestrator] Gemini parallel enrichment success for {corp_name}")
+                elif gemini_result and gemini_result.get("error"):
+                    error_messages.append(f"Gemini: {gemini_result.get('error')}")
+                    provenance["gemini_error"] = gemini_result.get("error")
+            except concurrent.futures.TimeoutError:
+                error_messages.append("Gemini: timeout")
+                provenance["gemini_error"] = "timeout"
+                self.circuit_breaker.record_failure("gemini", "timeout")
+            except Exception as e:
+                error_messages.append(f"Gemini: {str(e)}")
+                provenance["gemini_error"] = str(e)
+                self.circuit_breaker.record_failure("gemini", str(e))
+
+        elapsed_ms = int((time.time() - start_time) * 1000)
+        provenance["layer1_parallel_time_ms"] = elapsed_ms
+        logger.info(
+            f"[Orchestrator] Layer 1+1.5 parallel completed in {elapsed_ms}ms "
+            f"(perplexity={'OK' if perplexity_result else 'FAIL'}, "
+            f"gemini={'OK' if gemini_result else 'FAIL'})"
+        )
+
+        # Gemini 결과를 validation 형식으로 변환 (Consensus Engine 호환)
+        gemini_validation = None
+        if gemini_result and not gemini_result.get("error"):
+            gemini_validation = {
+                "validated_fields": [],
+                "enriched_fields": gemini_result.get("enriched_fields", {}),
+                "discrepancies": [],
+                "source": "GEMINI_PARALLEL",
+            }
+
+        return perplexity_result, gemini_validation
+
+    def _safe_perplexity_search(self, corp_name: str, industry_name: str) -> Optional[dict]:
+        """Thread-safe Perplexity 검색 래퍼"""
+        try:
+            return self._perplexity_search_fn(corp_name, industry_name)
+        except Exception as e:
+            logger.warning(f"[Orchestrator] Perplexity search exception: {e}")
+            return {"error": str(e), "error_type": "exception"}
+
+    def _safe_gemini_enrich(self, corp_name: str, industry_name: str) -> Optional[dict]:
+        """Thread-safe Gemini enrichment 래퍼 (병렬 모드용)"""
+        try:
+            # 병렬 모드에서는 빈 프로필로 시작하여 enrichment 수행
+            empty_profile = {
+                "corp_name": corp_name,
+                "industry_name": industry_name,
+                "business_summary": None,
+                "revenue_krw": None,
+                "export_ratio_pct": None,
+                "country_exposure": None,
+                "key_materials": None,
+                "key_customers": None,
+            }
+            enriched = self.gemini.enrich_missing_fields(
+                profile=empty_profile,
+                corp_name=corp_name,
+                industry_name=industry_name,
+            )
+            return {"enriched_fields": enriched}
+        except Exception as e:
+            logger.warning(f"[Orchestrator] Gemini enrichment exception: {e}")
+            return {"error": str(e), "error_type": "exception"}
+
+    def _try_perplexity_gemini_sequential(
+        self,
+        corp_name: str,
+        industry_name: str,
+        provenance: dict,
+        error_messages: list[str],
+    ) -> tuple[Optional[dict], Optional[dict]]:
+        """
+        순차 모드: 기존 방식 (Perplexity → Gemini validation)
+
+        Gemini는 Perplexity 결과가 있을 때만 검증 수행
+        """
         perplexity_result = None
         gemini_validation = None
 
@@ -355,7 +594,7 @@ class MultiAgentOrchestrator:
             error_messages.append("Perplexity circuit breaker is OPEN")
             provenance["perplexity_circuit_open"] = True
 
-        # Layer 1.5: Gemini Validation
+        # Layer 1.5: Gemini Validation (순차 - Perplexity 결과 필요)
         if perplexity_result and self.circuit_breaker.is_available("gemini"):
             try:
                 gemini_validation = self.gemini.validate(
@@ -687,7 +926,16 @@ class MultiAgentOrchestrator:
     # =========================================================================
 
     def _is_profile_sufficient(self, profile: dict) -> bool:
-        """프로필이 충분한지 확인"""
+        """
+        프로필이 충분한지 확인
+
+        P0-3 Fix: 최소 필드 수 기준 완화
+        - 기존: 필수 3개 + 추가 3개 = 6개 필드 필요
+        - 수정: 필수 3개 + 추가 1개 = 4개 필드 필요
+
+        이유: Perplexity 실패 시 Gemini enriched 필드만으로도
+        Layer 3 Rule-Based Merge 가능하도록 기준 완화
+        """
         if not profile:
             return False
 
@@ -696,9 +944,12 @@ class MultiAgentOrchestrator:
             if field not in profile or profile[field] is None:
                 return False
 
-        # 최소 필드 수 확인 (필수 필드 외 3개 이상)
+        # P0-3 Fix: 최소 필드 수 완화 (3개 → 1개 추가)
+        # 기존: required(3) + 3 = 6개 필요
+        # 수정: required(3) + 1 = 4개 필요
+        MIN_ADDITIONAL_FIELDS = 1
         non_meta_fields = [k for k in profile.keys() if not k.startswith("_")]
-        if len(non_meta_fields) < len(self.rule_config.required_fields) + 3:
+        if len(non_meta_fields) < len(self.rule_config.required_fields) + MIN_ADDITIONAL_FIELDS:
             return False
 
         return True

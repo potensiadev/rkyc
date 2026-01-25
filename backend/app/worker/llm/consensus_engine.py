@@ -9,12 +9,16 @@ PRD v1.2 결정 사항:
 v1.3 변경사항:
 - kiwipiepy 형태소 분석기 도입 (BUG-001 수정)
 - 품사 기반 불용어 필터링
+
+P2-3 Fix:
+- Jaccard Similarity 캐싱 (LRU Cache)
 """
 
 import logging
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, UTC
+from functools import lru_cache
 from typing import Any, Optional
 from enum import Enum
 
@@ -270,9 +274,15 @@ def _tokenize_simple(text: str) -> set[str]:
     return tokens
 
 
+@lru_cache(maxsize=1024)
+def _tokenize_cached(text: str) -> frozenset:
+    """P2-3: 캐싱을 위한 tokenize wrapper (frozenset 반환)"""
+    return frozenset(tokenize(text))
+
+
 def jaccard_similarity(text_a: str, text_b: str) -> float:
     """
-    Jaccard Similarity 계산
+    Jaccard Similarity 계산 (P2-3: LRU 캐싱 적용)
 
     J(A,B) = |A ∩ B| / |A ∪ B|
 
@@ -288,8 +298,9 @@ def jaccard_similarity(text_a: str, text_b: str) -> float:
     if not text_a or not text_b:
         return 0.0  # 하나만 비어있으면 불일치
 
-    tokens_a = tokenize(text_a)
-    tokens_b = tokenize(text_b)
+    # P2-3: 캐시된 tokenize 사용
+    tokens_a = _tokenize_cached(text_a)
+    tokens_b = _tokenize_cached(text_b)
 
     if not tokens_a and not tokens_b:
         return 1.0
@@ -300,6 +311,12 @@ def jaccard_similarity(text_a: str, text_b: str) -> float:
     union = tokens_a | tokens_b
 
     return len(intersection) / len(union) if union else 0.0
+
+
+def clear_jaccard_cache():
+    """P2-3: 테스트용 캐시 클리어"""
+    _tokenize_cached.cache_clear()
+    logger.debug("[ConsensusEngine] Jaccard cache cleared")
 
 
 def compare_values(value_a: Any, value_b: Any, threshold: float = 0.7) -> tuple[bool, float]:
@@ -513,15 +530,13 @@ class ConsensusEngine:
     ) -> FieldConsensus:
         """개별 필드 합성"""
 
-        # Gemini enriched 값 추출
+        # P1-1 Fix: Gemini enriched 값 추출 (다양한 형식 처리)
         gemini_value = None
         gemini_confidence = "LOW"
         if gemini_enriched:
-            if isinstance(gemini_enriched, dict) and "value" in gemini_enriched:
-                gemini_value = gemini_enriched["value"]
-                gemini_confidence = gemini_enriched.get("confidence", "LOW")
-            else:
-                gemini_value = gemini_enriched
+            gemini_value, gemini_confidence = self._extract_gemini_value(
+                gemini_enriched, field_name
+            )
 
         # Case 1: Perplexity 값이 null이고 Gemini가 보완한 경우
         if perplexity_value is None or perplexity_value == [] or perplexity_value == {}:
@@ -613,6 +628,58 @@ class ConsensusEngine:
             similarity_score=None,
             notes="Perplexity only" + (" (validated)" if is_validated else ""),
         )
+
+    def _extract_gemini_value(
+        self,
+        gemini_enriched: Any,
+        field_name: str,
+    ) -> tuple[Any, str]:
+        """
+        P1-1 Fix: Gemini enriched 필드에서 값 안전하게 추출
+
+        다양한 형식 처리:
+        1. {"value": X, "confidence": Y} - 표준 형식
+        2. {"field_name": X, "source": "GEMINI_INFERRED"} - 메타데이터 포함
+        3. 직접 값 (list, dict, str 등)
+
+        Returns:
+            (value, confidence)
+        """
+        if gemini_enriched is None:
+            return None, "LOW"
+
+        # 표준 형식: {"value": X, "confidence": Y}
+        if isinstance(gemini_enriched, dict) and "value" in gemini_enriched:
+            return (
+                gemini_enriched["value"],
+                gemini_enriched.get("confidence", "LOW"),
+            )
+
+        # 메타데이터 포함 형식: {"source": "GEMINI_INFERRED", ...}
+        # "value" 키가 없지만 source/confidence 같은 메타 키가 있는 경우
+        if isinstance(gemini_enriched, dict):
+            meta_keys = {"source", "confidence", "reasoning", "error", "error_type"}
+            data_keys = set(gemini_enriched.keys()) - meta_keys
+
+            if data_keys and meta_keys & set(gemini_enriched.keys()):
+                # 메타 키 제외하고 실제 데이터만 추출
+                if len(data_keys) == 1:
+                    # 단일 필드인 경우 그 값 반환
+                    data_key = list(data_keys)[0]
+                    return (
+                        gemini_enriched[data_key],
+                        gemini_enriched.get("confidence", "LOW"),
+                    )
+                else:
+                    # 여러 필드인 경우 메타 키 제외한 dict 반환
+                    extracted = {k: v for k, v in gemini_enriched.items() if k not in meta_keys}
+                    return extracted, gemini_enriched.get("confidence", "LOW")
+
+            # 일반 dict (메타 키 없음) - 그대로 반환
+            return gemini_enriched, "LOW"
+
+        # 직접 값 (list, str, int 등)
+        return gemini_enriched, "LOW"
 
     def _determine_overall_confidence(self, field_details: list[FieldConsensus]) -> str:
         """전체 프로필 신뢰도 결정"""
