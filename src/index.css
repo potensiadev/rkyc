@@ -188,4 +188,84 @@
   .text-balance {
     text-wrap: balance;
   }
+
+  /* 얇은 가로 스크롤바 */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.3) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    height: 4px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--muted-foreground) / 0.3);
+    border-radius: 2px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--muted-foreground) / 0.5);
+  }
+}
+
+/* ============================================================ */
+/* Print / PDF Export Styles */
+/* ============================================================ */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 15mm;
+  }
+
+  body {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .print-container {
+    width: 100% !important;
+    max-width: 180mm !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+  }
+
+  /* 페이지 나눔 제어 */
+  .break-inside-avoid {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .break-before-page {
+    break-before: page;
+    page-break-before: always;
+  }
+
+  /* 헤더/푸터 숨김 */
+  .no-print {
+    display: none !important;
+  }
+}
+
+/* Report Document 전용 스타일 */
+.report-document {
+  max-width: 180mm;
+  margin: 0 auto;
+  word-break: keep-all;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  line-height: 1.6;
+}
+
+.report-document h1,
+.report-document h2,
+.report-document h3 {
+  word-break: keep-all;
+}
+
+.report-document p,
+.report-document li,
+.report-document span {
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }

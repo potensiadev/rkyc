@@ -1,5 +1,5 @@
 import { Separator } from "@/components/ui/separator";
-import { useCorporationReport } from "@/hooks/useApi";
+import { useCorporationReport, useCorpProfile } from "@/hooks/useApi";
 import {
   formatDate,
 } from "@/data/signals";
@@ -27,7 +27,7 @@ const ReportDocument = ({
   sectionsToShow = {
     summary: true,
     companyOverview: true,
-    valueChain: false,
+    valueChain: true,
     signalTypeSummary: true,
     signalTimeline: true,
     evidenceSummary: true,
@@ -38,11 +38,84 @@ const ReportDocument = ({
 }: ReportDocumentProps) => {
   // Use new Report API hook
   const { data: report, isLoading } = useCorporationReport(corporationId);
+  // Profile API for shareholders (only show when profiling is complete)
+  const { data: profile } = useCorpProfile(corporationId);
 
   if (isLoading) {
     return (
-      <div className="flex justify-center items-center py-20">
-        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      <div className="report-document bg-white text-foreground font-sans animate-pulse">
+        {/* Header Skeleton */}
+        <div className="border-b-2 border-border pb-8 mb-8">
+          <div className="text-center space-y-4">
+            <div className="h-8 bg-muted rounded w-3/4 mx-auto" />
+            <div className="h-6 bg-muted rounded w-1/3 mx-auto" />
+            <div className="space-y-2 mt-4">
+              <div className="h-4 bg-muted rounded w-1/4 mx-auto" />
+              <div className="h-4 bg-muted rounded w-1/3 mx-auto" />
+            </div>
+            <div className="h-10 bg-muted rounded w-2/3 mx-auto mt-6" />
+          </div>
+        </div>
+
+        {/* Summary Skeleton */}
+        <div className="mb-8 space-y-4">
+          <div className="h-6 bg-muted rounded w-1/4" />
+          <div className="h-4 bg-muted rounded w-full" />
+          <div className="h-4 bg-muted rounded w-5/6" />
+          <div className="h-4 bg-muted rounded w-4/5" />
+        </div>
+
+        {/* Company Overview Skeleton */}
+        <div className="mb-8 space-y-4">
+          <div className="h-6 bg-muted rounded w-1/5" />
+          <div className="space-y-2">
+            <div className="flex gap-4">
+              <div className="h-4 bg-muted rounded w-20" />
+              <div className="h-4 bg-muted rounded w-32" />
+            </div>
+            <div className="flex gap-4">
+              <div className="h-4 bg-muted rounded w-20" />
+              <div className="h-4 bg-muted rounded w-40" />
+            </div>
+            <div className="flex gap-4">
+              <div className="h-4 bg-muted rounded w-20" />
+              <div className="h-4 bg-muted rounded w-24" />
+            </div>
+          </div>
+        </div>
+
+        {/* Signal Summary Skeleton */}
+        <div className="mb-8 space-y-4">
+          <div className="h-6 bg-muted rounded w-1/4" />
+          <div className="space-y-4 pl-4 border-l-2 border-muted">
+            <div className="space-y-2">
+              <div className="h-4 bg-muted rounded w-1/3" />
+              <div className="h-4 bg-muted rounded w-full" />
+            </div>
+            <div className="space-y-2">
+              <div className="h-4 bg-muted rounded w-1/3" />
+              <div className="h-4 bg-muted rounded w-5/6" />
+            </div>
+            <div className="space-y-2">
+              <div className="h-4 bg-muted rounded w-1/3" />
+              <div className="h-4 bg-muted rounded w-4/5" />
+            </div>
+          </div>
+        </div>
+
+        {/* Timeline Skeleton */}
+        <div className="mb-8 space-y-4">
+          <div className="h-6 bg-muted rounded w-1/4" />
+          <div className="space-y-3">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="flex gap-4 border-b border-muted pb-3">
+                <div className="h-4 bg-muted rounded w-24" />
+                <div className="h-4 bg-muted rounded w-16" />
+                <div className="h-4 bg-muted rounded flex-1" />
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
@@ -55,7 +128,7 @@ const ReportDocument = ({
     );
   }
 
-  const { corporation, summary_stats, signals, evidence_list, loan_insight } = report;
+  const { corporation, summary_stats, signals, evidence_list, loan_insight, corp_profile } = report;
 
   // Signal Counts
   const signalCounts = summary_stats;
@@ -109,9 +182,9 @@ const ReportDocument = ({
   };
 
   return (
-    <div className="bg-white text-foreground font-sans print:p-0">
+    <div className="report-document bg-white text-foreground font-sans print:p-0" style={{ fontFamily: 'Pretendard, "Malgun Gothic", "맑은 고딕", sans-serif' }}>
       {/* Report Header / Cover */}
-      <div className="border-b-2 border-border pb-8 mb-8">
+      <div className="border-b-2 border-border pb-8 mb-8 break-inside-avoid">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-foreground mb-4">
             rKYC 기업 시그널 분석 보고서
@@ -131,7 +204,7 @@ const ReportDocument = ({
 
       {/* Executive Summary */}
       {sectionsToShow.summary && (
-        <section className="mb-8">
+        <section className="mb-8 break-inside-avoid">
           <h2 className="text-lg font-semibold text-foreground mb-4 pb-2 border-b border-border">
             요약 (Executive Summary)
           </h2>
@@ -154,7 +227,7 @@ const ReportDocument = ({
 
       {/* Company Overview */}
       {sectionsToShow.companyOverview && (
-        <section className="mb-8">
+        <section className="mb-8 break-inside-avoid">
           <h2 className="text-lg font-semibold text-foreground mb-4 pb-2 border-b border-border">
             기업 개요
           </h2>
@@ -185,13 +258,237 @@ const ReportDocument = ({
                 <span className="text-foreground">{corporation.internal_rating}</span>
               </div>
             )}
+            {/* 주요 주주: Profile 데이터가 있을 때만 표시 */}
+            {profile?.shareholders && profile.shareholders.length > 0 && (
+              <div className="flex">
+                <span className="w-32 text-muted-foreground shrink-0">주요 주주</span>
+                <span className="text-foreground">
+                  {profile.shareholders.map((sh, i) => (
+                    <span key={i}>
+                      {sh.name} ({sh.ownership_pct}%)
+                      {i < profile.shareholders.length - 1 && ', '}
+                    </span>
+                  ))}
+                </span>
+              </div>
+            )}
           </div>
+        </section>
+      )}
+
+      {/* 기업 인텔리전스 (방안 3: 2단 레이아웃) - CorporateDetailPage와 동일 */}
+      {sectionsToShow.valueChain && profile && (
+        <section className="mb-8 break-inside-avoid">
+          <h2 className="text-lg font-semibold text-foreground mb-4 pb-2 border-b border-border">
+            기업 인텔리전스
+          </h2>
+
+          {/* 사업 개요 (Full Width) */}
+          <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 mb-4">
+            <h3 className="text-sm font-semibold text-foreground mb-2">사업 개요</h3>
+            {profile.business_summary ? (
+              <p className="text-sm text-muted-foreground leading-relaxed">{profile.business_summary}</p>
+            ) : (
+              <p className="text-sm text-muted-foreground italic">-</p>
+            )}
+            {/* 핵심 지표 inline */}
+            <div className="mt-3 pt-3 border-t border-slate-200 flex items-center gap-6 text-sm">
+              <div>
+                <span className="text-muted-foreground">연간 매출</span>
+                <span className="ml-2 font-medium">{profile.revenue_krw ? `${(profile.revenue_krw / 100000000).toLocaleString()}억원` : '-'}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">수출 비중</span>
+                <span className="ml-2 font-medium">{typeof profile.export_ratio_pct === 'number' ? `${profile.export_ratio_pct}%` : '-'}</span>
+              </div>
+              {profile.business_model && (
+                <div>
+                  <span className="text-muted-foreground">비즈니스</span>
+                  <span className="ml-2 font-medium">B2B</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 2단 레이아웃: 밸류체인 | 시장 포지션 */}
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            {/* 좌측: 밸류체인 */}
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-3">
+              <h3 className="text-sm font-semibold text-foreground">밸류체인</h3>
+
+              {/* 공급사 */}
+              <div>
+                <span className="text-xs text-muted-foreground">공급사</span>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {profile.supply_chain?.key_suppliers?.length > 0 ? (
+                    profile.supply_chain.key_suppliers.map((s, i) => (
+                      <span key={i} className="text-xs bg-white border px-2 py-0.5 rounded">{s}</span>
+                    ))
+                  ) : (
+                    <span className="text-xs text-muted-foreground">-</span>
+                  )}
+                </div>
+              </div>
+
+              {/* 고객사 */}
+              <div>
+                <span className="text-xs text-muted-foreground">고객사</span>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {profile.key_customers?.length > 0 ? (
+                    profile.key_customers.map((c, i) => (
+                      <span key={i} className="text-xs bg-white border px-2 py-0.5 rounded">{c}</span>
+                    ))
+                  ) : (
+                    <span className="text-xs text-muted-foreground">-</span>
+                  )}
+                </div>
+              </div>
+
+              {/* 원자재 */}
+              <div>
+                <span className="text-xs text-muted-foreground">주요 원자재</span>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {profile.key_materials?.length > 0 ? (
+                    profile.key_materials.map((m, i) => (
+                      <span key={i} className="text-xs bg-white border px-2 py-0.5 rounded">{m}</span>
+                    ))
+                  ) : (
+                    <span className="text-xs text-muted-foreground">-</span>
+                  )}
+                </div>
+              </div>
+
+              {/* 단일 조달처 위험 */}
+              {profile.supply_chain?.single_source_risk?.length > 0 && (
+                <div className="pt-2 border-t border-slate-200">
+                  <span className="text-xs text-red-600">⚠ 단일 조달처 위험</span>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {profile.supply_chain.single_source_risk.map((r, i) => (
+                      <span key={i} className="text-xs bg-red-50 text-red-700 border border-red-200 px-2 py-0.5 rounded">{r}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 국가 비중 */}
+              {Object.keys(profile.supply_chain?.supplier_countries || {}).length > 0 && (
+                <div className="pt-2 border-t border-slate-200">
+                  <span className="text-xs text-muted-foreground">공급 국가 비중</span>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {Object.entries(profile.supply_chain!.supplier_countries).map(([country, pct]) => (
+                      <span key={country} className="text-xs bg-orange-50 text-orange-700 px-2 py-0.5 rounded">
+                        {country} {pct}%
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 우측: 시장 포지션 */}
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-3">
+              <h3 className="text-sm font-semibold text-foreground">시장 포지션</h3>
+
+              {/* 경쟁사 */}
+              <div>
+                <span className="text-xs text-muted-foreground">경쟁사</span>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {profile.competitors?.length > 0 ? (
+                    profile.competitors.map((c, i) => (
+                      <span key={i} className="text-xs bg-white border px-2 py-0.5 rounded">{c.name}</span>
+                    ))
+                  ) : (
+                    <span className="text-xs text-muted-foreground">-</span>
+                  )}
+                </div>
+              </div>
+
+              {/* 거시 요인 */}
+              <div className="pt-2 border-t border-slate-200">
+                <span className="text-xs text-muted-foreground">거시 요인</span>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {profile.macro_factors?.length > 0 ? (
+                    profile.macro_factors.map((f, i) => (
+                      <span
+                        key={i}
+                        className={`text-xs px-2 py-0.5 rounded ${
+                          f.impact === 'POSITIVE' ? 'bg-green-50 text-green-700 border border-green-200' :
+                          f.impact === 'NEGATIVE' ? 'bg-red-50 text-red-700 border border-red-200' :
+                          'bg-slate-100 border border-slate-200'
+                        }`}
+                      >
+                        {f.impact === 'POSITIVE' ? '↑ ' : f.impact === 'NEGATIVE' ? '↓ ' : ''}{f.factor}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-xs text-muted-foreground">-</span>
+                  )}
+                </div>
+              </div>
+
+              {/* 주요 주주 */}
+              <div className="pt-2 border-t border-slate-200">
+                <span className="text-xs text-muted-foreground">주요 주주</span>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {profile.shareholders?.length > 0 ? (
+                    profile.shareholders.map((sh, i) => (
+                      <span key={i} className="text-xs bg-white border px-2 py-0.5 rounded">
+                        {sh.name} ({sh.ownership_pct}%)
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-xs text-muted-foreground">-</span>
+                  )}
+                </div>
+              </div>
+
+              {/* 해외 사업 */}
+              {(profile.overseas_business?.subsidiaries?.length > 0 || profile.overseas_business?.manufacturing_countries?.length > 0) && (
+                <div className="pt-2 border-t border-slate-200">
+                  <span className="text-xs text-muted-foreground">해외 사업</span>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {profile.overseas_business?.subsidiaries?.map((sub, i) => (
+                      <span key={i} className="text-xs bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded">
+                        {sub.name} ({sub.country})
+                      </span>
+                    ))}
+                    {profile.overseas_business?.manufacturing_countries?.map((c, i) => (
+                      <span key={`mfg-${i}`} className="text-xs bg-green-50 text-green-700 border border-green-200 px-2 py-0.5 rounded">
+                        생산: {c}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 글로벌 노출 (Full Width) */}
+          {profile.country_exposure && Object.keys(profile.country_exposure).length > 0 && (
+            <div className="flex items-center gap-3 px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg mb-4">
+              <span className="text-sm text-blue-900 font-medium">🌐 글로벌 노출:</span>
+              <div className="flex gap-2">
+                {Object.entries(profile.country_exposure).map(([country, pct]) => (
+                  <span key={country} className="text-sm text-blue-700">
+                    {country} {pct}%
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 신뢰도 */}
+          {profile.profile_confidence && (
+            <div className="text-xs text-muted-foreground text-right">
+              신뢰도: {profile.profile_confidence}
+            </div>
+          )}
         </section>
       )}
 
       {/* Signal Summary by Type */}
       {sectionsToShow.signalTypeSummary && (
-        <section className="mb-8">
+        <section className="mb-8" style={{ pageBreakInside: 'avoid' }}>
           <h2 className="text-lg font-semibold text-foreground mb-4 pb-2 border-b border-border">
             시그널 유형별 요약
           </h2>
@@ -206,7 +503,7 @@ const ReportDocument = ({
               <div className="text-sm text-muted-foreground space-y-1">
                 <p>감지 건수: {signalCounts.direct}건</p>
                 {directSignals.length > 0 ? (
-                  <p className="line-clamp-2">{directSignals[0].summary || directSignals[0].title}</p>
+                  <p>{directSignals[0].summary || directSignals[0].title}</p>
                 ) : (
                   <p className="text-muted-foreground/50">감지된 직접 시그널이 없습니다.</p>
                 )}
@@ -223,7 +520,7 @@ const ReportDocument = ({
               <div className="text-sm text-muted-foreground space-y-1">
                 <p>감지 건수: {signalCounts.industry}건</p>
                 {industrySignals.length > 0 ? (
-                  <p className="line-clamp-2">{industrySignals[0].summary || industrySignals[0].title}</p>
+                  <p>{industrySignals[0].summary || industrySignals[0].title}</p>
                 ) : (
                   <p className="text-muted-foreground/50">감지된 산업 시그널이 없습니다.</p>
                 )}
@@ -240,7 +537,7 @@ const ReportDocument = ({
               <div className="text-sm text-muted-foreground space-y-1">
                 <p>감지 건수: {signalCounts.environment}건</p>
                 {environmentSignals.length > 0 ? (
-                  <p className="line-clamp-2">{environmentSignals[0].summary || environmentSignals[0].title}</p>
+                  <p>{environmentSignals[0].summary || environmentSignals[0].title}</p>
                 ) : (
                   <p className="text-muted-foreground/50">감지된 환경 시그널이 없습니다.</p>
                 )}
@@ -309,7 +606,7 @@ const ReportDocument = ({
                     <p className="text-foreground font-medium text-sm leading-snug">
                       "{evidence.snippet || evidence.ref_value}"
                     </p>
-                    <p className="text-xs text-muted-foreground truncate max-w-[500px]">
+                    <p className="text-xs text-muted-foreground break-all">
                       출처: {evidence.ref_value}
                     </p>
                   </div>
@@ -331,7 +628,7 @@ const ReportDocument = ({
 
       {/* Loan Reference Insight - AI Risk Manager Opinion */}
       {(corporation.has_loan || sectionsToShow.loanInsight) && loan_insight && (
-        <section className="mb-8 break-inside-avoid">
+        <section className="mb-8">
           <h2 className="text-lg font-semibold text-foreground mb-4 pb-2 border-b border-border flex items-center justify-between">
             <span>여신 참고 관점 요약 (AI Risk Opinion)</span>
             <Badge
@@ -433,7 +730,7 @@ const ReportDocument = ({
 
       {/* Disclaimer */}
       {sectionsToShow.disclaimer && (
-        <section className="mt-12 pt-6 border-t-2 border-border">
+        <section className="mt-12 pt-6 border-t-2 border-border" style={{ pageBreakInside: 'avoid' }}>
           <div className="bg-muted p-4 rounded text-xs text-muted-foreground leading-relaxed">
             본 보고서는 rKYC 시스템이 감지한 시그널을 기반으로 생성된 참고 자료입니다.
             자동 판단, 점수화, 예측 또는 조치를 의미하지 않으며,

@@ -4,11 +4,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { FileDown, Link2, Eye, Printer, Loader2 } from "lucide-react";
+import { FileDown, Eye, Printer, Loader2 } from "lucide-react";
 import ReportDocument from "@/components/reports/ReportDocument";
 import ReportPreviewModal from "@/components/reports/ReportPreviewModal";
 import PDFExportModal from "@/components/reports/PDFExportModal";
-import ShareLinkModal from "@/components/reports/ShareLinkModal";
 import { useCorporations, useCorporation } from "@/hooks/useApi";
 
 const ReportsPage = () => {
@@ -16,7 +15,6 @@ const ReportsPage = () => {
   const [selectedCorporationId, setSelectedCorporationId] = useState<string>("");
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [showPDFModal, setShowPDFModal] = useState(false);
-  const [showShareModal, setShowShareModal] = useState(false);
   const reportRef = useRef<HTMLDivElement>(null);
 
   // Set default selection when corporations load
@@ -35,7 +33,7 @@ const ReportsPage = () => {
         <div>
           <h1 className="text-2xl font-bold text-foreground">보고서 관리</h1>
           <p className="text-muted-foreground mt-2">
-            기업별 시그널 분석 보고서를 조회하고 PDF로 내보내거나 공유할 수 있습니다.
+            기업별 시그널 분석 보고서를 조회하고 PDF로 내보낼 수 있습니다.
           </p>
         </div>
 
@@ -81,10 +79,6 @@ const ReportsPage = () => {
                     <FileDown className="w-4 h-4 mr-2" />
                     PDF 다운로드
                   </Button>
-                  <Button variant="secondary" onClick={() => setShowShareModal(true)} disabled={!selectedCorporationId}>
-                    <Link2 className="w-4 h-4 mr-2" />
-                    링크 공유
-                  </Button>
                 </div>
               </div>
             )}
@@ -124,12 +118,6 @@ const ReportsPage = () => {
             onClose={() => setShowPDFModal(false)}
             fileName={defaultFileName}
             contentRef={reportRef}
-          />
-
-          <ShareLinkModal
-            open={showShareModal}
-            onClose={() => setShowShareModal(false)}
-            companyName={companyName}
           />
         </>
       )}

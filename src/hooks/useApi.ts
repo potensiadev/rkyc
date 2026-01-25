@@ -314,6 +314,7 @@ export function useCorpProfileDetail(corpId: string) {
     queryFn: () => getCorpProfileDetail(corpId),
     enabled: !!corpId,
     staleTime: 5 * 60 * 1000,
+    retry: false,  // P1-2 Fix: 404는 재시도 불필요
   });
 }
 
@@ -494,15 +495,57 @@ export function useTriggerImmediateScan() {
 // Report Hook
 // ============================================================
 
-import { getCorporationReport } from '@/lib/api';
+import {
+  getCorporationReport,
+  getLoanInsight,
+  checkLoanInsightExists,
+  getAllLoanInsightSummaries,
+  ApiLoanInsightSummary,
+  ApiLoanInsightSummariesResponse,
+} from '@/lib/api';
 
 export function useCorporationReport(corpId: string) {
   return useQuery({
     queryKey: ['report', corpId],
     queryFn: () => getCorporationReport(corpId),
     enabled: !!corpId,
-    // Keep report fresh but allow short cache
-    staleTime: 5 * 60 * 1000
+    // 캐싱 전략 개선: 더 긴 캐시 유지
+    staleTime: 10 * 60 * 1000,      // 10분 동안 fresh 상태
+    gcTime: 30 * 60 * 1000,          // 30분 동안 캐시 유지 (구 cacheTime)
+    refetchOnWindowFocus: false,     // 포커스 시 재요청 방지
+    refetchOnMount: false,           // 마운트 시 재요청 방지 (캐시 있으면)
+  });
+}
+
+// ============================================================
+// Loan Insight Hook
+// ============================================================
+
+export function useLoanInsight(corpId: string) {
+  return useQuery({
+    queryKey: ['loan-insight', corpId],
+    queryFn: () => getLoanInsight(corpId),
+    enabled: !!corpId,
+    staleTime: 5 * 60 * 1000,
+    retry: false, // 404면 재시도 안함
+  });
+}
+
+export function useLoanInsightExists(corpId: string) {
+  return useQuery({
+    queryKey: ['loan-insight-exists', corpId],
+    queryFn: () => checkLoanInsightExists(corpId),
+    enabled: !!corpId,
+    staleTime: 60 * 1000, // 1분 캐시
+  });
+}
+
+// Signal Inbox용 - 전체 기업 스탠스 배치 조회
+export function useLoanInsightSummaries() {
+  return useQuery({
+    queryKey: ['loan-insight-summaries'],
+    queryFn: () => getAllLoanInsightSummaries(),
+    staleTime: 2 * 60 * 1000, // 2분 캐시
   });
 }
 
@@ -531,5 +574,10 @@ export type {
   SchedulerActionResponse,
   SchedulerTriggerResponse,
   // Report types
-  ApiReportResponse
+  ApiReportResponse,
+  // Loan Insight types
+  ApiLoanInsightResponse,
+  ApiLoanInsightExistsResponse,
+  ApiLoanInsightSummary,
+  ApiLoanInsightSummariesResponse,
 };

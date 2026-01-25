@@ -1,15 +1,14 @@
 import { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { SignalCard } from "@/components/signals/SignalCard";
-import { SignalDetailPanel } from "@/components/signals/SignalDetailPanel";
 import { Signal, SignalStatus } from "@/types/signal";
 import { Building2, Loader2 } from "lucide-react";
 import { useSignals } from "@/hooks/useApi";
 
 export default function DirectSignalPage() {
+  const navigate = useNavigate();
   const { data: signals = [], isLoading } = useSignals({ signal_type: 'DIRECT' });
-  const [selectedSignal, setSelectedSignal] = useState<Signal | null>(null);
-  const [detailOpen, setDetailOpen] = useState(false);
   const [activeStatus, setActiveStatus] = useState<SignalStatus | "all">("all");
 
   const filteredSignals = useMemo(() => {
@@ -33,8 +32,7 @@ export default function DirectSignalPage() {
   }, [signals]);
 
   const handleViewDetail = (signal: Signal) => {
-    setSelectedSignal(signal);
-    setDetailOpen(true);
+    navigate(`/signals/${signal.id}`);
   };
 
   const statusFilters = [
@@ -121,13 +119,6 @@ export default function DirectSignalPage() {
             <p className="text-muted-foreground">선택한 조건에 해당하는 직접 시그널이 없습니다.</p>
           </div>
         )}
-
-        {/* Signal detail panel */}
-        <SignalDetailPanel
-          signal={selectedSignal}
-          open={detailOpen}
-          onClose={() => setDetailOpen(false)}
-        />
       </div>
     </MainLayout>
   );

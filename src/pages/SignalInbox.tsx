@@ -1,25 +1,15 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
-import { DemoPanel } from "@/components/demo/DemoPanel";
-import { SchedulerPanel } from "@/components/demo/SchedulerPanel";
-import { SIGNAL_TYPE_CONFIG, SIGNAL_IMPACT_CONFIG, SIGNAL_STRENGTH_CONFIG } from "@/types/signal";
-import { formatRelativeTime } from "@/data/signals";
-import { useSignals, useSignalStats } from "@/hooks/useApi";
+import { useSignals, useSignalStats, useLoanInsightSummaries, ApiLoanInsightSummary } from "@/hooks/useApi";
 import {
   AlertCircle,
   TrendingUp,
   TrendingDown,
-  Lightbulb,
-  Building2,
-  Factory,
-  Globe,
-  FileText,
-  Clock
+  Lightbulb
 } from "lucide-react";
 
-import { GravityGrid } from "@/components/dashboard/GravityGrid";
-import { LevitatingCard } from "@/components/dashboard/LevitatingCard";
+import { GroupedSignalCard } from "@/components/dashboard/GroupedSignalCard";
 
 interface KPICardProps {
   icon: React.ElementType;
@@ -47,22 +37,6 @@ function KPICard({ icon: Icon, label, value, trend, colorClass = "text-primary",
   );
 }
 
-function getSignalTypeIcon(category: "direct" | "industry" | "environment") {
-  switch (category) {
-    case "direct": return Building2;
-    case "industry": return Factory;
-    case "environment": return Globe;
-  }
-}
-
-function getImpactIcon(impact: "risk" | "opportunity" | "neutral") {
-  switch (impact) {
-    case "risk": return TrendingDown;
-    case "opportunity": return TrendingUp;
-    case "neutral": return FileText;
-  }
-}
-
 export default function SignalInbox() {
   const navigate = useNavigate();
   const [activeStatus, setActiveStatus] = useState<"all" | "new" | "review" | "resolved">("all");
@@ -70,6 +44,18 @@ export default function SignalInbox() {
   // API에서 데이터 로드
   const { data: signals = [], isLoading, error } = useSignals();
   const { data: stats } = useSignalStats();
+  const { data: insightSummaries } = useLoanInsightSummaries();
+
+  // corp_id -> insight summary 맵 생성
+  const insightMap = useMemo(() => {
+    const map = new Map<string, ApiLoanInsightSummary>();
+    if (insightSummaries?.insights) {
+      insightSummaries.insights.forEach((insight) => {
+        map.set(insight.corp_id, insight);
+      });
+    }
+    return map;
+  }, [insightSummaries]);
 
   const filteredSignals = useMemo(() => {
     return signals.filter((signal) => {
@@ -77,6 +63,26 @@ export default function SignalInbox() {
       return true;
     });
   }, [activeStatus, signals]);
+
+  // 기업별로 시그널 그룹핑
+  const groupedSignals = useMemo(() => {
+    const groups = new Map<string, typeof filteredSignals>();
+    filteredSignals.forEach((signal) => {
+      const corpId = signal.corporationId;
+      if (!groups.has(corpId)) {
+        groups.set(corpId, []);
+      }
+      groups.get(corpId)!.push(signal);
+    });
+    // Map을 배열로 변환하고 시그널 수 기준 정렬
+    return Array.from(groups.entries())
+      .map(([corpId, sigs]) => ({
+        corporationId: corpId,
+        corporationName: sigs[0].corporationName,
+        signals: sigs,
+      }))
+      .sort((a, b) => b.signals.length - a.signals.length);
+  }, [filteredSignals]);
 
   const counts = useMemo(() => ({
     all: stats?.total || signals.length,
@@ -88,12 +94,6 @@ export default function SignalInbox() {
     opportunity7d: stats?.opportunity || signals.filter(s => s.impact === "opportunity").length,
     loanEligible: 0,
   }), [signals, stats]);
-
-  // Click company name -> go to corporate report
-  const handleCompanyClick = (corporationId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    navigate(`/corporates/${corporationId}`);
-  };
 
   // Click row -> go to signal detail
   const handleRowClick = (signalId: string) => {
@@ -174,17 +174,20 @@ export default function SignalInbox() {
           </select>
         </div>
 
-        {/* 2. Levitating Asset Grid */}
-        <GravityGrid>
-          {filteredSignals.map((signal, idx) => (
-            <LevitatingCard
-              key={signal.id}
-              signal={signal}
-              index={idx}
-              onClick={handleRowClick}
+        {/* 2. Grouped Signal Cards by Corporation */}
+        <div className="space-y-4">
+          {groupedSignals.map((group) => (
+            <GroupedSignalCard
+              key={group.corporationId}
+              corporationId={group.corporationId}
+              corporationName={group.corporationName}
+              signals={group.signals}
+              loanInsight={insightMap.get(group.corporationId)}
+              onSignalClick={handleRowClick}
+              onCorporationClick={(id) => navigate(`/corporates/${id}`)}
             />
           ))}
-        </GravityGrid>
+        </div>
 
         {filteredSignals.length === 0 && (
           <div className="text-center py-32 bg-card/30 rounded-2xl border border-dashed border-border/50">

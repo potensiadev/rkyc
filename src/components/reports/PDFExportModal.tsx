@@ -37,51 +37,128 @@ const PDFExportModal = ({ open, onClose, fileName, contentRef }: PDFExportModalP
     }
 
     try {
-      setProgress(20);
+      setProgress(10);
 
-      // Wait for fonts to load
+      // Wait for fonts to load completely
       await document.fonts.ready;
 
-      setProgress(40);
+      // Additional delay for font rendering
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      setProgress(20);
 
       const element = contentRef.current;
 
-      // Capture the element
-      const canvas = await html2canvas(element, {
-        scale: 2,
+      // A4 dimensions in mm: 210 x 297
+      // With 15mm margins: content area = 180 x 267mm
+      // At 96 DPI: 180mm = ~680px
+      const A4_WIDTH_MM = 210;
+      const A4_HEIGHT_MM = 297;
+      const MARGIN_MM = 15;
+      const CONTENT_WIDTH_MM = A4_WIDTH_MM - (MARGIN_MM * 2);
+      const CONTENT_HEIGHT_MM = A4_HEIGHT_MM - (MARGIN_MM * 2);
+
+      // Pixel dimensions (at 96 DPI, 1mm ≈ 3.78px)
+      const MM_TO_PX = 3.78;
+      const CONTENT_WIDTH_PX = Math.floor(CONTENT_WIDTH_MM * MM_TO_PX);
+
+      setProgress(30);
+
+      // Clone and prepare element for capture
+      const clonedElement = element.cloneNode(true) as HTMLElement;
+      clonedElement.style.width = `${CONTENT_WIDTH_PX}px`;
+      clonedElement.style.maxWidth = `${CONTENT_WIDTH_PX}px`;
+      clonedElement.style.position = 'absolute';
+      clonedElement.style.left = '-9999px';
+      clonedElement.style.top = '0';
+      clonedElement.style.backgroundColor = '#ffffff';
+      clonedElement.style.padding = '0';
+      clonedElement.style.margin = '0';
+
+      // Apply PDF-optimized styles to cloned element
+      const styleElement = document.createElement('style');
+      styleElement.textContent = `
+        * {
+          -webkit-font-smoothing: antialiased;
+          -moz-osx-font-smoothing: grayscale;
+          text-rendering: optimizeLegibility;
+        }
+        .line-clamp-1, .line-clamp-2, .line-clamp-3 {
+          display: block !important;
+          -webkit-line-clamp: unset !important;
+          overflow: visible !important;
+          text-overflow: clip !important;
+          white-space: normal !important;
+        }
+        .truncate {
+          overflow: visible !important;
+          text-overflow: clip !important;
+          white-space: normal !important;
+          word-break: break-word !important;
+        }
+      `;
+      clonedElement.prepend(styleElement);
+
+      document.body.appendChild(clonedElement);
+
+      // Wait for layout
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      setProgress(40);
+
+      // Capture with improved settings
+      const canvas = await html2canvas(clonedElement, {
+        scale: 2, // Higher scale for better quality
         useCORS: true,
         logging: false,
         backgroundColor: "#ffffff",
-        width: element.scrollWidth,
-        height: element.scrollHeight,
-        windowWidth: element.scrollWidth,
-        windowHeight: element.scrollHeight,
+        width: CONTENT_WIDTH_PX,
+        height: clonedElement.scrollHeight,
+        windowWidth: CONTENT_WIDTH_PX,
+        windowHeight: clonedElement.scrollHeight,
+        imageTimeout: 15000,
+        // Improve text rendering
+        onclone: (clonedDoc, clonedEl) => {
+          // Force font family on all text elements
+          const textElements = clonedEl.querySelectorAll('*');
+          textElements.forEach((el) => {
+            if (el instanceof HTMLElement) {
+              const computedStyle = window.getComputedStyle(el);
+              // Preserve existing font but ensure fallback
+              el.style.fontFamily = `${computedStyle.fontFamily}, "Malgun Gothic", "맑은 고딕", sans-serif`;
+            }
+          });
+        },
       });
+
+      // Remove cloned element
+      document.body.removeChild(clonedElement);
 
       setProgress(60);
 
+      // Create PDF
       const pdf = new jsPDF({
         orientation: "portrait",
         unit: "mm",
         format: "a4",
+        compress: true,
       });
 
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
       const imgWidth = canvas.width;
       const imgHeight = canvas.height;
 
-      // Calculate scale to fit width with margins
-      const margin = 10;
-      const scale = (pdfWidth - margin * 2) / imgWidth;
-      const scaledWidth = imgWidth * scale;
-      const scaledHeight = imgHeight * scale;
+      // Calculate dimensions for PDF
+      const pdfContentWidth = CONTENT_WIDTH_MM;
+      const scale = pdfContentWidth / (imgWidth / 2); // Divide by 2 because canvas scale is 2
+      const scaledHeight = (imgHeight / 2) * scale;
 
-      // Calculate number of pages needed
-      const pageContentHeight = pdfHeight - margin * 2;
-      const totalPages = Math.ceil(scaledHeight / pageContentHeight);
+      // Calculate number of pages
+      const totalPages = Math.ceil(scaledHeight / CONTENT_HEIGHT_MM);
 
       setProgress(70);
+
+      // Source height per page in canvas pixels (accounting for scale)
+      const sourceHeightPerPage = (CONTENT_HEIGHT_MM / scale) * 2;
 
       for (let page = 0; page < totalPages; page++) {
         if (page > 0) {
@@ -89,8 +166,11 @@ const PDFExportModal = ({ open, onClose, fileName, contentRef }: PDFExportModalP
         }
 
         // Calculate source area for this page
-        const sourceY = (page * pageContentHeight) / scale;
-        const sourceHeight = Math.min(pageContentHeight / scale, imgHeight - sourceY);
+        const sourceY = page * sourceHeightPerPage;
+        const remainingHeight = imgHeight - sourceY;
+        const sourceHeight = Math.min(sourceHeightPerPage, remainingHeight);
+
+        if (sourceHeight <= 0) continue;
 
         // Create a temporary canvas for this page
         const pageCanvas = document.createElement("canvas");
@@ -99,29 +179,40 @@ const PDFExportModal = ({ open, onClose, fileName, contentRef }: PDFExportModalP
         const ctx = pageCanvas.getContext("2d");
 
         if (ctx) {
+          // White background
           ctx.fillStyle = "#ffffff";
           ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+
+          // Draw portion of the main canvas
           ctx.drawImage(
             canvas,
-            0, sourceY,
-            imgWidth, sourceHeight,
-            0, 0,
-            imgWidth, sourceHeight
+            0, sourceY,           // Source x, y
+            imgWidth, sourceHeight, // Source width, height
+            0, 0,                   // Dest x, y
+            imgWidth, sourceHeight  // Dest width, height
           );
 
-          const pageImgData = pageCanvas.toDataURL("image/png");
+          const pageImgData = pageCanvas.toDataURL("image/png", 1.0);
+
+          // Calculate actual height for this page content
+          const actualPageHeight = (sourceHeight / 2) * scale;
+
           pdf.addImage(
             pageImgData,
             "PNG",
-            margin,
-            margin,
-            scaledWidth,
-            sourceHeight * scale
+            MARGIN_MM,
+            MARGIN_MM,
+            pdfContentWidth,
+            actualPageHeight,
+            undefined,
+            'FAST'
           );
         }
+
+        setProgress(70 + Math.floor((page / totalPages) * 20));
       }
 
-      setProgress(90);
+      setProgress(95);
 
       // Generate blob for download
       const blob = pdf.output("blob");

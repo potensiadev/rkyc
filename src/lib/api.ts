@@ -677,6 +677,34 @@ export async function triggerImmediateScan(): Promise<SchedulerTriggerResponse> 
 }
 
 
+// Report Corp Profile (공급망, 해외사업, 거시요인)
+export interface ApiReportSupplyChain {
+  key_suppliers: string[];
+  supplier_countries: Record<string, number>;
+  single_source_risk: string[];
+  material_import_ratio_pct: number | null;
+}
+
+export interface ApiReportOverseasBusiness {
+  subsidiaries: { name: string; country: string }[];
+  manufacturing_countries: string[];
+}
+
+export interface ApiReportCorpProfile {
+  business_summary: string | null;
+  revenue_krw: number | null;
+  export_ratio_pct: number | null;
+  country_exposure: string[];
+  key_materials: string[];
+  key_customers: string[];
+  supply_chain: ApiReportSupplyChain | null;
+  overseas_business: ApiReportOverseasBusiness | null;
+  competitors: string[];
+  macro_factors: { factor: string; impact: string }[];
+  shareholders: { name: string; ownership_pct: number }[];
+  profile_confidence: string | null;
+}
+
 export interface ApiReportResponse {
   corporation: {
     id: string;
@@ -712,10 +740,71 @@ export interface ApiReportResponse {
     action_items: string[];
     generated_at: string;
   } | null;
+  corp_profile: ApiReportCorpProfile | null;  // NEW: 공급망, 해외사업 등
   snapshot_data: Record<string, unknown> | null;
   generated_at: string;
 }
 
 export async function getCorporationReport(corpId: string): Promise<ApiReportResponse> {
   return fetchApi<ApiReportResponse>(`/api/v1/reports/corporation/${corpId}`);
+}
+
+// ============================================================
+// Loan Insight API
+// ============================================================
+
+export interface ApiLoanInsightResponse {
+  insight_id: string;
+  corp_id: string;
+  stance: {
+    level: string;  // CAUTION, MONITORING, STABLE, POSITIVE
+    label: string;  // 한글 라벨
+    color: string;  // red, orange, green, blue
+  };
+  executive_summary: string | null;  // 사업개요 + 비즈니스모델 + 핵심 시그널 요약
+  narrative: string;
+  key_risks: string[];
+  key_opportunities: string[];  // 핵심 기회 요인
+  mitigating_factors: string[];
+  action_items: string[];
+  signal_count: number;
+  risk_count: number;
+  opportunity_count: number;
+  generation_model: string | null;
+  is_fallback: boolean;
+  generated_at: string;
+}
+
+export interface ApiLoanInsightExistsResponse {
+  exists: boolean;
+  generated_at: string | null;
+  stance_level: string | null;
+}
+
+export async function getLoanInsight(corpId: string): Promise<ApiLoanInsightResponse> {
+  return fetchApi<ApiLoanInsightResponse>(`/api/v1/loan-insights/${corpId}`);
+}
+
+export async function checkLoanInsightExists(corpId: string): Promise<ApiLoanInsightExistsResponse> {
+  return fetchApi<ApiLoanInsightExistsResponse>(`/api/v1/loan-insights/${corpId}/exists`);
+}
+
+// Batch API for Signal Inbox - Get all loan insight summaries
+export interface ApiLoanInsightSummary {
+  corp_id: string;
+  stance_level: string;  // CAUTION, MONITORING, STABLE, POSITIVE
+  stance_label: string;  // 한글 라벨 (주의, 관찰, 안정, 긍정)
+  stance_color: string;  // red, orange, green, blue
+  executive_summary: string | null;
+  risk_count: number;
+  opportunity_count: number;
+  generated_at: string | null;
+}
+
+export interface ApiLoanInsightSummariesResponse {
+  insights: ApiLoanInsightSummary[];
+}
+
+export async function getAllLoanInsightSummaries(): Promise<ApiLoanInsightSummariesResponse> {
+  return fetchApi<ApiLoanInsightSummariesResponse>(`/api/v1/loan-insights/`);
 }
