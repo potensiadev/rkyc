@@ -13,6 +13,17 @@ Production-grade validation with:
 - Chain-of-Thought 8단계
 - Soft Guardrails
 - Few-shot 예시 포함
+
+Sprint 2 Multi-Agent Architecture (ADR-009):
+- 3-Agent parallel execution (Direct, Industry, Environment)
+- Orchestrator-based coordination
+- Deduplication and cross-validation
+
+Sprint 3/4 Enhancements (ADR-009):
+- Cross-Validation with conflict detection
+- Graceful Degradation with partial_failure tracking
+- Provider Concurrency Limiting
+- OrchestratorMetadata for monitoring
 """
 
 import json
@@ -35,6 +46,13 @@ from app.worker.llm.prompts import (
     ENVIRONMENT_FEW_SHOT_EXAMPLES,
 )
 from app.worker.llm.exceptions import AllProvidersFailedError
+
+# Sprint 2/3/4: Multi-Agent imports
+from app.worker.pipelines.signal_agents import (
+    SignalAgentOrchestrator,
+    get_signal_orchestrator,
+)
+from app.worker.pipelines.signal_agents.orchestrator import OrchestratorMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -93,10 +111,30 @@ class SignalExtractionPipeline:
     - Chain-of-Thought 8단계 추론
     - Soft Guardrails (자기 검증)
     - Signal Type별 Few-shot 예시
+
+    Sprint 2 Multi-Agent Architecture (ADR-009):
+    - 3-Agent parallel execution
+    - use_multi_agent=True enables parallel mode
+    - use_multi_agent=False uses legacy single-LLM mode
     """
 
-    def __init__(self):
+    def __init__(self, use_multi_agent: bool = True):
+        """
+        Initialize pipeline.
+
+        Args:
+            use_multi_agent: True to use 3-Agent parallel mode (Sprint 2)
+                           False to use legacy single-LLM mode
+        """
         self.llm = LLMService()
+        self.use_multi_agent = use_multi_agent
+
+        if use_multi_agent:
+            self._orchestrator = get_signal_orchestrator()
+            logger.info("SignalExtractionPipeline initialized with Multi-Agent mode")
+        else:
+            self._orchestrator = None
+            logger.info("SignalExtractionPipeline initialized with Legacy mode")
 
     def _build_enhanced_system_prompt(self, corp_name: str, industry_name: str) -> str:
         """
@@ -204,9 +242,130 @@ class SignalExtractionPipeline:
                 - event_signature: SHA256 hash for deduplication
         """
         corp_id = context.get("corp_id", "")
+
+        # Sprint 2: Use Multi-Agent mode if enabled
+        if self.use_multi_agent and self._orchestrator:
+            logger.info(
+                f"SIGNAL stage starting for corp_id={corp_id} "
+                f"[Multi-Agent Mode: 3-Agent Parallel]"
+            )
+            return self._execute_multi_agent(context)
+        else:
+            logger.info(
+                f"SIGNAL stage starting for corp_id={corp_id} "
+                f"[Legacy Mode: Single LLM]"
+            )
+            return self._execute_legacy(context)
+
+    def _execute_multi_agent(self, context: dict) -> list[dict]:
+        """
+        Execute signal extraction using 3-Agent parallel architecture.
+
+        Sprint 2 (ADR-009):
+        - DirectSignalAgent: 8 DIRECT event_types
+        - IndustrySignalAgent: INDUSTRY_SHOCK
+        - EnvironmentSignalAgent: POLICY_REGULATION_CHANGE
+
+        Sprint 3/4 (ADR-009):
+        - Cross-Validation with conflict detection
+        - Graceful Degradation with partial_failure tracking
+        - OrchestratorMetadata for monitoring
+
+        All agents run in parallel, results are merged and deduplicated.
+        """
+        corp_id = context.get("corp_id", "")
+
+        logger.info(
+            f"Multi-Agent extraction: "
+            f"direct_events={len(context.get('direct_events', []))}, "
+            f"industry_events={len(context.get('industry_events', []))}, "
+            f"environment_events={len(context.get('environment_events', []))}"
+        )
+
+        try:
+            # Execute all 3 agents via orchestrator
+            # Sprint 3/4: Returns tuple (signals, metadata)
+            signals, metadata = self._orchestrator.execute(context)
+
+            # Log orchestrator metadata for monitoring
+            self._log_orchestrator_metadata(corp_id, metadata)
+
+            # Check for partial failure
+            if metadata.partial_failure:
+                logger.warning(
+                    f"SIGNAL stage completed with partial failure: "
+                    f"failed_agents={metadata.failed_agents}"
+                )
+
+            logger.info(
+                f"SIGNAL stage completed [Multi-Agent]: "
+                f"extracted {len(signals)} signals, "
+                f"conflicts={metadata.conflicts_detected}, "
+                f"needs_review={metadata.needs_review_count}"
+            )
+            return signals
+
+        except Exception as e:
+            logger.error(
+                f"Multi-Agent extraction failed for corp_id={corp_id}: {e}"
+            )
+            # Fallback to legacy mode on failure
+            logger.warning("Falling back to Legacy mode...")
+            return self._execute_legacy(context)
+
+    def _log_orchestrator_metadata(
+        self,
+        corp_id: str,
+        metadata: OrchestratorMetadata,
+    ) -> None:
+        """
+        Log orchestrator metadata for monitoring and debugging.
+
+        Sprint 3/4: Structured logging of agent performance metrics.
+        """
+        logger.info(
+            f"[OrchestratorMetrics] corp_id={corp_id} "
+            f"total_raw={metadata.total_raw_signals} "
+            f"deduplicated={metadata.deduplicated_count} "
+            f"validated={metadata.validated_count} "
+            f"conflicts={metadata.conflicts_detected} "
+            f"needs_review={metadata.needs_review_count} "
+            f"processing_ms={metadata.processing_time_ms} "
+            f"partial_failure={metadata.partial_failure}"
+        )
+
+        # Log individual agent results
+        for agent_name, result in metadata.agent_results.items():
+            if isinstance(result, dict):
+                logger.info(
+                    f"[AgentMetrics] agent={agent_name} "
+                    f"status={result.get('status', 'unknown')} "
+                    f"signals={result.get('signal_count', 0)} "
+                    f"time_ms={result.get('execution_time_ms', 0)} "
+                    f"retries={result.get('retry_count', 0)}"
+                )
+
+        # Log failed agents with error messages
+        if metadata.failed_agents:
+            for agent_name in metadata.failed_agents:
+                agent_result = metadata.agent_results.get(agent_name, {})
+                error_msg = agent_result.get('error_message', 'unknown error')
+                logger.warning(
+                    f"[AgentFailure] agent={agent_name} error={error_msg}"
+                )
+
+    def _execute_legacy(self, context: dict) -> list[dict]:
+        """
+        Execute signal extraction using legacy single-LLM approach.
+
+        This is the original implementation kept for:
+        - Backward compatibility
+        - Fallback when multi-agent fails
+        - Comparison testing
+        """
+        corp_id = context.get("corp_id", "")
         corp_name = context.get("corp_name", "")
         industry_name = context.get("industry_name", "")
-        logger.info(f"SIGNAL stage starting for corp_id={corp_id}")
 
         # 해커톤 최적화: 향상된 시스템 프롬프트 사용
         enhanced_system_prompt = self._build_enhanced_system_prompt(
@@ -249,7 +408,7 @@ class SignalExtractionPipeline:
         )
 
         logger.info(
-            f"SIGNAL extraction with enhanced prompts (hackathon optimized): "
+            f"SIGNAL extraction [Legacy mode]: "
             f"direct={len(context.get('direct_events', []))}, "
             f"industry={len(context.get('industry_events', []))}, "
             f"environment={len(context.get('environment_events', []))}"
@@ -271,7 +430,7 @@ class SignalExtractionPipeline:
                     enriched_signals.append(enriched)
 
             logger.info(
-                f"SIGNAL stage completed: extracted {len(enriched_signals)} signals"
+                f"SIGNAL stage completed [Legacy]: extracted {len(enriched_signals)} signals"
             )
             return enriched_signals
 

@@ -22,6 +22,15 @@ from app.worker.pipelines.corp_profiling import (
     ProfileEvidenceCreator,
 )
 
+# Sprint 2: Signal Multi-Agent Architecture (ADR-009)
+from app.worker.pipelines.signal_agents import (
+    BaseSignalAgent,
+    DirectSignalAgent,
+    IndustrySignalAgent,
+    EnvironmentSignalAgent,
+    SignalAgentOrchestrator,
+)
+
 __all__ = [
     "SnapshotPipeline",
     "NoSnapshotError",
@@ -48,4 +57,10 @@ __all__ = [
     "CorpProfileValidator",
     "EnvironmentQuerySelector",
     "ProfileEvidenceCreator",
+    # Sprint 2: Signal Multi-Agent Architecture (ADR-009)
+    "BaseSignalAgent",
+    "DirectSignalAgent",
+    "IndustrySignalAgent",
+    "EnvironmentSignalAgent",
+    "SignalAgentOrchestrator",
 ]

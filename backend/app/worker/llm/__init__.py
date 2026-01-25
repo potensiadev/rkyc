@@ -66,6 +66,18 @@ from app.worker.llm.orchestrator import (
     reset_orchestrator,
 )
 
+# ADR-009 Sprint 1 - Usage Tracking
+from app.worker.llm.usage_tracker import (
+    LLMUsageTracker,
+    LLMUsageLog,
+    UsageSummary,
+    LLMProvider,
+    TOKEN_PRICING,
+    get_usage_tracker,
+    reset_usage_tracker,
+    log_llm_usage,
+)
+
 # v2.0 - 4-Layer Analysis Architecture
 from app.worker.llm.layer_architecture import (
     # Enums and Constants
@@ -159,6 +171,15 @@ __all__ = [
     "RuleBasedMergeConfig",
     "get_orchestrator",
     "reset_orchestrator",
+    # ADR-009 Sprint 1 - Usage Tracking
+    "LLMUsageTracker",
+    "LLMUsageLog",
+    "UsageSummary",
+    "LLMProvider",
+    "TOKEN_PRICING",
+    "get_usage_tracker",
+    "reset_usage_tracker",
+    "log_llm_usage",
     # v2.0 - 4-Layer Analysis Architecture
     "SourceCredibility",
     "ImpactPath",

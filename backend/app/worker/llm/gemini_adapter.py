@@ -29,7 +29,7 @@ from litellm.exceptions import (
 
 from app.core.config import settings
 from app.worker.llm.exceptions import AllProvidersFailedError
-from app.worker.pipelines.corp_profiling import sanitize_input_for_prompt
+from app.worker.llm.utils import sanitize_input_for_prompt
 
 logger = logging.getLogger(__name__)
 

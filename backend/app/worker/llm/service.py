@@ -7,6 +7,11 @@ v1.1 변경사항:
   - response.choices 검증 추가
   - API 키 누락 시 명확한 에러
   - timeout 예외 분류 추가
+
+v1.2 변경사항 (Sprint 1 - ADR-009):
+- LLM Usage Tracking 통합
+- Per-call 비용 계산 및 로깅
+- Agent별 사용량 추적
 """
 
 import json
@@ -27,6 +32,7 @@ from app.worker.llm.exceptions import (
     TimeoutError as LLMTimeoutError,
     NoAPIKeyConfiguredError,
 )
+from app.worker.llm.usage_tracker import log_llm_usage
 
 logger = logging.getLogger(__name__)
 
@@ -145,6 +151,10 @@ class LLMService:
         response_format: Optional[dict] = None,
         temperature: float = 0.1,
         max_tokens: int = 4096,
+        agent_name: str = "unknown",
+        corp_id: Optional[str] = None,
+        job_id: Optional[str] = None,
+        stage: Optional[str] = None,
     ) -> str:
         """
         Call LLM with automatic fallback chain.
@@ -154,6 +164,10 @@ class LLMService:
             response_format: Optional response format (e.g., {"type": "json_object"})
             temperature: Sampling temperature (0.0-1.0)
             max_tokens: Maximum tokens in response
+            agent_name: Name of the agent making this call (for usage tracking)
+            corp_id: Corporation ID (for usage tracking)
+            job_id: Job ID (for usage tracking)
+            stage: Pipeline stage (for usage tracking)
 
         Returns:
             str: LLM response content
@@ -180,6 +194,10 @@ class LLMService:
 
             # Try this model with retries
             for attempt in range(self.MAX_RETRIES):
+                start_time = time.time()
+                input_tokens = 0
+                output_tokens = 0
+
                 try:
                     logger.info(
                         f"Calling {model} (attempt {attempt + 1}/{self.MAX_RETRIES})"
@@ -200,6 +218,7 @@ class LLMService:
 
                     # Make the call
                     response = completion(**kwargs)
+                    latency_ms = int((time.time() - start_time) * 1000)
 
                     # P0-004 fix: Validate response structure before accessing
                     if not response or not hasattr(response, 'choices'):
@@ -229,7 +248,29 @@ class LLMService:
                             raw_response="[empty]",
                         )
 
-                    logger.info(f"Successfully got response from {model}")
+                    # Extract token counts from response (ADR-009 Sprint 1)
+                    if hasattr(response, 'usage') and response.usage:
+                        input_tokens = getattr(response.usage, 'prompt_tokens', 0) or 0
+                        output_tokens = getattr(response.usage, 'completion_tokens', 0) or 0
+
+                    # Log usage (ADR-009 Sprint 1)
+                    log_llm_usage(
+                        provider=provider,
+                        model=model,
+                        agent_name=agent_name,
+                        input_tokens=input_tokens,
+                        output_tokens=output_tokens,
+                        latency_ms=latency_ms,
+                        corp_id=corp_id,
+                        job_id=job_id,
+                        stage=stage,
+                        success=True,
+                    )
+
+                    logger.info(
+                        f"Successfully got response from {model} "
+                        f"(tokens: {input_tokens}+{output_tokens}, latency: {latency_ms}ms)"
+                    )
 
                     return content
 
@@ -238,6 +279,23 @@ class LLMService:
                     raise
 
                 except Exception as e:
+                    latency_ms = int((time.time() - start_time) * 1000)
+
+                    # Log failed usage (ADR-009 Sprint 1)
+                    log_llm_usage(
+                        provider=provider,
+                        model=model,
+                        agent_name=agent_name,
+                        input_tokens=input_tokens,
+                        output_tokens=output_tokens,
+                        latency_ms=latency_ms,
+                        corp_id=corp_id,
+                        job_id=job_id,
+                        stage=stage,
+                        success=False,
+                        error_message=str(e)[:200],
+                    )
+
                     classified_error = self._classify_error(e, provider)
                     errors.append({
                         "model": model,
@@ -284,6 +342,10 @@ class LLMService:
         messages: list[dict],
         temperature: float = 0.1,
         max_tokens: int = 4096,
+        agent_name: str = "unknown",
+        corp_id: Optional[str] = None,
+        job_id: Optional[str] = None,
+        stage: Optional[str] = None,
     ) -> dict:
         """
         Call LLM and parse JSON response.
@@ -292,6 +354,10 @@ class LLMService:
             messages: List of message dicts
             temperature: Sampling temperature
             max_tokens: Maximum tokens
+            agent_name: Name of the agent making this call (for usage tracking)
+            corp_id: Corporation ID (for usage tracking)
+            job_id: Job ID (for usage tracking)
+            stage: Pipeline stage (for usage tracking)
 
         Returns:
             dict: Parsed JSON response
@@ -305,6 +371,10 @@ class LLMService:
             response_format={"type": "json_object"},
             temperature=temperature,
             max_tokens=max_tokens,
+            agent_name=agent_name,
+            corp_id=corp_id,
+            job_id=job_id,
+            stage=stage,
         )
 
         # Strip markdown code blocks if present
@@ -329,7 +399,14 @@ class LLMService:
                 raw_response=response[:500],
             )
 
-    def extract_signals(self, context: dict, system_prompt: str, user_prompt: str) -> list[dict]:
+    def extract_signals(
+        self,
+        context: dict,
+        system_prompt: str,
+        user_prompt: str,
+        agent_name: str = "signal_extraction",
+        trace_id: Optional[str] = None,
+    ) -> list[dict]:
         """
         Extract risk signals from context using LLM.
 
@@ -337,19 +414,37 @@ class LLMService:
             context: Unified context data
             system_prompt: System prompt for signal extraction
             user_prompt: User prompt with context data
+            agent_name: Name of the calling agent (for usage tracking)
+            trace_id: P0-5 Fix - Trace ID for observability/debugging
 
         Returns:
             list[dict]: Extracted signals
         """
+        # P0-5 Fix: Log trace_id for observability
+        if trace_id:
+            logger.info(f"[{agent_name}] trace_id={trace_id} starting signal extraction")
+
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ]
 
-        result = self.call_with_json_response(messages)
+        # Sprint 2: Pass agent_name for usage tracking
+        result = self.call_with_json_response(
+            messages=messages,
+            agent_name=agent_name,
+            corp_id=context.get("corp_id"),
+            job_id=context.get("job_id"),
+            stage="SIGNAL",
+        )
 
         signals = result.get("signals", [])
-        logger.info(f"Extracted {len(signals)} signals from LLM")
+
+        # P0-5 Fix: Include trace_id in log output
+        if trace_id:
+            logger.info(f"[{agent_name}] trace_id={trace_id} extracted {len(signals)} signals")
+        else:
+            logger.info(f"[{agent_name}] Extracted {len(signals)} signals from LLM")
 
         return signals
 
