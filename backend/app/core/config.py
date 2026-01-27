@@ -126,6 +126,17 @@ class Settings(BaseSettings):
     GOOGLE_API_KEY: str = Field(default="", description="Google API key for Gemini fallback")
     PERPLEXITY_API_KEY: str = Field(default="", description="Perplexity API key for external search")
 
+    # =========================================================================
+    # Multi-Search Provider Configuration (검색 내장 LLM 2-Track)
+    # =========================================================================
+    # 검색 가능 LLM: Perplexity, Gemini (OpenAI/Claude는 검색 기능 없음)
+    SEARCH_PROVIDER_PRIORITY: str = Field(
+        default="perplexity,gemini_grounding",
+        description="Search provider priority (LLMs with built-in search only)"
+    )
+    # Multi-Search 병렬 모드 (Perplexity + Gemini 동시 검색)
+    MULTI_SEARCH_PARALLEL_MODE: bool = Field(default=False, description="Enable parallel search with both providers")
+
     # Security Architecture: Internal LLM Configuration
     # INTERNAL_LLM_PROVIDER: mvp_openai (default) | azure_openai | onprem_llama
     INTERNAL_LLM_PROVIDER: str = Field(default="mvp_openai", description="Internal LLM provider selection")

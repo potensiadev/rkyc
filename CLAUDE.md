@@ -46,7 +46,9 @@
 - LLM: litellm (multi-provider routing)
 - Primary: Claude Opus 4.5 (claude-opus-4-5-20251101)
 - Fallback: GPT-5.2 Pro, Gemini 3 Pro Preview
-- External: Perplexity sonar-pro (외부 검색)
+- External Search: **검색 내장 LLM 2-Track** (Perplexity 의존도 완화)
+  - Primary: Perplexity sonar-pro (실시간 검색 + AI 요약)
+  - Fallback: Gemini Grounding (Google Search 기반)
 
 ### Database
 - Supabase PostgreSQL (Tokyo ap-northeast-1)
@@ -1689,6 +1691,65 @@ docs/architecture/ADR-009-multi-agent-signal-extraction.md (Sprint 3/4 완료)
 | 안정성 | 단일 실패점 | Graceful Degradation | 향상 |
 | 모니터링 | 없음 | 실시간 API | 추가 |
 
+### 세션 19 (2026-01-27) - 검색 내장 LLM 2-Track Architecture ✅
+**목표**: Perplexity 의존도 완화 (추가 유료 API 없이!)
+
+**문제점**:
+- Perplexity API에 100% 의존 (orchestrator.py 61회, consensus_engine.py 22회 언급)
+- Single Point of Failure: Perplexity 장애 시 전체 Corp Profiling 중단
+
+**해결책**: 검색 내장 LLM 2-Track (ADR-010)
+- 기존 LLM만 활용 (추가 API 비용 없음!)
+- OpenAI/Claude는 검색 기능 없음 → Perplexity + Gemini Grounding만 사용
+
+#### 검색 가능 LLM 현황
+| LLM | 검색 기능 | 용도 |
+|-----|----------|------|
+| **Perplexity** | ✅ | Primary Search |
+| **Gemini** | ✅ Grounding | Fallback Search |
+| OpenAI | ❌ | 분석/합성 전용 |
+| Claude | ❌ | 분석/합성 전용 |
+
+#### 1. search_providers.py
+```python
+class MultiSearchManager:
+    providers = [
+        PerplexityProvider(),      # Primary
+        GeminiGroundingProvider(), # Fallback
+    ]
+```
+
+#### 2. Orchestrator 통합
+- Perplexity 실패 시 → Gemini Grounding 자동 시도
+- `enable_multi_search(True)` 메서드로 활성화
+
+#### 3. Admin API
+| Endpoint | Description |
+|----------|-------------|
+| `GET /admin/search-providers/status` | Perplexity/Gemini 상태 |
+| `GET /admin/search-providers/health` | 건강 상태 요약 |
+
+**신규 파일**:
+```
+backend/app/worker/llm/search_providers.py
+docs/architecture/ADR-010-multi-search-provider.md
+```
+
+**수정된 파일**:
+```
+backend/app/worker/llm/orchestrator.py
+backend/app/worker/llm/__init__.py
+backend/app/api/v1/endpoints/admin.py
+backend/app/core/config.py
+backend/.env.example
+CLAUDE.md
+```
+
+**핵심 포인트**:
+- ✅ 추가 유료 API 없음 (Tavily, Brave 등 제외)
+- ✅ 기존 API 키만 활용 (PERPLEXITY_API_KEY, GOOGLE_API_KEY)
+- ✅ Perplexity 장애 시 Gemini Grounding으로 자동 fallback
+
 ---
 
 ## 참고 사항
@@ -1716,6 +1777,11 @@ docs/architecture/ADR-009-multi-agent-signal-extraction.md (Sprint 3/4 완료)
   - Sprint 2: Signal 3-Agent 병렬 (Direct/Industry/Environment), Orchestrator 패턴
   - Sprint 3: Cross-Validation 강화, Graceful Degradation, Provider Concurrency Limit
   - Sprint 4: Celery group() 분산 실행, Admin 모니터링 API
+- **검색 내장 LLM 2-Track** (ADR-010): Perplexity 의존도 완화
+  - Primary: Perplexity sonar-pro
+  - Fallback: Gemini Grounding (GOOGLE_API_KEY 활용)
+  - 추가 유료 API 없음! (Tavily, Brave 등 미사용)
+  - `/admin/search-providers/health`로 상태 모니터링
 
 ---
-*Last Updated: 2026-01-26 (세션 18-3 완료 - Multi-Agent Sprint 3, 4 완료, Quality & Reliability + Distributed Execution)*
+*Last Updated: 2026-01-27 (세션 19 완료 - 검색 내장 LLM 2-Track, Perplexity 의존도 완화)*

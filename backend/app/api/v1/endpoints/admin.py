@@ -600,3 +600,150 @@ def _format_ttl(seconds: int) -> str:
         return f"{minutes}m"
     else:
         return f"{seconds}s"
+
+
+# ============================================================================
+# Multi-Search Provider Status API (Perplexity 의존도 완화)
+# ============================================================================
+
+
+class SearchProviderStatusResponse(BaseModel):
+    """검색 Provider 상태 응답"""
+    provider: str
+    available: bool
+    circuit_state: str
+    failure_count: int
+    api_key_configured: bool
+
+
+class AllSearchProvidersStatusResponse(BaseModel):
+    """전체 검색 Provider 상태 응답"""
+    providers: dict[str, SearchProviderStatusResponse]
+    available_count: int
+    total_count: int
+    fallback_ready: bool
+
+
+@router.get(
+    "/search-providers/status",
+    response_model=AllSearchProvidersStatusResponse,
+    summary="검색 Provider 상태 조회",
+    description="모든 검색 Provider(Perplexity, Tavily, Brave, Gemini)의 상태를 조회합니다.",
+)
+async def get_search_providers_status_endpoint():
+    """
+    전체 검색 Provider 상태 조회
+
+    Perplexity 외에 대안 Provider(Tavily, Brave Search, Gemini Grounding)의
+    사용 가능 여부를 확인합니다.
+
+    Returns:
+        AllSearchProvidersStatusResponse: 모든 provider의 상태
+    """
+    from app.worker.llm.search_providers import get_search_providers_status
+
+    status_dict = get_search_providers_status()
+
+    providers = {}
+    available_count = 0
+
+    for provider_name, status in status_dict.items():
+        is_available = status["available"]
+        if is_available:
+            available_count += 1
+
+        providers[provider_name] = SearchProviderStatusResponse(
+            provider=provider_name,
+            available=is_available,
+            circuit_state=status["circuit_state"],
+            failure_count=status["failure_count"],
+            api_key_configured=is_available,
+        )
+
+    total_count = len(providers)
+    # Perplexity 외에 1개 이상 대안이 있으면 fallback_ready
+    perplexity_available = providers.get("perplexity", SearchProviderStatusResponse(
+        provider="perplexity", available=False, circuit_state="unknown", failure_count=0, api_key_configured=False
+    )).available
+    fallback_ready = (available_count > 1) or (not perplexity_available and available_count >= 1)
+
+    return AllSearchProvidersStatusResponse(
+        providers=providers,
+        available_count=available_count,
+        total_count=total_count,
+        fallback_ready=fallback_ready,
+    )
+
+
+@router.get(
+    "/search-providers/health",
+    summary="검색 Provider 건강 상태 요약",
+    description="검색 Provider의 건강 상태를 요약하고 권장 사항을 제공합니다.",
+)
+async def get_search_providers_health():
+    """
+    검색 Provider 건강 상태 요약
+
+    Perplexity 의존도와 Fallback 준비 상태를 분석합니다.
+
+    Returns:
+        dict: 건강 상태 요약 및 권장 사항
+    """
+    from app.worker.llm.search_providers import get_search_providers_status
+    from app.core.config import settings
+
+    status_dict = get_search_providers_status()
+
+    # 분석
+    perplexity_status = status_dict.get("perplexity", {})
+    tavily_status = status_dict.get("tavily", {})
+    brave_status = status_dict.get("brave", {})
+    gemini_status = status_dict.get("gemini_grounding", {})
+
+    available_providers = [p for p, s in status_dict.items() if s["available"]]
+    unavailable_providers = [p for p, s in status_dict.items() if not s["available"]]
+
+    # 위험도 분석
+    risk_level = "low"
+    recommendations = []
+
+    if len(available_providers) == 0:
+        risk_level = "critical"
+        recommendations.append("⚠️ 모든 검색 Provider가 사용 불가능합니다. API 키를 확인하세요.")
+    elif len(available_providers) == 1 and "perplexity" in available_providers:
+        risk_level = "high"
+        recommendations.append("⚠️ Perplexity만 사용 가능합니다. 장애 시 검색 기능이 중단됩니다.")
+        recommendations.append("→ TAVILY_API_KEY 또는 BRAVE_SEARCH_API_KEY 설정을 권장합니다.")
+    elif "perplexity" not in available_providers:
+        risk_level = "medium"
+        recommendations.append("⚠️ Primary Provider(Perplexity)가 사용 불가능합니다.")
+        recommendations.append(f"→ 현재 Fallback Provider({', '.join(available_providers)})로 운영 중입니다.")
+    elif len(available_providers) >= 2:
+        risk_level = "low"
+        recommendations.append("✅ 다중 검색 Provider가 구성되어 있습니다. Fallback 준비 완료.")
+
+    # Circuit Breaker 상태 경고
+    for provider, status in status_dict.items():
+        if status["circuit_state"] == "open":
+            recommendations.append(f"⚠️ {provider}의 Circuit Breaker가 OPEN 상태입니다.")
+
+    return {
+        "risk_level": risk_level,
+        "summary": {
+            "available_providers": available_providers,
+            "unavailable_providers": unavailable_providers,
+            "total": len(status_dict),
+            "available": len(available_providers),
+        },
+        "perplexity_dependency": {
+            "is_sole_provider": len(available_providers) == 1 and "perplexity" in available_providers,
+            "has_fallback": len(available_providers) > 1 or "perplexity" not in available_providers,
+        },
+        "recommendations": recommendations,
+        "config_hint": {
+            "TAVILY_API_KEY": "설정됨" if settings.TAVILY_API_KEY else "미설정",
+            "BRAVE_SEARCH_API_KEY": "설정됨" if settings.BRAVE_SEARCH_API_KEY else "미설정",
+            "PERPLEXITY_API_KEY": "설정됨" if settings.PERPLEXITY_API_KEY else "미설정",
+            "GOOGLE_API_KEY": "설정됨" if settings.GOOGLE_API_KEY else "미설정",
+        },
+    }

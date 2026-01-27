@@ -43,6 +43,12 @@ from app.worker.llm.consensus_engine import (
 )
 from app.worker.llm.gemini_adapter import GeminiAdapter, get_gemini_adapter
 from app.worker.llm.exceptions import AllProvidersFailedError
+from app.worker.llm.search_providers import (
+    MultiSearchManager,
+    SearchResult,
+    SearchProviderType,
+    get_multi_search_manager,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -167,6 +173,10 @@ class MultiAgentOrchestrator:
         # Gemini parallel search function (optional, for Layer 1 parallel mode)
         self._gemini_search_fn: Optional[Callable] = None
 
+        # Multi-Search Manager for Perplexity fallback (대안 검색 Provider)
+        self._multi_search_manager: Optional[MultiSearchManager] = None
+        self._use_multi_search: bool = False  # 활성화 시 Perplexity 실패 시 대안 Provider 시도
+
         # Parallel mode flag (default: True for Sprint 1)
         self.parallel_mode = True
 
@@ -185,6 +195,26 @@ class MultiAgentOrchestrator:
     def set_gemini_search(self, fn: Callable):
         """Gemini 검색 함수 주입 (병렬 모드용)"""
         self._gemini_search_fn = fn
+
+    def set_multi_search_manager(self, manager: MultiSearchManager, use_as_fallback: bool = True):
+        """
+        Multi-Search Manager 설정
+
+        Args:
+            manager: MultiSearchManager 인스턴스
+            use_as_fallback: True면 Perplexity 실패 시에만 사용 (기본값)
+                             False면 항상 MultiSearchManager 사용
+        """
+        self._multi_search_manager = manager
+        self._use_multi_search = True
+        logger.info(f"[Orchestrator] MultiSearchManager configured (fallback_mode={use_as_fallback})")
+
+    def enable_multi_search(self, enabled: bool = True):
+        """Multi-Search 모드 활성화/비활성화"""
+        self._use_multi_search = enabled
+        if enabled and not self._multi_search_manager:
+            self._multi_search_manager = get_multi_search_manager()
+        logger.info(f"[Orchestrator] Multi-search mode: {enabled}")
 
     def set_parallel_mode(self, enabled: bool):
         """병렬 실행 모드 설정"""
@@ -529,12 +559,70 @@ class MultiAgentOrchestrator:
         return perplexity_result, gemini_validation
 
     def _safe_perplexity_search(self, corp_name: str, industry_name: str) -> Optional[dict]:
-        """Thread-safe Perplexity 검색 래퍼"""
+        """
+        Thread-safe Perplexity 검색 래퍼
+
+        Multi-Search 모드가 활성화되어 있으면:
+        1. Perplexity 먼저 시도
+        2. 실패 시 MultiSearchManager로 대안 Provider 시도
+        """
+        # 1차: Perplexity 직접 호출 시도
         try:
-            return self._perplexity_search_fn(corp_name, industry_name)
+            result = self._perplexity_search_fn(corp_name, industry_name)
+            if result and not result.get("error"):
+                return result
         except Exception as e:
             logger.warning(f"[Orchestrator] Perplexity search exception: {e}")
-            return {"error": str(e), "error_type": "exception"}
+            perplexity_error = str(e)
+        else:
+            perplexity_error = result.get("error") if result else "empty_result"
+
+        # 2차: Multi-Search Fallback (Perplexity 실패 시)
+        if self._use_multi_search and self._multi_search_manager:
+            logger.info(f"[Orchestrator] Perplexity failed, trying MultiSearchManager fallback")
+            try:
+                # 검색 쿼리 생성
+                query = f"{corp_name} {industry_name} 기업 정보 매출 사업 현황"
+
+                # 동기 래퍼로 비동기 호출 (thread 내부이므로 새 event loop 필요)
+                import asyncio
+                try:
+                    loop = asyncio.get_event_loop()
+                except RuntimeError:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+
+                search_result: SearchResult = loop.run_until_complete(
+                    self._multi_search_manager.search(
+                        query=query,
+                        preferred_provider=None,  # Perplexity 제외하고 시도
+                    )
+                )
+
+                if search_result and search_result.content:
+                    logger.info(
+                        f"[Orchestrator] MultiSearch fallback success with {search_result.provider.value}",
+                        extra={
+                            "provider": search_result.provider.value,
+                            "latency_ms": search_result.latency_ms,
+                        }
+                    )
+                    return {
+                        "content": search_result.content,
+                        "citations": search_result.citations,
+                        "source": f"MULTI_SEARCH_{search_result.provider.value.upper()}",
+                        "fallback_used": True,
+                        "original_error": perplexity_error,
+                    }
+
+            except Exception as fallback_error:
+                logger.warning(f"[Orchestrator] MultiSearch fallback also failed: {fallback_error}")
+                return {
+                    "error": f"Perplexity: {perplexity_error}; Fallback: {str(fallback_error)}",
+                    "error_type": "all_search_failed"
+                }
+
+        return {"error": perplexity_error, "error_type": "exception"}
 
     def _safe_gemini_enrich(self, corp_name: str, industry_name: str) -> Optional[dict]:
         """Thread-safe Gemini enrichment 래퍼 (병렬 모드용)"""

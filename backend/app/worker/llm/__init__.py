@@ -173,6 +173,19 @@ from app.worker.llm.orchestrator import (
     reset_orchestrator,
 )
 
+# Multi-Search Provider Architecture (검색 내장 LLM 2-Track)
+from app.worker.llm.search_providers import (
+    MultiSearchManager,
+    SearchResult,
+    SearchProviderType,
+    BaseSearchProvider,
+    PerplexityProvider,
+    GeminiGroundingProvider,
+    get_multi_search_manager,
+    reset_multi_search_manager,
+    get_search_providers_status,
+)
+
 # ADR-009 Sprint 1 - Usage Tracking
 from app.worker.llm.usage_tracker import (
     LLMUsageTracker,
@@ -376,6 +389,16 @@ __all__ = [
     "RuleBasedMergeConfig",
     "get_orchestrator",
     "reset_orchestrator",
+    # Multi-Search Provider Architecture (검색 내장 LLM 2-Track)
+    "MultiSearchManager",
+    "SearchResult",
+    "SearchProviderType",
+    "BaseSearchProvider",
+    "PerplexityProvider",
+    "GeminiGroundingProvider",
+    "get_multi_search_manager",
+    "reset_multi_search_manager",
+    "get_search_providers_status",
     # ADR-009 Sprint 1 - Usage Tracking
     "LLMUsageTracker",
     "LLMUsageLog",
