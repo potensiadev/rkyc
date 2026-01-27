@@ -150,6 +150,9 @@ class EmbeddingService:
 
         return results
 
+    # P0-2 Fix: Alias for sync method (consensus_engine compatibility)
+    embed_batch_sync = embed_batch
+
     def _embed_batch_internal(self, texts: list[str]) -> list[Optional[list[float]]]:
         """
         Internal method to embed a batch of texts.

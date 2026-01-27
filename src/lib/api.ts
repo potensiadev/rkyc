@@ -319,9 +319,10 @@ export async function refreshCorpProfile(corpId: string): Promise<ApiProfileRefr
 }
 
 // ============================================================
-// 신규 법인 KYC API
+// 신규 법인 KYC API - 비활성화
 // ============================================================
 
+/*
 // 신규 KYC 분석 요청 타입
 export interface NewKycAnalysisRequest {
   corpName?: string;
@@ -434,6 +435,7 @@ export async function getNewKycJobStatus(jobId: string): Promise<NewKycJobStatus
 export async function getNewKycReport(jobId: string): Promise<NewKycReportResponse> {
   return fetchApi<NewKycReportResponse>(`/api/v1/new-kyc/report/${jobId}`);
 }
+*/
 
 // ============================================================
 // Session 16: Signal Enriched Detail API (풍부한 시그널 상세)

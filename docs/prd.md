@@ -2227,8 +2227,8 @@ OPENAI_MODEL_PRIMARY=gpt-4o
 OPENAI_MODEL_MINI=gpt-4o-mini
 
 # Gemini Models
-GEMINI_MODEL_PRIMARY=gemini-1.5-pro
-GEMINI_MODEL_FLASH=gemini-1.5-flash
+GEMINI_MODEL_PRIMARY=gemini-3-pro-preview
+GEMINI_MODEL_FLASH=gemini-3-pro-preview
 
 # Perplexity Models
 PERPLEXITY_MODEL_PRIMARY=sonar-pro

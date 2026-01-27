@@ -1,6 +1,6 @@
 # Celery Tasks
 from app.worker.tasks.analysis import run_analysis_pipeline
-from app.worker.tasks.new_kyc_analysis import run_new_kyc_pipeline
+# from app.worker.tasks.new_kyc_analysis import run_new_kyc_pipeline  # 신규 법인 KYC - 비활성화
 from app.worker.tasks.profile_refresh import (
     refresh_corp_profile,
     refresh_expiring_profiles,
@@ -21,7 +21,7 @@ from app.worker.tasks.dynamic_scheduler import (
 
 __all__ = [
     "run_analysis_pipeline",
-    "run_new_kyc_pipeline",  # 신규 법인 KYC
+    # "run_new_kyc_pipeline",  # 신규 법인 KYC - 비활성화
     # PRD v1.2 - Profile Refresh Tasks
     "refresh_corp_profile",
     "refresh_expiring_profiles",

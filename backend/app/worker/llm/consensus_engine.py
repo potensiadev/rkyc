@@ -10,11 +10,16 @@ v1.3 변경사항:
 - kiwipiepy 형태소 분석기 도입 (BUG-001 수정)
 - 품사 기반 불용어 필터링
 
+v1.4 변경사항:
+- Hybrid Semantic Consensus 추가
+- Primary: Embedding 유사도 (코사인 유사도)
+- Fallback: Jaccard 유사도 (Embedding 사용 불가 시)
+
 P2-3 Fix:
 - Jaccard Similarity 캐싱 (LRU Cache)
+- 필드별 다른 threshold 지원 (FieldThresholds)
 """
 
-import logging
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, UTC
@@ -22,7 +27,9 @@ from functools import lru_cache
 from typing import Any, Optional
 from enum import Enum
 
-logger = logging.getLogger(__name__)
+from app.worker.tracing import get_logger
+
+logger = get_logger("ConsensusEngine")
 
 # Lazy import for kiwipiepy (heavy initialization)
 _kiwi_instance = None
@@ -319,60 +326,248 @@ def clear_jaccard_cache():
     logger.debug("[ConsensusEngine] Jaccard cache cleared")
 
 
-def compare_values(value_a: Any, value_b: Any, threshold: float = 0.7) -> tuple[bool, float]:
+# ============================================================================
+# Semantic (Embedding) Similarity - v1.4
+# ============================================================================
+
+# Embedding service cache
+_embedding_service = None
+_embedding_available = None
+
+
+def _get_embedding_service():
+    """Embedding 서비스 싱글톤 (lazy initialization)"""
+    global _embedding_service, _embedding_available
+
+    if _embedding_available is None:
+        try:
+            from app.worker.llm.embedding import get_embedding_service
+            _embedding_service = get_embedding_service()
+            _embedding_available = True
+            logger.info("embedding_service_initialized")
+        except Exception as e:
+            logger.warning(
+                "embedding_service_unavailable",
+                error=str(e),
+                fallback="jaccard"
+            )
+            _embedding_available = False
+
+    return _embedding_service if _embedding_available else None
+
+
+def semantic_similarity(text_a: str, text_b: str) -> Optional[float]:
     """
-    두 값 비교
+    Semantic (Embedding) Similarity 계산 (동기 버전)
+
+    P0-2 Fix: asyncio.run() 제거, 순수 동기 버전으로 변경.
+    Celery Worker에서 안전하게 사용 가능.
+
+    Note: 동기 컨텍스트에서는 Jaccard fallback을 사용하는 것을 권장.
+    비동기 컨텍스트에서는 semantic_similarity_async() 사용.
+
+    Args:
+        text_a: 첫 번째 텍스트
+        text_b: 두 번째 텍스트
+
+    Returns:
+        Optional[float]: 유사도 (0.0 ~ 1.0), Embedding 사용 불가 시 None
+    """
+    if not text_a or not text_b:
+        return None
+
+    embedding_service = _get_embedding_service()
+    if not embedding_service:
+        return None
+
+    try:
+        # 동기 버전: embed_sync 메서드 사용 (있는 경우)
+        if hasattr(embedding_service, 'embed_batch_sync'):
+            embeddings = embedding_service.embed_batch_sync([text_a, text_b])
+            if len(embeddings) != 2:
+                return None
+            return embedding_service.compute_similarity(embeddings[0], embeddings[1])
+        else:
+            # Embedding 서비스가 동기 메서드를 지원하지 않으면 None 반환
+            # 호출자는 Jaccard fallback 사용
+            logger.debug(
+                "semantic_similarity_sync_unavailable",
+                message="EmbeddingService does not support sync operations, use async version"
+            )
+            return None
+
+    except Exception as e:
+        logger.warning(
+            "semantic_similarity_failed",
+            error=str(e),
+            fallback="jaccard"
+        )
+        return None
+
+
+async def semantic_similarity_async(text_a: str, text_b: str) -> Optional[float]:
+    """
+    Semantic (Embedding) Similarity 계산 (비동기 버전)
+
+    Args:
+        text_a: 첫 번째 텍스트
+        text_b: 두 번째 텍스트
+
+    Returns:
+        Optional[float]: 유사도 (0.0 ~ 1.0), Embedding 사용 불가 시 None
+    """
+    if not text_a or not text_b:
+        return None
+
+    embedding_service = _get_embedding_service()
+    if not embedding_service:
+        return None
+
+    try:
+        embeddings = await embedding_service.embed_batch([text_a, text_b])
+        if len(embeddings) != 2:
+            return None
+        return embedding_service.compute_similarity(embeddings[0], embeddings[1])
+    except Exception as e:
+        logger.warning(
+            "semantic_similarity_async_failed",
+            error=str(e),
+            fallback="jaccard"
+        )
+        return None
+
+
+def hybrid_similarity(text_a: str, text_b: str, prefer_jaccard: bool = False) -> tuple[float, str]:
+    """
+    Hybrid Similarity 계산 (동기 버전)
+
+    P0-2 Fix: 동기 컨텍스트에서 안전하게 사용 가능.
+
+    Primary: Embedding 유사도 (정확도 높음, 동기 API 지원 시)
+    Fallback: Jaccard 유사도 (Embedding 사용 불가 시)
+
+    Args:
+        text_a: 첫 번째 텍스트
+        text_b: 두 번째 텍스트
+        prefer_jaccard: True면 Embedding 시도 없이 바로 Jaccard 사용
+
+    Returns:
+        tuple[float, str]: (유사도, 사용된 방법 "embedding" | "jaccard")
+    """
+    if not text_a and not text_b:
+        return 1.0, "both_empty"
+    if not text_a or not text_b:
+        return 0.0, "one_empty"
+
+    # Jaccard 선호 모드 (async 컨텍스트에서 sync 호출 시 유용)
+    if prefer_jaccard:
+        jaccard_score = jaccard_similarity(text_a, text_b)
+        return jaccard_score, "jaccard"
+
+    # Try embedding similarity first
+    embedding_score = semantic_similarity(text_a, text_b)
+    if embedding_score is not None:
+        logger.debug(
+            "hybrid_similarity_used_embedding",
+            score=embedding_score
+        )
+        return embedding_score, "embedding"
+
+    # Fallback to Jaccard
+    jaccard_score = jaccard_similarity(text_a, text_b)
+    logger.debug(
+        "hybrid_similarity_used_jaccard",
+        score=jaccard_score
+    )
+    return jaccard_score, "jaccard"
+
+
+async def hybrid_similarity_async(text_a: str, text_b: str) -> tuple[float, str]:
+    """
+    Hybrid Similarity 계산 (비동기 버전)
+
+    Args:
+        text_a: 첫 번째 텍스트
+        text_b: 두 번째 텍스트
+
+    Returns:
+        tuple[float, str]: (유사도, 사용된 방법)
+    """
+    if not text_a and not text_b:
+        return 1.0, "both_empty"
+    if not text_a or not text_b:
+        return 0.0, "one_empty"
+
+    # Try embedding similarity first
+    embedding_score = await semantic_similarity_async(text_a, text_b)
+    if embedding_score is not None:
+        return embedding_score, "embedding"
+
+    # Fallback to Jaccard
+    jaccard_score = jaccard_similarity(text_a, text_b)
+    return jaccard_score, "jaccard"
+
+
+# ============================================================================
+# Value Comparison
+# ============================================================================
+
+
+def compare_values(value_a: Any, value_b: Any, threshold: float = 0.7, use_semantic: bool = True) -> tuple[bool, float, str]:
+    """
+    두 값 비교 (Hybrid Semantic Similarity 지원)
 
     Args:
         value_a: 첫 번째 값
         value_b: 두 번째 값
         threshold: 유사도 임계값 (기본 0.7)
+        use_semantic: Semantic Similarity 사용 여부 (기본 True)
 
     Returns:
-        tuple[bool, float]: (일치 여부, 유사도 점수)
+        tuple[bool, float, str]: (일치 여부, 유사도 점수, 사용된 방법)
     """
     # 둘 다 None이면 일치
     if value_a is None and value_b is None:
-        return True, 1.0
+        return True, 1.0, "both_none"
 
     # 하나만 None이면 불일치
     if value_a is None or value_b is None:
-        return False, 0.0
+        return False, 0.0, "one_none"
 
     # 타입이 다르면 불일치
     if type(value_a) != type(value_b):
-        return False, 0.0
+        return False, 0.0, "type_mismatch"
 
     # 숫자 비교
     if isinstance(value_a, (int, float)):
         if value_a == 0 and value_b == 0:
-            return True, 1.0
+            return True, 1.0, "numeric"
         if value_a == 0 or value_b == 0:
-            return False, 0.0
+            return False, 0.0, "numeric"
         # 10% 이내 차이면 일치
         ratio = min(value_a, value_b) / max(value_a, value_b)
-        return ratio >= 0.9, ratio
+        return ratio >= 0.9, ratio, "numeric"
 
     # 리스트 비교
     if isinstance(value_a, list):
         if not value_a and not value_b:
-            return True, 1.0
+            return True, 1.0, "list_empty"
         if not value_a or not value_b:
-            return False, 0.0
+            return False, 0.0, "list_one_empty"
         # 리스트 요소의 Jaccard
         set_a = set(str(x).lower() for x in value_a)
         set_b = set(str(x).lower() for x in value_b)
         intersection = set_a & set_b
         union = set_a | set_b
         score = len(intersection) / len(union) if union else 0.0
-        return score >= threshold, score
+        return score >= threshold, score, "list_jaccard"
 
     # 딕셔너리 비교
     if isinstance(value_a, dict):
         if not value_a and not value_b:
-            return True, 1.0
+            return True, 1.0, "dict_empty"
         if not value_a or not value_b:
-            return False, 0.0
+            return False, 0.0, "dict_one_empty"
         # 키 일치도
         keys_a = set(value_a.keys())
         keys_b = set(value_b.keys())
@@ -384,7 +579,7 @@ def compare_values(value_a: Any, value_b: Any, threshold: float = 0.7) -> tuple[
         if key_intersection:
             value_matches = sum(
                 1 for k in key_intersection
-                if compare_values(value_a[k], value_b[k], threshold)[0]
+                if compare_values(value_a[k], value_b[k], threshold, use_semantic)[0]
             )
             value_score = value_matches / len(key_intersection)
         else:
@@ -392,15 +587,30 @@ def compare_values(value_a: Any, value_b: Any, threshold: float = 0.7) -> tuple[
 
         # 종합 점수
         score = (key_score + value_score) / 2
-        return score >= threshold, score
+        return score >= threshold, score, "dict"
 
-    # 문자열 비교 (Jaccard Similarity)
+    # 문자열 비교 (Hybrid Similarity)
     if isinstance(value_a, str):
-        score = jaccard_similarity(value_a, value_b)
-        return score >= threshold, score
+        if use_semantic:
+            score, method = hybrid_similarity(value_a, value_b)
+        else:
+            score = jaccard_similarity(value_a, value_b)
+            method = "jaccard"
+        return score >= threshold, score, method
 
     # 기타 타입: 정확히 일치 확인
-    return value_a == value_b, 1.0 if value_a == value_b else 0.0
+    return value_a == value_b, 1.0 if value_a == value_b else 0.0, "exact"
+
+
+def compare_values_legacy(value_a: Any, value_b: Any, threshold: float = 0.7) -> tuple[bool, float]:
+    """
+    Legacy compare_values (backward compatibility)
+
+    Returns:
+        tuple[bool, float]: (일치 여부, 유사도 점수)
+    """
+    is_match, score, _ = compare_values(value_a, value_b, threshold, use_semantic=False)
+    return is_match, score
 
 
 # ============================================================================
@@ -408,31 +618,94 @@ def compare_values(value_a: Any, value_b: Any, threshold: float = 0.7) -> tuple[
 # ============================================================================
 
 
+@dataclass
+class FieldThresholds:
+    """
+    P2-3: 필드별 Similarity Threshold 관리
+
+    필드 유형에 따라 다른 threshold 적용:
+    - name: 높은 정확도 요구 (0.9)
+    - summary: 유연한 매칭 허용 (0.6)
+    - numeric: 비율 기반 비교 (10%)
+    - default: 기본값 (0.7)
+    """
+    default: float = 0.7
+    name: float = 0.9
+    summary: float = 0.6
+    numeric: float = 0.1  # 10% tolerance
+
+    # 필드명 매핑
+    NAME_FIELDS: set = field(default_factory=lambda: {
+        "ceo_name", "corp_name", "headquarters", "key_suppliers",
+        "key_customers", "executives", "competitors",
+    })
+    SUMMARY_FIELDS: set = field(default_factory=lambda: {
+        "business_summary", "industry_overview", "business_model",
+    })
+    NUMERIC_FIELDS: set = field(default_factory=lambda: {
+        "revenue_krw", "export_ratio_pct", "employee_count", "founded_year",
+    })
+
+    def get_threshold(self, field_name: str) -> float:
+        """필드명에 맞는 threshold 반환"""
+        if field_name in self.NAME_FIELDS:
+            return self.name
+        elif field_name in self.SUMMARY_FIELDS:
+            return self.summary
+        elif field_name in self.NUMERIC_FIELDS:
+            return self.numeric
+        return self.default
+
+    @classmethod
+    def from_settings(cls) -> "FieldThresholds":
+        """설정에서 threshold 로드"""
+        try:
+            from app.core.config import settings
+            return cls(
+                default=settings.CONSENSUS_SIMILARITY_THRESHOLD,
+                name=settings.CONSENSUS_THRESHOLD_NAME,
+                summary=settings.CONSENSUS_THRESHOLD_SUMMARY,
+                numeric=settings.CONSENSUS_THRESHOLD_NUMBER,
+            )
+        except Exception:
+            return cls()  # 기본값 사용
+
+
 class ConsensusEngine:
     """
-    Multi-Agent Consensus Engine
+    Multi-Agent Consensus Engine (v1.4 Hybrid Semantic)
 
     3개 소스의 프로필 정보를 합성:
     1. Perplexity (Primary Search)
     2. Gemini (Validation + Enrichment)
     3. Claude (Final Synthesis)
 
-    합의 규칙:
-    - Jaccard Similarity >= 0.7: 일치 → Perplexity 값 채택
+    합의 규칙 (v1.4):
+    - Hybrid Similarity >= threshold: 일치 → Perplexity 값 채택
+      - Primary: Embedding 코사인 유사도
+      - Fallback: Jaccard 유사도
     - 불일치: Perplexity 값 채택 + discrepancy: true
     - null: Gemini enriched 값 사용 (source: GEMINI_INFERRED)
+
+    P2-3: 필드별 threshold 지원
     """
 
-    SIMILARITY_THRESHOLD = 0.7
-
     # 필드별 비교 전략
-    STRING_FIELDS = {"business_summary"}
-    NUMERIC_FIELDS = {"revenue_krw", "export_ratio_pct", "employee_count"}
-    LIST_FIELDS = {"key_materials", "key_customers", "overseas_operations", "key_suppliers"}
-    DICT_FIELDS = {"country_exposure", "supply_chain", "regulatory_exposure"}
+    STRING_FIELDS = {"business_summary", "industry_overview", "business_model"}
+    NUMERIC_FIELDS = {"revenue_krw", "export_ratio_pct", "employee_count", "founded_year"}
+    LIST_FIELDS = {"key_materials", "key_customers", "overseas_operations", "key_suppliers", "executives", "competitors", "macro_factors"}
+    DICT_FIELDS = {"country_exposure", "supply_chain", "regulatory_exposure", "overseas_business", "shareholders", "financial_history"}
 
-    def __init__(self):
+    def __init__(self, use_semantic: bool = True, thresholds: Optional[FieldThresholds] = None):
+        """
+        Args:
+            use_semantic: Semantic (Embedding) Similarity 사용 여부 (기본 True)
+            thresholds: 필드별 threshold 설정 (None이면 settings에서 로드)
+        """
         self.metadata = ConsensusMetadata()
+        self.use_semantic = use_semantic
+        self._similarity_methods_used: dict[str, str] = {}
+        self.thresholds = thresholds or FieldThresholds.from_settings()
 
     def merge(
         self,
@@ -505,14 +778,28 @@ class ConsensusEngine:
             "error_messages": self.metadata.error_messages,
         }
 
+        # Count similarity methods used
+        embedding_count = sum(1 for m in self._similarity_methods_used.values() if m == "embedding")
+        jaccard_count = sum(1 for m in self._similarity_methods_used.values() if m == "jaccard")
+
         logger.info(
-            f"[Consensus] Merged profile: "
-            f"total={self.metadata.total_fields}, "
-            f"matched={self.metadata.matched_fields}, "
-            f"discrepancy={self.metadata.discrepancy_fields}, "
-            f"enriched={self.metadata.enriched_fields}, "
-            f"confidence={self.metadata.overall_confidence}"
+            "consensus_merged",
+            total_fields=self.metadata.total_fields,
+            matched_fields=self.metadata.matched_fields,
+            discrepancy_fields=self.metadata.discrepancy_fields,
+            enriched_fields=self.metadata.enriched_fields,
+            confidence=self.metadata.overall_confidence,
+            use_semantic=self.use_semantic,
+            embedding_comparisons=embedding_count,
+            jaccard_comparisons=jaccard_count,
         )
+
+        # Add similarity method stats to metadata
+        merged_profile["_consensus_metadata"]["similarity_methods"] = {
+            "embedding": embedding_count,
+            "jaccard": jaccard_count,
+            "use_semantic_enabled": self.use_semantic,
+        }
 
         return ConsensusResult(
             profile=merged_profile,
@@ -580,13 +867,20 @@ class ConsensusEngine:
                 notes=discrepancy_info.get("issue", "Gemini flagged discrepancy"),
             )
 
-        # Case 3: 둘 다 값이 있는 경우 - Jaccard Similarity 비교
+        # Case 3: 둘 다 값이 있는 경우 - Hybrid Similarity 비교
         if gemini_value is not None:
-            is_match, score = compare_values(
+            # P2-3: 필드별 threshold 사용
+            field_threshold = self.thresholds.get_threshold(field_name)
+
+            is_match, score, method = compare_values(
                 perplexity_value,
                 gemini_value,
-                self.SIMILARITY_THRESHOLD,
+                field_threshold,
+                use_semantic=self.use_semantic,
             )
+
+            # Track which method was used
+            self._similarity_methods_used[field_name] = method
 
             if is_match:
                 # 일치: Perplexity 값 채택, 높은 신뢰도
@@ -599,7 +893,7 @@ class ConsensusEngine:
                     perplexity_value=perplexity_value,
                     gemini_value=gemini_value,
                     similarity_score=score,
-                    notes=f"Matched (Jaccard={score:.2f})",
+                    notes=f"Matched ({method}={score:.2f}, threshold={field_threshold})",
                 )
             else:
                 # 불일치: Perplexity 값 채택 + discrepancy 표시
@@ -612,7 +906,7 @@ class ConsensusEngine:
                     perplexity_value=perplexity_value,
                     gemini_value=gemini_value,
                     similarity_score=score,
-                    notes=f"Discrepancy (Jaccard={score:.2f} < {self.SIMILARITY_THRESHOLD})",
+                    notes=f"Discrepancy ({method}={score:.2f} < {field_threshold})",
                 )
 
         # Case 4: Perplexity만 값이 있는 경우

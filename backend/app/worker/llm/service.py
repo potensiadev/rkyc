@@ -2,20 +2,19 @@
 LLM Service with Fallback Chain
 Multi-provider LLM integration using litellm
 
+v1.2 변경사항:
+- 2-Layer 캐시 통합 (Memory LRU + Redis)
+- Structured Logging 통합
+- 캐시 hit/miss 로깅
+
 v1.1 변경사항:
 - P0-004 fix: 예외 처리 강화
   - response.choices 검증 추가
   - API 키 누락 시 명확한 에러
   - timeout 예외 분류 추가
-
-v1.2 변경사항 (Sprint 1 - ADR-009):
-- LLM Usage Tracking 통합
-- Per-call 비용 계산 및 로깅
-- Agent별 사용량 추적
 """
 
 import json
-import logging
 import time
 from typing import Optional, Any
 
@@ -32,9 +31,16 @@ from app.worker.llm.exceptions import (
     TimeoutError as LLMTimeoutError,
     NoAPIKeyConfiguredError,
 )
-from app.worker.llm.usage_tracker import log_llm_usage
+from app.worker.llm.cache import LLMCache, CacheOperation, get_llm_cache
+from app.worker.llm.model_router import (
+    ModelRouter,
+    TaskComplexity,
+    TaskType,
+    get_model_router,
+)
+from app.worker.tracing import get_logger, LogEvents
 
-logger = logging.getLogger(__name__)
+logger = get_logger("LLMService")
 
 # Configure litellm from settings
 litellm.set_verbose = settings.LLM_VERBOSE
@@ -92,9 +98,48 @@ class LLMService:
         "authentication_error",
     ]
 
-    def __init__(self):
-        """Initialize LLM service with API keys"""
+    def __init__(
+        self,
+        cache: Optional[LLMCache] = None,
+        router: Optional[ModelRouter] = None,
+    ):
+        """Initialize LLM service with API keys, cache, and model router"""
         self._configure_api_keys()
+        self.last_successful_model: Optional[str] = None
+        self._cache = cache  # Lazy initialization via get_llm_cache()
+        self._router = router  # Lazy initialization via get_model_router()
+        self._cache_enabled = True
+        self._smart_routing_enabled = True
+
+    @property
+    def cache(self) -> LLMCache:
+        """Get cache instance (lazy initialization)"""
+        if self._cache is None:
+            self._cache = get_llm_cache()
+        return self._cache
+
+    @property
+    def router(self) -> ModelRouter:
+        """Get model router instance (lazy initialization)"""
+        if self._router is None:
+            self._router = get_model_router()
+        return self._router
+
+    def disable_cache(self) -> None:
+        """Disable caching for this instance"""
+        self._cache_enabled = False
+
+    def enable_cache(self) -> None:
+        """Enable caching for this instance"""
+        self._cache_enabled = True
+
+    def disable_smart_routing(self) -> None:
+        """Disable task-aware model routing (use default models)"""
+        self._smart_routing_enabled = False
+
+    def enable_smart_routing(self) -> None:
+        """Enable task-aware model routing"""
+        self._smart_routing_enabled = True
 
     def _configure_api_keys(self):
         """Set API keys for litellm"""
@@ -151,10 +196,6 @@ class LLMService:
         response_format: Optional[dict] = None,
         temperature: float = 0.1,
         max_tokens: int = 4096,
-        agent_name: str = "unknown",
-        corp_id: Optional[str] = None,
-        job_id: Optional[str] = None,
-        stage: Optional[str] = None,
     ) -> str:
         """
         Call LLM with automatic fallback chain.
@@ -164,10 +205,6 @@ class LLMService:
             response_format: Optional response format (e.g., {"type": "json_object"})
             temperature: Sampling temperature (0.0-1.0)
             max_tokens: Maximum tokens in response
-            agent_name: Name of the agent making this call (for usage tracking)
-            corp_id: Corporation ID (for usage tracking)
-            job_id: Job ID (for usage tracking)
-            stage: Pipeline stage (for usage tracking)
 
         Returns:
             str: LLM response content
@@ -194,10 +231,6 @@ class LLMService:
 
             # Try this model with retries
             for attempt in range(self.MAX_RETRIES):
-                start_time = time.time()
-                input_tokens = 0
-                output_tokens = 0
-
                 try:
                     logger.info(
                         f"Calling {model} (attempt {attempt + 1}/{self.MAX_RETRIES})"
@@ -218,7 +251,6 @@ class LLMService:
 
                     # Make the call
                     response = completion(**kwargs)
-                    latency_ms = int((time.time() - start_time) * 1000)
 
                     # P0-004 fix: Validate response structure before accessing
                     if not response or not hasattr(response, 'choices'):
@@ -248,29 +280,8 @@ class LLMService:
                             raw_response="[empty]",
                         )
 
-                    # Extract token counts from response (ADR-009 Sprint 1)
-                    if hasattr(response, 'usage') and response.usage:
-                        input_tokens = getattr(response.usage, 'prompt_tokens', 0) or 0
-                        output_tokens = getattr(response.usage, 'completion_tokens', 0) or 0
-
-                    # Log usage (ADR-009 Sprint 1)
-                    log_llm_usage(
-                        provider=provider,
-                        model=model,
-                        agent_name=agent_name,
-                        input_tokens=input_tokens,
-                        output_tokens=output_tokens,
-                        latency_ms=latency_ms,
-                        corp_id=corp_id,
-                        job_id=job_id,
-                        stage=stage,
-                        success=True,
-                    )
-
-                    logger.info(
-                        f"Successfully got response from {model} "
-                        f"(tokens: {input_tokens}+{output_tokens}, latency: {latency_ms}ms)"
-                    )
+                    logger.info(f"Successfully got response from {model}")
+                    self.last_successful_model = model
 
                     return content
 
@@ -279,23 +290,6 @@ class LLMService:
                     raise
 
                 except Exception as e:
-                    latency_ms = int((time.time() - start_time) * 1000)
-
-                    # Log failed usage (ADR-009 Sprint 1)
-                    log_llm_usage(
-                        provider=provider,
-                        model=model,
-                        agent_name=agent_name,
-                        input_tokens=input_tokens,
-                        output_tokens=output_tokens,
-                        latency_ms=latency_ms,
-                        corp_id=corp_id,
-                        job_id=job_id,
-                        stage=stage,
-                        success=False,
-                        error_message=str(e)[:200],
-                    )
-
                     classified_error = self._classify_error(e, provider)
                     errors.append({
                         "model": model,
@@ -342,10 +336,6 @@ class LLMService:
         messages: list[dict],
         temperature: float = 0.1,
         max_tokens: int = 4096,
-        agent_name: str = "unknown",
-        corp_id: Optional[str] = None,
-        job_id: Optional[str] = None,
-        stage: Optional[str] = None,
     ) -> dict:
         """
         Call LLM and parse JSON response.
@@ -354,10 +344,6 @@ class LLMService:
             messages: List of message dicts
             temperature: Sampling temperature
             max_tokens: Maximum tokens
-            agent_name: Name of the agent making this call (for usage tracking)
-            corp_id: Corporation ID (for usage tracking)
-            job_id: Job ID (for usage tracking)
-            stage: Pipeline stage (for usage tracking)
 
         Returns:
             dict: Parsed JSON response
@@ -371,10 +357,6 @@ class LLMService:
             response_format={"type": "json_object"},
             temperature=temperature,
             max_tokens=max_tokens,
-            agent_name=agent_name,
-            corp_id=corp_id,
-            job_id=job_id,
-            stage=stage,
         )
 
         # Strip markdown code blocks if present
@@ -399,13 +381,160 @@ class LLMService:
                 raw_response=response[:500],
             )
 
-    def extract_signals(
+    def call_with_smart_routing(
+        self,
+        messages: list[dict],
+        task_type: Optional[TaskType] = None,
+        response_format: Optional[dict] = None,
+        temperature: float = 0.1,
+        max_tokens: int = 4096,
+    ) -> str:
+        """
+        Call LLM with task-aware model selection.
+
+        Automatically selects appropriate models based on task complexity.
+        Simple tasks use faster/cheaper models, complex tasks use high-quality models.
+
+        Args:
+            messages: List of message dicts with 'role' and 'content'
+            task_type: Optional task type for explicit complexity mapping
+            response_format: Optional response format (e.g., {"type": "json_object"})
+            temperature: Sampling temperature (0.0-1.0)
+            max_tokens: Maximum tokens in response
+
+        Returns:
+            str: LLM response content
+        """
+        if not self._smart_routing_enabled:
+            return self.call_with_fallback(
+                messages=messages,
+                response_format=response_format,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+
+        # Extract prompt for complexity analysis
+        prompt = ""
+        for msg in messages:
+            if msg.get("role") == "user":
+                content = msg.get("content", "")
+                if isinstance(content, str):
+                    prompt += content
+                elif isinstance(content, list):
+                    # Handle multimodal messages
+                    for part in content:
+                        if isinstance(part, dict) and part.get("type") == "text":
+                            prompt += part.get("text", "")
+
+        # Get task-appropriate models
+        if task_type:
+            models = self.router.get_models_for_prompt(prompt, task_type=task_type)
+            complexity = self.router.classify_task(prompt, task_type=task_type)
+        else:
+            complexity = self.router.classify_task(prompt)
+            models = self.router.get_models(complexity)
+
+        logger.info(
+            LogEvents.LLM_CALL_START,
+            complexity=complexity.value,
+            models=[m["model"] for m in models],
+            smart_routing=True,
+        )
+
+        # Use selected models for the call
+        errors = []
+        models_tried = 0
+
+        for model_config in models:
+            model = model_config["model"]
+            provider = model_config["provider"]
+            model_max_tokens = model_config.get("max_tokens", max_tokens)
+
+            # Check if API key is available
+            api_key = self._get_api_key(provider)
+            if not api_key:
+                logger.warning(f"Skipping {provider}: No API key configured")
+                continue
+
+            models_tried += 1
+
+            # Try this model with retries
+            for attempt in range(self.MAX_RETRIES):
+                try:
+                    kwargs = {
+                        "model": model,
+                        "messages": messages,
+                        "temperature": temperature,
+                        "max_tokens": min(max_tokens, model_max_tokens),
+                    }
+
+                    if response_format and provider != "anthropic":
+                        kwargs["response_format"] = response_format
+
+                    response = completion(**kwargs)
+
+                    if not response or not hasattr(response, 'choices'):
+                        raise InvalidResponseError(
+                            message="LLM response missing 'choices' attribute",
+                            raw_response=str(response)[:200] if response else "None",
+                        )
+
+                    if not response.choices or len(response.choices) == 0:
+                        raise InvalidResponseError(
+                            message="LLM response has empty 'choices' array",
+                            raw_response=str(response)[:200],
+                        )
+
+                    content = response.choices[0].message.content
+
+                    if not content or not content.strip():
+                        raise InvalidResponseError(
+                            message="Empty content in LLM response",
+                            raw_response="[empty]",
+                        )
+
+                    logger.info(
+                        LogEvents.LLM_CALL_SUCCESS,
+                        model=model,
+                        complexity=complexity.value,
+                        cost_ratio=self.router.estimate_cost_ratio(complexity),
+                    )
+                    self.last_successful_model = model
+
+                    return content
+
+                except Exception as e:
+                    errors.append({
+                        "model": model,
+                        "provider": provider,
+                        "attempt": attempt + 1,
+                        "error": str(e),
+                    })
+
+                    if not self._is_retryable_error(e):
+                        break
+
+                    if attempt >= self.MAX_RETRIES - 1:
+                        break
+
+                    delay = min(
+                        self.INITIAL_DELAY * (self.BACKOFF_MULTIPLIER ** attempt),
+                        self.MAX_DELAY,
+                    )
+                    time.sleep(delay)
+
+        # All models exhausted
+        raise AllProvidersFailedError(
+            message=f"All smart-routed models failed after {len(errors)} attempts",
+            errors=errors,
+        )
+
+    async def extract_signals(
         self,
         context: dict,
         system_prompt: str,
         user_prompt: str,
-        agent_name: str = "signal_extraction",
-        trace_id: Optional[str] = None,
+        use_cache: bool = True,
     ) -> list[dict]:
         """
         Extract risk signals from context using LLM.
@@ -414,41 +543,92 @@ class LLMService:
             context: Unified context data
             system_prompt: System prompt for signal extraction
             user_prompt: User prompt with context data
-            agent_name: Name of the calling agent (for usage tracking)
-            trace_id: P0-5 Fix - Trace ID for observability/debugging
+            use_cache: Whether to use cache (default True)
 
         Returns:
             list[dict]: Extracted signals
         """
-        # P0-5 Fix: Log trace_id for observability
-        if trace_id:
-            logger.info(f"[{agent_name}] trace_id={trace_id} starting signal extraction")
+        cache_key_context = {
+            "corp_id": context.get("corp_id"),
+            "snapshot_hash": context.get("snapshot_hash"),
+        }
+
+        # Try cache first
+        if use_cache and self._cache_enabled:
+            cached = await self.cache.get(
+                CacheOperation.SIGNAL_EXTRACTION,
+                user_prompt,
+                cache_key_context
+            )
+            if cached:
+                signals = cached.get("signals", [])
+                logger.info(
+                    LogEvents.LLM_CACHE_HIT,
+                    operation="signal_extraction",
+                    signal_count=len(signals)
+                )
+                return signals
 
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ]
 
-        # Sprint 2: Pass agent_name for usage tracking
-        result = self.call_with_json_response(
-            messages=messages,
-            agent_name=agent_name,
-            corp_id=context.get("corp_id"),
-            job_id=context.get("job_id"),
-            stage="SIGNAL",
-        )
+        result = self.call_with_json_response(messages)
 
         signals = result.get("signals", [])
+        logger.info(
+            LogEvents.LLM_CALL_SUCCESS,
+            operation="signal_extraction",
+            signal_count=len(signals),
+            model=self.last_successful_model
+        )
 
-        # P0-5 Fix: Include trace_id in log output
-        if trace_id:
-            logger.info(f"[{agent_name}] trace_id={trace_id} extracted {len(signals)} signals")
-        else:
-            logger.info(f"[{agent_name}] Extracted {len(signals)} signals from LLM")
+        # Cache the result
+        if use_cache and self._cache_enabled:
+            await self.cache.set(
+                CacheOperation.SIGNAL_EXTRACTION,
+                user_prompt,
+                cache_key_context,
+                result
+            )
 
         return signals
 
-    def generate_insight(self, signals: list[dict], context: dict, prompt: str) -> str:
+    def extract_signals_sync(
+        self,
+        context: dict,
+        system_prompt: str,
+        user_prompt: str,
+    ) -> list[dict]:
+        """
+        Synchronous version of extract_signals (for backward compatibility).
+        Does NOT use cache.
+        """
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+
+        result = self.call_with_json_response(messages)
+
+        signals = result.get("signals", [])
+        logger.info(
+            LogEvents.LLM_CALL_SUCCESS,
+            operation="signal_extraction_sync",
+            signal_count=len(signals),
+            model=self.last_successful_model
+        )
+
+        return signals
+
+    async def generate_insight(
+        self,
+        signals: list[dict],
+        context: dict,
+        prompt: str,
+        use_cache: bool = True,
+    ) -> str:
         """
         Generate executive insight summary.
 
@@ -456,17 +636,81 @@ class LLMService:
             signals: List of validated signals
             context: Unified context data
             prompt: Insight generation prompt
+            use_cache: Whether to use cache (default True)
 
         Returns:
             str: Generated insight text
         """
+        cache_key_context = {
+            "corp_id": context.get("corp_id"),
+            "signal_count": len(signals),
+            "signal_ids": sorted([s.get("id", "") for s in signals[:10]]),  # First 10 for key
+        }
+
+        # Try cache first
+        if use_cache and self._cache_enabled:
+            cached = await self.cache.get(
+                CacheOperation.INSIGHT_GENERATION,
+                prompt,
+                cache_key_context
+            )
+            if cached:
+                logger.info(
+                    LogEvents.LLM_CACHE_HIT,
+                    operation="insight_generation"
+                )
+                return cached.get("insight", "")
+
         messages = [{"role": "user", "content": prompt}]
 
-        return self.call_with_fallback(
+        result = self.call_with_fallback(
             messages=messages,
             temperature=0.3,  # Slightly higher for more natural text
             max_tokens=2048,
         )
+
+        logger.info(
+            LogEvents.LLM_CALL_SUCCESS,
+            operation="insight_generation",
+            model=self.last_successful_model
+        )
+
+        # Cache the result
+        if use_cache and self._cache_enabled:
+            await self.cache.set(
+                CacheOperation.INSIGHT_GENERATION,
+                prompt,
+                cache_key_context,
+                {"insight": result}
+            )
+
+        return result
+
+    def generate_insight_sync(
+        self,
+        signals: list[dict],
+        context: dict,
+        prompt: str,
+    ) -> str:
+        """
+        Synchronous version of generate_insight (for backward compatibility).
+        Does NOT use cache.
+        """
+        messages = [{"role": "user", "content": prompt}]
+
+        result = self.call_with_fallback(
+            messages=messages,
+            temperature=0.3,
+            max_tokens=2048,
+        )
+
+        logger.info(
+            LogEvents.LLM_CALL_SUCCESS,
+            operation="insight_generation_sync",
+            model=self.last_successful_model
+        )
+
+        return result
 
     def extract_document_facts(
         self,
@@ -619,6 +863,7 @@ class LLMService:
                         )
 
                     logger.info(f"Successfully got vision response from {model}")
+                    self.last_successful_model = model
 
                     return content
 

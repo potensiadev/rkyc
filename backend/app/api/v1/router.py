@@ -4,7 +4,8 @@ Aggregates all API endpoints
 """
 
 from fastapi import APIRouter
-from app.api.v1.endpoints import corporations, signals, jobs, dashboard, documents, profiles, admin, new_kyc, signals_enriched, scheduler, diagnostics, reports, loan_insights
+from app.api.v1.endpoints import corporations, signals, jobs, dashboard, documents, profiles, admin, signals_enriched, scheduler, diagnostics, reports, loan_insights
+# from app.api.v1.endpoints import new_kyc  # 신규 법인 KYC - 비활성화
 
 # Create main API router
 api_router = APIRouter()
@@ -20,7 +21,7 @@ api_router.include_router(dashboard.router, prefix="/dashboard", tags=["dashboar
 api_router.include_router(documents.router, prefix="/documents", tags=["documents"])
 api_router.include_router(profiles.router, tags=["profiles"])  # Routes: /corporations/{corp_id}/profile*
 api_router.include_router(admin.router, tags=["admin"])  # PRD v1.2: Circuit Breaker Status API
-api_router.include_router(new_kyc.router, prefix="/new-kyc", tags=["new-kyc"])  # 신규 법인 KYC
+# api_router.include_router(new_kyc.router, prefix="/new-kyc", tags=["new-kyc"])  # 신규 법인 KYC - 비활성화
 api_router.include_router(scheduler.router, prefix="/scheduler", tags=["scheduler"])  # Real-time signal detection control
 api_router.include_router(diagnostics.router, prefix="/diagnostics", tags=["diagnostics"])  # Pipeline diagnostics
 api_router.include_router(reports.router, prefix="/reports", tags=["reports"])  # Full reports with evidence

@@ -373,34 +373,63 @@ class CircuitBreakerManager:
     - claude: threshold=2, cooldown=600s
 
     v1.3: Redis 영속화 지원
+    v1.4: P1-1 Configuration 외부화 (config.py에서 읽기)
     """
 
-    # PRD v1.2 기본 설정
-    DEFAULT_CONFIGS = {
-        "perplexity": CircuitConfig(
-            failure_threshold=3,
-            cooldown_seconds=300,
-            half_open_requests=1,
-        ),
-        "gemini": CircuitConfig(
-            failure_threshold=3,
-            cooldown_seconds=300,
-            half_open_requests=1,
-        ),
-        "claude": CircuitConfig(
-            failure_threshold=2,
-            cooldown_seconds=600,
-            half_open_requests=1,
-        ),
-    }
+    @staticmethod
+    def _load_configs_from_settings() -> dict[str, CircuitConfig]:
+        """Load circuit breaker configs from settings (P1-1)"""
+        try:
+            from app.core.config import settings
+            return {
+                "perplexity": CircuitConfig(
+                    failure_threshold=settings.CIRCUIT_BREAKER_PERPLEXITY_THRESHOLD,
+                    cooldown_seconds=settings.CIRCUIT_BREAKER_PERPLEXITY_COOLDOWN,
+                    half_open_requests=1,
+                ),
+                "gemini": CircuitConfig(
+                    failure_threshold=settings.CIRCUIT_BREAKER_GEMINI_THRESHOLD,
+                    cooldown_seconds=settings.CIRCUIT_BREAKER_GEMINI_COOLDOWN,
+                    half_open_requests=1,
+                ),
+                "claude": CircuitConfig(
+                    failure_threshold=settings.CIRCUIT_BREAKER_CLAUDE_THRESHOLD,
+                    cooldown_seconds=settings.CIRCUIT_BREAKER_CLAUDE_COOLDOWN,
+                    half_open_requests=1,
+                ),
+                "openai": CircuitConfig(
+                    failure_threshold=settings.CIRCUIT_BREAKER_OPENAI_THRESHOLD,
+                    cooldown_seconds=settings.CIRCUIT_BREAKER_OPENAI_COOLDOWN,
+                    half_open_requests=1,
+                ),
+            }
+        except Exception as e:
+            logger.warning(f"Failed to load circuit breaker configs from settings: {e}, using defaults")
+            return CircuitBreakerManager._get_default_configs()
+
+    @staticmethod
+    def _get_default_configs() -> dict[str, CircuitConfig]:
+        """Fallback default configs"""
+        return {
+            "perplexity": CircuitConfig(failure_threshold=3, cooldown_seconds=300, half_open_requests=1),
+            "gemini": CircuitConfig(failure_threshold=3, cooldown_seconds=300, half_open_requests=1),
+            "claude": CircuitConfig(failure_threshold=2, cooldown_seconds=600, half_open_requests=1),
+            "openai": CircuitConfig(failure_threshold=3, cooldown_seconds=300, half_open_requests=1),
+        }
+
+    # Default configs (loaded at class definition time, but can be overridden)
+    DEFAULT_CONFIGS = _get_default_configs.__func__()
 
     def __init__(self, use_redis: bool = True):
         self._breakers: dict[str, CircuitBreaker] = {}
         self._lock = threading.Lock()
         self._use_redis = use_redis
 
+        # P1-1: Load configs from settings (falls back to defaults)
+        configs = self._load_configs_from_settings()
+
         # 기본 provider 초기화
-        for provider, config in self.DEFAULT_CONFIGS.items():
+        for provider, config in configs.items():
             self._breakers[provider] = CircuitBreaker(provider, config, use_redis=use_redis)
 
     def get_breaker(self, provider: str) -> CircuitBreaker:

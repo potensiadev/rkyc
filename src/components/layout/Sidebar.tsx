@@ -13,7 +13,7 @@ import {
   Factory,
   Globe,
   Newspaper,
-  UserPlus,
+  // UserPlus,  // 신규 법인 KYC - 비활성화
 } from "lucide-react";
 
 interface SubMenuItem {
@@ -78,12 +78,13 @@ const navigationItems: NavigationItem[] = [
     icon: BarChart3,
     path: "/analytics",
   },
-  {
-    id: "new-kyc",
-    label: "신규 법인 PRE-KYC",
-    icon: UserPlus,
-    path: "/new-kyc",
-  },
+  // 신규 법인 KYC - 비활성화
+  // {
+  //   id: "new-kyc",
+  //   label: "신규 법인 PRE-KYC",
+  //   icon: UserPlus,
+  //   path: "/new-kyc",
+  // },
 ];
 
 const bottomItems: NavigationItem[] = [

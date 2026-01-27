@@ -5,14 +5,7 @@ PRD v1.2:
 - Circuit Breaker 상태 조회 API
 - 수동 리셋 API
 - P2-2: Profile 재생성 API
-
-ADR-009 Sprint 1:
-- LLM Usage 통계 조회 API
-
-ADR-009 Sprint 3/4:
-- Signal Agent Orchestrator 모니터링 API
-- Agent Performance 메트릭
-- Conflict 통계
+- v1.2: LLM Cache 상태 조회 API
 """
 
 from typing import Optional
@@ -25,15 +18,7 @@ from app.worker.llm.circuit_breaker import (
     get_circuit_breaker_manager,
     CircuitState,
 )
-from app.worker.llm.usage_tracker import get_usage_tracker
-from app.worker.pipelines.signal_agents import (
-    get_signal_orchestrator,
-    reset_signal_orchestrator,
-)
-from app.worker.pipelines.signal_agents.orchestrator import (
-    AgentStatus,
-    get_concurrency_limiter,
-)
+from app.worker.llm.cache import get_llm_cache, CacheOperation
 from app.core.database import get_db
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -320,348 +305,6 @@ async def get_llm_health():
 
 
 # ============================================================================
-# LLM Usage Tracking (ADR-009 Sprint 1)
-# ============================================================================
-
-
-class LLMUsageSummaryResponse(BaseModel):
-    """LLM Usage 요약 응답"""
-    period_start: str
-    period_end: str
-    total_calls: int
-    total_tokens: int
-    total_cost_usd: float
-    avg_latency_ms: float
-    success_rate: float
-    by_provider: dict
-    by_agent: dict
-    by_stage: dict
-
-
-class LLMUsageTotalsResponse(BaseModel):
-    """LLM Usage 전체 통계 응답"""
-    calls: int
-    tokens: int
-    cost_usd: float
-    by_provider: dict
-    by_agent: dict
-
-
-@router.get(
-    "/llm-usage/summary",
-    response_model=LLMUsageSummaryResponse,
-    summary="LLM Usage 통계 요약",
-    description="지정된 시간 동안의 LLM 사용 통계를 조회합니다.",
-)
-async def get_llm_usage_summary(
-    minutes: int = Query(default=60, ge=1, le=1440, description="조회할 기간 (분)")
-):
-    """
-    LLM Usage 통계 요약
-
-    Args:
-        minutes: 조회 기간 (분, 기본 60분, 최대 24시간)
-
-    Returns:
-        LLMUsageSummaryResponse: 기간 내 사용 통계
-    """
-    tracker = get_usage_tracker()
-    summary = tracker.get_summary(last_n_minutes=minutes)
-
-    return LLMUsageSummaryResponse(
-        period_start=summary.period_start,
-        period_end=summary.period_end,
-        total_calls=summary.total_calls,
-        total_tokens=summary.total_tokens,
-        total_cost_usd=round(summary.total_cost_usd, 6),
-        avg_latency_ms=round(summary.avg_latency_ms, 2),
-        success_rate=round(summary.success_rate, 4),
-        by_provider=summary.by_provider,
-        by_agent=summary.by_agent,
-        by_stage=summary.by_stage,
-    )
-
-
-@router.get(
-    "/llm-usage/totals",
-    response_model=LLMUsageTotalsResponse,
-    summary="LLM Usage 전체 통계",
-    description="서버 시작 이후 전체 LLM 사용 통계를 조회합니다.",
-)
-async def get_llm_usage_totals():
-    """
-    LLM Usage 전체 통계
-
-    Returns:
-        LLMUsageTotalsResponse: 전체 사용 통계
-    """
-    tracker = get_usage_tracker()
-    totals = tracker.get_totals()
-
-    return LLMUsageTotalsResponse(
-        calls=totals["calls"],
-        tokens=totals["tokens"],
-        cost_usd=round(totals["cost_usd"], 6),
-        by_provider=dict(totals["by_provider"]),
-        by_agent=dict(totals["by_agent"]),
-    )
-
-
-@router.post(
-    "/llm-usage/reset",
-    summary="LLM Usage 통계 리셋",
-    description="LLM 사용 통계를 리셋합니다. (테스트용)",
-)
-async def reset_llm_usage():
-    """
-    LLM Usage 통계 리셋
-
-    Returns:
-        dict: 리셋 결과
-    """
-    tracker = get_usage_tracker()
-    tracker.reset()
-
-    return {
-        "success": True,
-        "message": "LLM usage statistics have been reset",
-    }
-
-
-# ============================================================================
-# Signal Agent Orchestrator Monitoring (ADR-009 Sprint 3/4)
-# ============================================================================
-
-
-class OrchestratorStatusResponse(BaseModel):
-    """Orchestrator 상태 응답"""
-    is_initialized: bool
-    execution_mode: str  # "local" or "distributed"
-    agent_count: int
-    agents: list[str]
-    cross_validation_enabled: bool
-    graceful_degradation_enabled: bool
-
-
-class AgentPerformanceResponse(BaseModel):
-    """Agent 성능 메트릭 응답"""
-    agent_name: str
-    total_executions: int
-    success_count: int
-    failure_count: int
-    timeout_count: int
-    avg_execution_time_ms: float
-    total_signals_produced: int
-    success_rate: float
-
-
-class ConcurrencyLimiterStatusResponse(BaseModel):
-    """Concurrency Limiter 상태 응답"""
-    provider: str
-    limit: int
-    current_permits: int
-    waiting_count: int
-
-
-class ConflictStatisticsResponse(BaseModel):
-    """Conflict 통계 응답"""
-    total_conflicts_detected: int
-    conflicts_by_field: dict[str, int]
-    needs_review_count: int
-    auto_resolved_count: int
-
-
-@router.get(
-    "/signal-orchestrator/status",
-    response_model=OrchestratorStatusResponse,
-    summary="Signal Orchestrator 상태 조회",
-    description="Signal Agent Orchestrator의 현재 상태를 조회합니다.",
-)
-async def get_orchestrator_status():
-    """
-    Signal Agent Orchestrator 상태 조회
-
-    Returns:
-        OrchestratorStatusResponse: Orchestrator 상태
-    """
-    try:
-        orchestrator = get_signal_orchestrator()
-        return OrchestratorStatusResponse(
-            is_initialized=True,
-            execution_mode="local",  # ThreadPoolExecutor
-            agent_count=len(orchestrator._agents),
-            agents=list(orchestrator._agents.keys()),
-            cross_validation_enabled=True,
-            graceful_degradation_enabled=True,
-        )
-    except Exception as e:
-        return OrchestratorStatusResponse(
-            is_initialized=False,
-            execution_mode="unknown",
-            agent_count=0,
-            agents=[],
-            cross_validation_enabled=False,
-            graceful_degradation_enabled=False,
-        )
-
-
-@router.get(
-    "/signal-orchestrator/concurrency",
-    summary="Concurrency Limiter 상태 조회",
-    description="Provider별 Concurrency Limiter 상태를 조회합니다.",
-)
-async def get_concurrency_status():
-    """
-    Concurrency Limiter 상태 조회
-
-    Returns:
-        dict: Provider별 concurrency 상태
-    """
-    limiter = get_concurrency_limiter()
-
-    providers_status = {}
-    for provider, semaphore in limiter._semaphores.items():
-        limit = limiter._limits.get(provider, 0)
-        # BoundedSemaphore doesn't expose current count directly
-        # We track it via the limiter's internal state
-        providers_status[provider] = {
-            "limit": limit,
-            "provider": provider,
-        }
-
-    return {
-        "providers": providers_status,
-        "default_limit": limiter._default_limit,
-    }
-
-
-@router.post(
-    "/signal-orchestrator/reset",
-    summary="Signal Orchestrator 리셋",
-    description="Signal Agent Orchestrator를 리셋합니다.",
-)
-async def reset_orchestrator():
-    """
-    Signal Agent Orchestrator 리셋
-
-    Returns:
-        dict: 리셋 결과
-    """
-    reset_signal_orchestrator()
-
-    return {
-        "success": True,
-        "message": "Signal Agent Orchestrator has been reset",
-    }
-
-
-@router.get(
-    "/signal-agents/list",
-    summary="등록된 Signal Agent 목록",
-    description="Orchestrator에 등록된 모든 Signal Agent 목록을 조회합니다.",
-)
-async def list_signal_agents():
-    """
-    등록된 Signal Agent 목록
-
-    Returns:
-        dict: Agent 목록 및 정보
-    """
-    orchestrator = get_signal_orchestrator()
-
-    agents_info = []
-    for name, agent in orchestrator._agents.items():
-        # P0-6 Fix: Use correct attribute names (SIGNAL_TYPE, ALLOWED_EVENT_TYPES)
-        agents_info.append({
-            "name": name,
-            "class": agent.__class__.__name__,
-            "signal_type": getattr(agent, 'SIGNAL_TYPE', 'unknown'),
-            "event_types": list(getattr(agent, 'ALLOWED_EVENT_TYPES', set())),
-        })
-
-    return {
-        "total": len(agents_info),
-        "agents": agents_info,
-    }
-
-
-@router.get(
-    "/health/signal-extraction",
-    summary="Signal Extraction 건강 상태",
-    description="Signal Extraction 파이프라인의 전체 건강 상태를 요약합니다.",
-)
-async def get_signal_extraction_health():
-    """
-    Signal Extraction 건강 상태 요약
-
-    Returns:
-        dict: 건강 상태 요약
-    """
-    # Circuit Breaker 상태
-    cb_manager = get_circuit_breaker_manager()
-    cb_status = cb_manager.get_all_status()
-
-    healthy_providers = []
-    degraded_providers = []
-    unavailable_providers = []
-
-    for provider, status in cb_status.items():
-        if status.state == CircuitState.CLOSED:
-            healthy_providers.append(provider)
-        elif status.state == CircuitState.HALF_OPEN:
-            degraded_providers.append(provider)
-        else:
-            unavailable_providers.append(provider)
-
-    # Orchestrator 상태
-    try:
-        orchestrator = get_signal_orchestrator()
-        orchestrator_status = "healthy"
-        agent_count = len(orchestrator._agents)
-    except Exception:
-        orchestrator_status = "unavailable"
-        agent_count = 0
-
-    # LLM Usage
-    tracker = get_usage_tracker()
-    usage_summary = tracker.get_summary(last_n_minutes=60)
-
-    # Overall health
-    if unavailable_providers or orchestrator_status == "unavailable":
-        overall = "unhealthy"
-    elif degraded_providers:
-        overall = "degraded"
-    else:
-        overall = "healthy"
-
-    return {
-        "status": overall,
-        "components": {
-            "orchestrator": {
-                "status": orchestrator_status,
-                "agent_count": agent_count,
-            },
-            "circuit_breakers": {
-                "healthy": healthy_providers,
-                "degraded": degraded_providers,
-                "unavailable": unavailable_providers,
-            },
-            "llm_usage_last_hour": {
-                "total_calls": usage_summary.total_calls,
-                "success_rate": round(usage_summary.success_rate, 4),
-                "avg_latency_ms": round(usage_summary.avg_latency_ms, 2),
-            },
-        },
-        "capabilities": {
-            "multi_agent_parallel": True,
-            "cross_validation": True,
-            "graceful_degradation": True,
-            "distributed_execution": True,  # Celery group support
-        },
-    }
-
-
-# ============================================================================
 # P2-2: Profile Provenance Regeneration API
 # ============================================================================
 
@@ -821,3 +464,139 @@ async def list_null_provenance_profiles(
         "count": len(profiles),
         "profiles": profiles,
     }
+
+
+# ============================================================================
+# v1.2: LLM Cache Status API
+# ============================================================================
+
+
+class CacheStatsResponse(BaseModel):
+    """LLM Cache 통계 응답"""
+    memory: dict[str, int]
+    redis_available: bool
+    redis: Optional[dict[str, int]] = None
+    redis_error: Optional[str] = None
+
+
+class CacheInvalidateRequest(BaseModel):
+    """Cache 무효화 요청"""
+    operation: Optional[str] = None  # None이면 전체 무효화
+    pattern: str = "*"
+
+
+class CacheInvalidateResponse(BaseModel):
+    """Cache 무효화 응답"""
+    success: bool
+    message: str
+    invalidated_count: int
+
+
+@router.get(
+    "/cache/status",
+    response_model=CacheStatsResponse,
+    summary="LLM Cache 상태 조회",
+    description="Memory 및 Redis LLM Cache의 현재 상태를 조회합니다.",
+)
+async def get_cache_status():
+    """
+    LLM Cache 상태 조회
+
+    Returns:
+        CacheStatsResponse: 캐시 통계
+    """
+    cache = get_llm_cache()
+    stats = await cache.get_stats()
+
+    return CacheStatsResponse(
+        memory=stats.get("memory", {}),
+        redis_available=stats.get("redis_available", False),
+        redis=stats.get("redis"),
+        redis_error=stats.get("redis_error"),
+    )
+
+
+@router.post(
+    "/cache/invalidate",
+    response_model=CacheInvalidateResponse,
+    summary="LLM Cache 무효화",
+    description="LLM Cache를 무효화합니다. operation을 지정하면 해당 타입만 무효화합니다.",
+)
+async def invalidate_cache(request: CacheInvalidateRequest):
+    """
+    LLM Cache 무효화
+
+    Args:
+        request: 무효화 요청 (operation, pattern)
+
+    Returns:
+        CacheInvalidateResponse: 무효화 결과
+    """
+    cache = get_llm_cache()
+
+    operation = None
+    if request.operation:
+        try:
+            operation = CacheOperation(request.operation)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid operation: {request.operation}. Valid values: {[op.value for op in CacheOperation]}"
+            )
+
+    count = await cache.invalidate_by_pattern(
+        operation=operation,
+        pattern_suffix=request.pattern,
+    )
+
+    return CacheInvalidateResponse(
+        success=True,
+        message=f"Invalidated {count} cache entries",
+        invalidated_count=count,
+    )
+
+
+@router.get(
+    "/cache/operations",
+    summary="Cache Operation 목록",
+    description="사용 가능한 Cache Operation 타입 목록을 조회합니다.",
+)
+async def list_cache_operations():
+    """
+    Cache Operation 타입 목록 조회
+
+    Returns:
+        dict: Operation 목록과 TTL 설정
+    """
+    from app.worker.llm.cache import CacheConfig
+
+    config = CacheConfig()
+    operations = []
+
+    for op in CacheOperation:
+        operations.append({
+            "name": op.value,
+            "ttl_seconds": config.get_ttl(op),
+            "ttl_human": _format_ttl(config.get_ttl(op)),
+        })
+
+    return {
+        "operations": operations,
+        "memory_cache_size": config.MEMORY_CACHE_SIZE,
+        "redis_key_prefix": config.REDIS_KEY_PREFIX,
+    }
+
+
+def _format_ttl(seconds: int) -> str:
+    """TTL을 사람이 읽기 쉬운 형식으로 변환"""
+    if seconds >= 86400:
+        days = seconds // 86400
+        return f"{days}d"
+    elif seconds >= 3600:
+        hours = seconds // 3600
+        return f"{hours}h"
+    elif seconds >= 60:
+        minutes = seconds // 60
+        return f"{minutes}m"
+    else:
+        return f"{seconds}s"

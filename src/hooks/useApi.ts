@@ -332,9 +332,10 @@ export function useRefreshCorpProfile() {
 }
 
 // ============================================================
-// 신규 법인 KYC Hooks
+// 신규 법인 KYC Hooks - 비활성화
 // ============================================================
 
+/*
 import {
   getNewKycJobStatus,
   getNewKycReport,
@@ -368,6 +369,7 @@ export function useNewKycReport(jobId: string) {
     staleTime: 5 * 60 * 1000, // 5분
   });
 }
+*/
 
 // ============================================================
 // Session 16: Signal Enriched Detail Hooks (풍부한 시그널 상세)
@@ -559,8 +561,8 @@ export type {
   SignalStatusType,
   ApiCorpProfileResponse,
   ApiCorpProfileDetailResponse,
-  NewKycJobStatusResponse,
-  NewKycReportResponse,
+  // NewKycJobStatusResponse,  // 신규 법인 KYC - 비활성화
+  // NewKycReportResponse,     // 신규 법인 KYC - 비활성화
   // Session 16: Enriched types
   ApiSignalEnrichedDetail,
   ApiSimilarCase,

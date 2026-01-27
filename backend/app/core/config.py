@@ -39,12 +39,60 @@ class Settings(BaseSettings):
     REDIS_BROKER_DB: int = Field(default=0, description="Redis DB number for Celery broker")
     REDIS_RESULT_DB: int = Field(default=1, description="Redis DB number for Celery results")
 
-    # Circuit Breaker Configuration
-    # In production, Redis is required to persist circuit breaker state across worker restarts
+    # =========================================================================
+    # Circuit Breaker Configuration (P1-1)
+    # =========================================================================
     CIRCUIT_BREAKER_REQUIRE_REDIS: bool = Field(
         default=True,
         description="Require Redis for circuit breaker state persistence (recommended for production)"
     )
+    # Provider-specific settings (JSON format: {"provider": {"threshold": 3, "cooldown": 300}})
+    CIRCUIT_BREAKER_PERPLEXITY_THRESHOLD: int = Field(default=3, description="Perplexity failure threshold")
+    CIRCUIT_BREAKER_PERPLEXITY_COOLDOWN: int = Field(default=300, description="Perplexity cooldown seconds")
+    CIRCUIT_BREAKER_GEMINI_THRESHOLD: int = Field(default=3, description="Gemini failure threshold")
+    CIRCUIT_BREAKER_GEMINI_COOLDOWN: int = Field(default=300, description="Gemini cooldown seconds")
+    CIRCUIT_BREAKER_CLAUDE_THRESHOLD: int = Field(default=2, description="Claude failure threshold (more conservative)")
+    CIRCUIT_BREAKER_CLAUDE_COOLDOWN: int = Field(default=600, description="Claude cooldown seconds")
+    CIRCUIT_BREAKER_OPENAI_THRESHOLD: int = Field(default=3, description="OpenAI failure threshold")
+    CIRCUIT_BREAKER_OPENAI_COOLDOWN: int = Field(default=300, description="OpenAI cooldown seconds")
+
+    # =========================================================================
+    # LLM Cache Configuration (P1-1)
+    # =========================================================================
+    LLM_CACHE_REDIS_DB: int = Field(default=2, description="Redis DB number for LLM cache")
+    LLM_CACHE_MEMORY_SIZE: int = Field(default=100, description="Memory LRU cache size per operation")
+    # TTL settings (seconds)
+    LLM_CACHE_TTL_PROFILE: int = Field(default=604800, description="Profile extraction cache TTL (7 days)")
+    LLM_CACHE_TTL_SIGNAL: int = Field(default=86400, description="Signal extraction cache TTL (1 day)")
+    LLM_CACHE_TTL_VALIDATION: int = Field(default=3600, description="Validation cache TTL (1 hour)")
+    LLM_CACHE_TTL_EMBEDDING: int = Field(default=2592000, description="Embedding cache TTL (30 days)")
+    LLM_CACHE_TTL_CONSENSUS: int = Field(default=86400, description="Consensus cache TTL (1 day)")
+    LLM_CACHE_TTL_DOCUMENT: int = Field(default=604800, description="Document parsing cache TTL (7 days)")
+    LLM_CACHE_TTL_INSIGHT: int = Field(default=43200, description="Insight generation cache TTL (12 hours)")
+
+    # =========================================================================
+    # Model Router Configuration (P1-1)
+    # =========================================================================
+    # Simple tier models (fast, cost-effective)
+    MODEL_SIMPLE_PRIMARY: str = Field(default="claude-3-5-haiku-20241022", description="Primary simple model")
+    MODEL_SIMPLE_FALLBACK: str = Field(default="gpt-4o-mini", description="Fallback simple model")
+    # Moderate tier models (balanced)
+    MODEL_MODERATE_PRIMARY: str = Field(default="claude-sonnet-4-20250514", description="Primary moderate model")
+    MODEL_MODERATE_FALLBACK1: str = Field(default="gpt-4o", description="First fallback moderate model")
+    MODEL_MODERATE_FALLBACK2: str = Field(default="gemini/gemini-2.0-flash", description="Second fallback moderate model")
+    # Complex tier models (high quality)
+    MODEL_COMPLEX_PRIMARY: str = Field(default="claude-opus-4-5-20251101", description="Primary complex model")
+    MODEL_COMPLEX_FALLBACK1: str = Field(default="gpt-4o", description="First fallback complex model")
+    MODEL_COMPLEX_FALLBACK2: str = Field(default="gemini/gemini-3-pro-preview", description="Second fallback complex model")
+
+    # =========================================================================
+    # Consensus Engine Configuration (P2-3)
+    # =========================================================================
+    CONSENSUS_SIMILARITY_THRESHOLD: float = Field(default=0.7, description="Default similarity threshold")
+    CONSENSUS_THRESHOLD_NUMBER: float = Field(default=0.1, description="Numeric comparison threshold (10%)")
+    CONSENSUS_THRESHOLD_NAME: float = Field(default=0.9, description="Name/entity comparison threshold")
+    CONSENSUS_THRESHOLD_SUMMARY: float = Field(default=0.6, description="Summary/description threshold")
+    CONSENSUS_USE_SEMANTIC: bool = Field(default=True, description="Enable semantic similarity")
 
     @property
     def CELERY_BROKER_URL(self) -> str:
