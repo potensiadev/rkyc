@@ -600,10 +600,19 @@ class LLMService:
         context: dict,
         system_prompt: str,
         user_prompt: str,
+        agent_name: Optional[str] = None,
+        trace_id: Optional[str] = None,
     ) -> list[dict]:
         """
         Synchronous version of extract_signals (for backward compatibility).
         Does NOT use cache.
+
+        Args:
+            context: Unified context data
+            system_prompt: System prompt for signal extraction
+            user_prompt: User prompt with context data
+            agent_name: Optional agent name for tracking
+            trace_id: Optional trace ID for observability
         """
         messages = [
             {"role": "system", "content": system_prompt},
@@ -617,7 +626,9 @@ class LLMService:
             LogEvents.LLM_CALL_SUCCESS,
             operation="signal_extraction_sync",
             signal_count=len(signals),
-            model=self.last_successful_model
+            model=self.last_successful_model,
+            agent_name=agent_name,
+            trace_id=trace_id,
         )
 
         return signals

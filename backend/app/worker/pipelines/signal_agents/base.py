@@ -128,7 +128,8 @@ class BaseSignalAgent(ABC):
         try:
             # Call LLM with agent-specific tracking
             # P0-5 Fix: Pass trace_id for observability
-            signals = self.llm.extract_signals(
+            # Use sync version since execute() is not async
+            signals = self.llm.extract_signals_sync(
                 context=context,
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
