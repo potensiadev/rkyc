@@ -64,7 +64,6 @@ const navigationItems: NavigationItem[] = [
     label: "시그널 인박스",
     icon: Inbox,
     path: "/",
-    badge: 12,
   },
   {
     id: "corporations",
