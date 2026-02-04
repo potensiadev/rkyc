@@ -143,6 +143,24 @@ def _parse_shareholders(data: list | None) -> list[ShareholderSchema]:
     ]
 
 
+def _normalize_country_exposure(data) -> dict:
+    """
+    country_exposure 타입 정규화 - P0 Fix
+
+    LLM/DB에서 list 또는 dict로 반환될 수 있음.
+    - list: ["미국", "중국"] → {"미국": 0, "중국": 0}
+    - dict: {"미국": 60, "중국": 30} → 그대로
+    """
+    if not data:
+        return {}
+    if isinstance(data, dict):
+        return data
+    if isinstance(data, list):
+        # list를 dict로 변환 (비중 정보 없으면 0으로 설정)
+        return {str(country): 0 for country in data if country}
+    return {}
+
+
 def _parse_consensus_metadata(data: dict | None) -> ConsensusMetadataSchema:
     """Parse consensus_metadata JSONB to schema."""
     if not data:
@@ -276,7 +294,7 @@ async def get_corp_profile(
         revenue_krw=row.revenue_krw,
         export_ratio_pct=row.export_ratio_pct,
         financial_history=financial_history,
-        country_exposure=row.country_exposure or {},
+        country_exposure=_normalize_country_exposure(row.country_exposure),
         key_materials=list(row.key_materials or []),
         key_customers=list(row.key_customers or []),
         overseas_operations=list(row.overseas_operations or []),
@@ -439,7 +457,7 @@ async def get_corp_profile_detail(
         revenue_krw=row.revenue_krw,
         export_ratio_pct=row.export_ratio_pct,
         financial_history=financial_history,
-        country_exposure=row.country_exposure or {},
+        country_exposure=_normalize_country_exposure(row.country_exposure),
         key_materials=list(row.key_materials or []),
         key_customers=list(row.key_customers or []),
         overseas_operations=list(row.overseas_operations or []),
