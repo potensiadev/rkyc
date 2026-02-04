@@ -2044,6 +2044,9 @@ class CorpProfilingPipeline:
         # Save to DB
         if db_session:
             await self._save_profile(profile, db_session)
+        else:
+            # No async session provided - use sync session (Celery-safe)
+            self._save_profile_sync(profile)
 
         # Select queries based on profile
         selected, details = self.query_selector.select_queries(
@@ -2933,6 +2936,121 @@ class CorpProfilingPipeline:
         except Exception as e:
             logger.error(f"Failed to save profile: {e}")
             await db_session.rollback()
+
+    def _save_profile_sync(self, profile: dict) -> None:
+        """Save profile to database using sync session (for Celery workers)."""
+        from app.worker.db import get_sync_db
+        from sqlalchemy import text
+
+        try:
+            with get_sync_db() as db:
+                # Same query as async version
+                query = text("""
+                    INSERT INTO rkyc_corp_profile (
+                        profile_id, corp_id, business_summary, revenue_krw, export_ratio_pct,
+                        country_exposure, key_materials, key_customers, overseas_operations,
+                        ceo_name, employee_count, founded_year, headquarters, executives,
+                        industry_overview, business_model, financial_history,
+                        competitors, macro_factors, supply_chain, overseas_business, shareholders,
+                        consensus_metadata,
+                        profile_confidence, field_confidences, source_urls,
+                        raw_search_result, field_provenance, extraction_model, extraction_prompt_version,
+                        is_fallback, search_failed, validation_warnings, status,
+                        fetched_at, expires_at
+                    ) VALUES (
+                        CAST(:profile_id AS uuid), :corp_id, :business_summary, :revenue_krw, :export_ratio_pct,
+                        CAST(:country_exposure AS jsonb), :key_materials, :key_customers, :overseas_operations,
+                        :ceo_name, :employee_count, :founded_year, :headquarters, CAST(:executives AS jsonb),
+                        :industry_overview, :business_model, CAST(:financial_history AS jsonb),
+                        CAST(:competitors AS jsonb), CAST(:macro_factors AS jsonb),
+                        CAST(:supply_chain AS jsonb), CAST(:overseas_business AS jsonb), CAST(:shareholders AS jsonb),
+                        CAST(:consensus_metadata AS jsonb),
+                        CAST(:profile_confidence AS confidence_level), CAST(:field_confidences AS jsonb), :source_urls,
+                        CAST(:raw_search_result AS jsonb), CAST(:field_provenance AS jsonb), :extraction_model, :extraction_prompt_version,
+                        :is_fallback, :search_failed, :validation_warnings, :status,
+                        CAST(:fetched_at AS timestamptz), CAST(:expires_at AS timestamptz)
+                    )
+                    ON CONFLICT (corp_id) DO UPDATE SET
+                        business_summary = EXCLUDED.business_summary,
+                        revenue_krw = EXCLUDED.revenue_krw,
+                        export_ratio_pct = EXCLUDED.export_ratio_pct,
+                        country_exposure = EXCLUDED.country_exposure,
+                        key_materials = EXCLUDED.key_materials,
+                        key_customers = EXCLUDED.key_customers,
+                        overseas_operations = EXCLUDED.overseas_operations,
+                        ceo_name = EXCLUDED.ceo_name,
+                        employee_count = EXCLUDED.employee_count,
+                        founded_year = EXCLUDED.founded_year,
+                        headquarters = EXCLUDED.headquarters,
+                        executives = EXCLUDED.executives,
+                        industry_overview = EXCLUDED.industry_overview,
+                        business_model = EXCLUDED.business_model,
+                        financial_history = EXCLUDED.financial_history,
+                        competitors = EXCLUDED.competitors,
+                        macro_factors = EXCLUDED.macro_factors,
+                        supply_chain = EXCLUDED.supply_chain,
+                        overseas_business = EXCLUDED.overseas_business,
+                        shareholders = EXCLUDED.shareholders,
+                        consensus_metadata = EXCLUDED.consensus_metadata,
+                        profile_confidence = EXCLUDED.profile_confidence,
+                        field_confidences = EXCLUDED.field_confidences,
+                        source_urls = EXCLUDED.source_urls,
+                        raw_search_result = EXCLUDED.raw_search_result,
+                        field_provenance = EXCLUDED.field_provenance,
+                        extraction_model = EXCLUDED.extraction_model,
+                        extraction_prompt_version = EXCLUDED.extraction_prompt_version,
+                        is_fallback = EXCLUDED.is_fallback,
+                        search_failed = EXCLUDED.search_failed,
+                        validation_warnings = EXCLUDED.validation_warnings,
+                        status = EXCLUDED.status,
+                        fetched_at = EXCLUDED.fetched_at,
+                        expires_at = EXCLUDED.expires_at,
+                        updated_at = NOW()
+                """)
+
+                db.execute(query, {
+                    "profile_id": str(profile.get("profile_id", "")),
+                    "corp_id": profile.get("corp_id", ""),
+                    "business_summary": profile.get("business_summary"),
+                    "revenue_krw": profile.get("revenue_krw"),
+                    "export_ratio_pct": profile.get("export_ratio_pct"),
+                    "country_exposure": safe_json_dumps(profile.get("country_exposure", {})),
+                    "key_materials": profile.get("key_materials", []),
+                    "key_customers": profile.get("key_customers", []),
+                    "overseas_operations": profile.get("overseas_operations", []),
+                    "ceo_name": profile.get("ceo_name"),
+                    "employee_count": profile.get("employee_count"),
+                    "founded_year": profile.get("founded_year"),
+                    "headquarters": profile.get("headquarters"),
+                    "executives": safe_json_dumps(profile.get("executives", [])),
+                    "industry_overview": profile.get("industry_overview"),
+                    "business_model": profile.get("business_model"),
+                    "financial_history": safe_json_dumps(profile.get("financial_history", [])),
+                    "competitors": safe_json_dumps(profile.get("competitors", [])),
+                    "macro_factors": safe_json_dumps(profile.get("macro_factors", [])),
+                    "supply_chain": safe_json_dumps(profile.get("supply_chain", {})),
+                    "overseas_business": safe_json_dumps(profile.get("overseas_business", {})),
+                    "shareholders": safe_json_dumps(profile.get("shareholders", [])),
+                    "consensus_metadata": safe_json_dumps(profile.get("consensus_metadata", {})),
+                    "profile_confidence": profile.get("profile_confidence", "LOW"),
+                    "field_confidences": safe_json_dumps(profile.get("field_confidences", {})),
+                    "source_urls": profile.get("source_urls", []),
+                    "raw_search_result": safe_json_dumps(profile.get("raw_search_result", {})),
+                    "field_provenance": safe_json_dumps(profile.get("field_provenance", {})),
+                    "extraction_model": profile.get("extraction_model"),
+                    "extraction_prompt_version": profile.get("extraction_prompt_version"),
+                    "is_fallback": profile.get("is_fallback", False),
+                    "search_failed": profile.get("search_failed", False),
+                    "validation_warnings": profile.get("validation_warnings", []),
+                    "status": profile.get("status", "ACTIVE"),
+                    "fetched_at": profile.get("fetched_at"),
+                    "expires_at": profile.get("expires_at"),
+                })
+                db.commit()
+                logger.info(f"Saved profile (sync) for {profile['corp_id']}")
+
+        except Exception as e:
+            logger.error(f"Failed to save profile (sync): {e}")
 
 
 # ============================================================================

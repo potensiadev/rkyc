@@ -416,7 +416,8 @@ class SignalExtractionPipeline:
 
         try:
             # Call LLM for signal extraction with enhanced prompt
-            signals = self.llm.extract_signals(
+            # P0-FIX: Use sync version since execute() is not async
+            signals = self.llm.extract_signals_sync(
                 context=context,
                 system_prompt=enhanced_system_prompt,
                 user_prompt=user_prompt,
