@@ -280,7 +280,9 @@ async def get_corp_profile(
     overseas_business = _parse_overseas_business(row.overseas_business)
     consensus_metadata = _parse_consensus_metadata(row.consensus_metadata)
 
-    return CorpProfileResponse(
+    # P0-DEBUG: Wrap response creation in try-except for better error reporting
+    try:
+        return CorpProfileResponse(
         profile_id=row.profile_id,
         corp_id=row.corp_id,
         business_summary=row.business_summary,
@@ -311,10 +313,22 @@ async def get_corp_profile(
         search_failed=row.search_failed or False,
         validation_warnings=list(row.validation_warnings or []),
         status=ProfileStatusEnum(row.status) if row.status else ProfileStatusEnum.ACTIVE,
-        fetched_at=row.fetched_at,
-        expires_at=row.expires_at,
-        is_expired=row.is_expired,
-    )
+            fetched_at=row.fetched_at,
+            expires_at=row.expires_at,
+            is_expired=row.is_expired,
+        )
+    except Exception as e:
+        # P0-DEBUG: Return detailed error for debugging
+        logger.error(f"Failed to create CorpProfileResponse for {corp_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "corp_id": corp_id,
+                "profile_id": str(row.profile_id) if row.profile_id else None,
+            },
+        )
 
 
 @router.get(
