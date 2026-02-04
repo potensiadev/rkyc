@@ -66,20 +66,20 @@ class LLMService:
     """
 
     # Model configuration - 3-stage fallback chain
-    # 해커톤 최적화: Claude Opus (품질 우선, 비용 허용)
+    # 해커톤 시연: GPT-4o Primary (JSON mode 안정성, 빠른 응답)
     MODELS = [
         {
-            "model": "claude-opus-4-5-20251101",  # Claude Opus 4.5 (Best quality for hackathon)
-            "provider": "anthropic",
-            "max_tokens": 8192,  # Increased for CoT + multi-signal
-        },
-        {
-            "model": "gpt-4o",  # GPT-4o (Fast & Strong fallback)
+            "model": "gpt-4o",  # GPT-4o Primary (supports response_format)
             "provider": "openai",
             "max_tokens": 8192,
         },
         {
-            "model": "gemini/gemini-3-pro-preview",  # Gemini 3 Pro Preview
+            "model": "claude-3-5-sonnet-20241022",  # Claude Sonnet Fallback
+            "provider": "anthropic",
+            "max_tokens": 8192,
+        },
+        {
+            "model": "gemini/gemini-1.5-pro",  # Gemini 1.5 Pro (stable)
             "provider": "google",
             "max_tokens": 8192,
         },
