@@ -1265,3 +1265,252 @@ INDUSTRY_CODE_MAP = {
 def get_industry_name(industry_code: str) -> str:
     """Get industry name from code"""
     return INDUSTRY_CODE_MAP.get(industry_code, f"기타 ({industry_code})")
+
+
+# =============================================================================
+# Corp Profile Search Prompts (v2.0)
+# =============================================================================
+
+# 분할 쿼리: 19개 필드를 3그룹으로 나눔
+CORP_PROFILE_QUERY_GROUP_1 = """
+{corp_name} {industry_name} 기업 기본 정보:
+- 대표이사/CEO 이름
+- 설립연도
+- 본사 위치
+- 임직원 수
+- 주요 사업 내용/비즈니스 모델
+- 업종 현황/산업 개요
+"""
+
+CORP_PROFILE_QUERY_GROUP_2 = """
+{corp_name} {industry_name} 재무/거래 정보:
+- 최근 3개년 매출액 (원화 기준)
+- 수출 비중 (%)
+- 주요 고객사/거래처
+- 주요 경쟁사
+- 거시경제 영향 요인
+"""
+
+CORP_PROFILE_QUERY_GROUP_3 = """
+{corp_name} {industry_name} 공급망/해외 사업 정보:
+- 국가별 매출 비중
+- 주요 원자재/부품
+- 공급망 현황 (주요 공급사, 국가 비중, 단일 조달처 위험)
+- 해외 법인/공장
+- 주요 주주 구성
+- 경영진 정보
+"""
+
+
+def build_corp_profile_query(
+    corp_name: str,
+    industry_name: str,
+    group: int = 0,
+) -> str:
+    """
+    Corp Profile 검색 쿼리 빌드
+
+    Args:
+        corp_name: 기업명
+        industry_name: 업종명
+        group: 쿼리 그룹 (0=전체, 1/2/3=분할)
+
+    Returns:
+        검색 쿼리 문자열
+    """
+    safe_corp_name = sanitize_input(corp_name, "corp_name", max_length=200)
+    safe_industry_name = sanitize_input(industry_name, "industry_name", max_length=100)
+
+    if group == 1:
+        template = CORP_PROFILE_QUERY_GROUP_1
+    elif group == 2:
+        template = CORP_PROFILE_QUERY_GROUP_2
+    elif group == 3:
+        template = CORP_PROFILE_QUERY_GROUP_3
+    else:
+        # 전체 쿼리 (기본)
+        template = """
+{corp_name} {industry_name} 기업 정보 종합:
+- 대표이사, 설립연도, 본사 위치, 임직원 수
+- 최근 매출액, 수출 비중, 주요 고객사, 경쟁사
+- 공급망 현황, 해외 사업, 주요 주주
+- 사업 개요, 비즈니스 모델, 업종 동향
+"""
+
+    return template.format(
+        corp_name=safe_corp_name,
+        industry_name=safe_industry_name,
+    ).strip()
+
+
+# =============================================================================
+# Corp Profile Extraction Prompt (LLM 응답에서 JSON 추출)
+# =============================================================================
+
+CORP_PROFILE_EXTRACTION_SYSTEM = """당신은 한국 기업 정보를 분석하는 전문가입니다.
+주어진 검색 결과에서 기업 프로필 정보를 구조화된 JSON으로 추출합니다.
+
+## 필수 규칙
+
+### 1. Evidence-First (근거 필수)
+- 검색 결과에서 실제로 확인된 정보만 추출
+- 확인되지 않은 정보는 null로 설정
+- 추정/예측 금지
+
+### 2. Confidence 기준
+- HIGH: 공시, IR 자료, 공식 발표에서 확인된 정보
+- MEDIUM: 주요 경제지 뉴스에서 확인된 정보
+- LOW: 단일 출처 또는 추정이 필요한 정보
+
+### 3. 숫자 필드 규칙
+- revenue_krw: 원화 기준 (억원 단위면 x 100,000,000 변환)
+- export_ratio_pct: 0-100 범위
+- employee_count: 양의 정수
+- founded_year: 1900-2026 범위
+
+## 출력 형식 (JSON)
+```json
+{
+  "business_summary": "사업 개요 (200자 이내)",
+  "revenue_krw": 숫자 또는 null,
+  "export_ratio_pct": 숫자 또는 null,
+  "ceo_name": "대표이사명 또는 null",
+  "employee_count": 숫자 또는 null,
+  "founded_year": 숫자 또는 null,
+  "headquarters": "본사 위치 또는 null",
+  "executives": [{"name": "이름", "position": "직책"}] 또는 null,
+  "industry_overview": "업종 현황 (100자 이내)",
+  "business_model": "비즈니스 모델 설명",
+  "country_exposure": [{"country": "국가", "ratio_pct": 숫자}] 또는 null,
+  "key_materials": ["원자재1", "원자재2"] 또는 null,
+  "key_customers": ["고객사1", "고객사2"] 또는 null,
+  "supply_chain": {
+    "key_suppliers": ["공급사1"],
+    "supplier_countries": [{"country": "국가", "ratio_pct": 숫자}],
+    "single_source_risk": true/false 또는 null
+  } 또는 null,
+  "overseas_business": {
+    "subsidiaries": [{"country": "국가", "name": "법인명"}],
+    "manufacturing_countries": ["국가1"]
+  } 또는 null,
+  "shareholders": [{"name": "주주명", "ratio_pct": 숫자}] 또는 null,
+  "competitors": [{"name": "경쟁사", "description": "설명"}] 또는 null,
+  "macro_factors": [{"factor": "요인", "impact": "POSITIVE/NEGATIVE/NEUTRAL"}] 또는 null,
+  "financial_history": [
+    {"year": 2024, "revenue_krw": 숫자, "operating_income_krw": 숫자}
+  ] 또는 null,
+  "confidence": "HIGH|MEDIUM|LOW",
+  "source_urls": ["URL1", "URL2"]
+}
+```
+"""
+
+CORP_PROFILE_EXTRACTION_USER = """# 분석 대상 기업
+- 기업명: {corp_name}
+- 업종: {industry_name}
+
+# 검색 결과
+{search_results}
+
+# 출처 URL
+{citations}
+
+# 요청
+위 검색 결과에서 기업 프로필 정보를 JSON 형식으로 추출하세요.
+확인되지 않은 정보는 반드시 null로 설정하세요.
+"""
+
+
+def format_corp_profile_extraction_prompt(
+    corp_name: str,
+    industry_name: str,
+    search_results: str,
+    citations: list[str],
+) -> str:
+    """Corp Profile 추출 프롬프트 생성"""
+    safe_corp_name = sanitize_input(corp_name, "corp_name", max_length=200)
+    safe_industry_name = sanitize_input(industry_name, "industry_name", max_length=100)
+    safe_results = sanitize_input(search_results, "search_results", max_length=30000)
+    citations_text = "\n".join(f"- {url}" for url in (citations or []))
+
+    return CORP_PROFILE_EXTRACTION_USER.format(
+        corp_name=safe_corp_name,
+        industry_name=safe_industry_name,
+        search_results=safe_results,
+        citations=citations_text or "출처 없음",
+    )
+
+
+# =============================================================================
+# OpenAI Validation Prompt (v2.0 Layer 2)
+# =============================================================================
+
+OPENAI_VALIDATION_SYSTEM = """당신은 데이터 품질 검증 전문가입니다.
+기업 프로필 데이터의 정확성과 일관성을 검증합니다.
+
+## 검증 항목
+
+### 1. 범위 검증
+- revenue_krw: 100만원 ~ 100조원
+- export_ratio_pct: 0 ~ 100
+- employee_count: 1 ~ 1,000,000
+- founded_year: 1900 ~ 2026
+
+### 2. Hallucination 탐지
+다음 패턴이 있으면 해당 필드를 null로 표시:
+- "I don't know", "확인 불가", "정보 없음"
+- 지나치게 일반적인 설명
+- 숫자 없이 "많은", "적은" 등 표현
+
+### 3. 내부 일관성
+- export_ratio_pct + domestic_ratio_pct ≈ 100
+- 수출 비중 > 30% 이면 해외 사업 정보 있어야 함
+
+## 출력 형식 (JSON)
+```json
+{
+  "is_valid": true/false,
+  "confidence": "HIGH|MEDIUM|LOW",
+  "issues": [
+    {"field": "필드명", "severity": "ERROR|WARNING|INFO", "message": "설명"}
+  ],
+  "validated_profile": {프로필 객체 (문제있는 필드는 null로 변경)},
+  "overall_assessment": "전체 평가 한 줄"
+}
+```
+"""
+
+OPENAI_VALIDATION_USER = """# 검증 대상 프로필
+- 기업명: {corp_name}
+- 업종: {industry_name}
+- 데이터 소스: {source}
+
+# 프로필 데이터
+```json
+{profile_json}
+```
+
+# 요청
+위 프로필 데이터를 검증하고 결과를 JSON으로 반환하세요.
+"""
+
+
+def format_openai_validation_prompt(
+    corp_name: str,
+    industry_name: str,
+    profile: dict,
+    source: str = "UNKNOWN",
+) -> str:
+    """OpenAI 검증 프롬프트 생성"""
+    import json as _json
+
+    safe_corp_name = sanitize_input(corp_name, "corp_name", max_length=200)
+    safe_industry_name = sanitize_input(industry_name, "industry_name", max_length=100)
+    profile_json = _json.dumps(profile, ensure_ascii=False, indent=2)
+
+    return OPENAI_VALIDATION_USER.format(
+        corp_name=safe_corp_name,
+        industry_name=safe_industry_name,
+        source=source,
+        profile_json=profile_json,
+    )

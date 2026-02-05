@@ -112,6 +112,12 @@ from app.worker.llm.consensus_engine import (
     compare_values,
     compare_values_legacy,
     get_consensus_engine,
+    # Structured Conflict Resolution
+    ConflictInfo,
+    StructuredConflictInput,
+    ConflictResolutionResult,
+    StructuredConflictResolver,
+    get_conflict_resolver,
 )
 from app.worker.llm.circuit_breaker import (
     CircuitBreaker,
@@ -177,6 +183,7 @@ from app.worker.llm.orchestrator import (
 from app.worker.llm.search_providers import (
     MultiSearchManager,
     SearchResult,
+    CrossCoverageResult,
     SearchProviderType,
     BaseSearchProvider,
     PerplexityProvider,
@@ -184,6 +191,27 @@ from app.worker.llm.search_providers import (
     get_multi_search_manager,
     reset_multi_search_manager,
     get_search_providers_status,
+)
+
+# Field Assignment (한국어 특화 필드 분담)
+from app.worker.llm.field_assignment import (
+    FieldProvider,
+    FieldAssignment,
+    PERPLEXITY_PRIMARY_FIELDS,
+    GEMINI_ACCEPTABLE_FIELDS,
+    CROSS_VALIDATION_REQUIRED,
+    SOURCE_CREDIBILITY,
+    get_field_assignment,
+    is_perplexity_primary,
+    is_gemini_acceptable,
+    requires_cross_validation,
+    get_perplexity_fields,
+    get_gemini_fields,
+    get_cross_validation_fields,
+    get_all_profile_fields,
+    get_field_confidence_weight,
+    get_source_credibility,
+    select_best_value,
 )
 
 # ADR-009 Sprint 1 - Usage Tracking
@@ -196,6 +224,26 @@ from app.worker.llm.usage_tracker import (
     get_usage_tracker,
     reset_usage_tracker,
     log_llm_usage,
+)
+
+# v2.0 - API Key Rotator
+from app.worker.llm.key_rotator import (
+    KeyRotator,
+    KeyState,
+    ProviderKeyPool,
+    get_key_rotator,
+    reset_key_rotator,
+)
+
+# v2.0 - OpenAI Validator
+from app.worker.llm.validator import (
+    OpenAIValidator,
+    ValidationResult,
+    ValidationIssue,
+    ValidationSeverity,
+    ConfidenceLevel as ValidatorConfidenceLevel,
+    get_validator,
+    reset_validator,
 )
 
 # v2.0 - 4-Layer Analysis Architecture
@@ -337,6 +385,12 @@ __all__ = [
     "compare_values",
     "compare_values_legacy",
     "get_consensus_engine",
+    # Structured Conflict Resolution
+    "ConflictInfo",
+    "StructuredConflictInput",
+    "ConflictResolutionResult",
+    "StructuredConflictResolver",
+    "get_conflict_resolver",
     # PRD v1.2 - Circuit Breaker
     "CircuitBreaker",
     "CircuitBreakerManager",
@@ -392,6 +446,7 @@ __all__ = [
     # Multi-Search Provider Architecture (검색 내장 LLM 2-Track)
     "MultiSearchManager",
     "SearchResult",
+    "CrossCoverageResult",
     "SearchProviderType",
     "BaseSearchProvider",
     "PerplexityProvider",
@@ -399,6 +454,24 @@ __all__ = [
     "get_multi_search_manager",
     "reset_multi_search_manager",
     "get_search_providers_status",
+    # Field Assignment (한국어 특화 필드 분담)
+    "FieldProvider",
+    "FieldAssignment",
+    "PERPLEXITY_PRIMARY_FIELDS",
+    "GEMINI_ACCEPTABLE_FIELDS",
+    "CROSS_VALIDATION_REQUIRED",
+    "SOURCE_CREDIBILITY",
+    "get_field_assignment",
+    "is_perplexity_primary",
+    "is_gemini_acceptable",
+    "requires_cross_validation",
+    "get_perplexity_fields",
+    "get_gemini_fields",
+    "get_cross_validation_fields",
+    "get_all_profile_fields",
+    "get_field_confidence_weight",
+    "get_source_credibility",
+    "select_best_value",
     # ADR-009 Sprint 1 - Usage Tracking
     "LLMUsageTracker",
     "LLMUsageLog",
@@ -408,6 +481,20 @@ __all__ = [
     "get_usage_tracker",
     "reset_usage_tracker",
     "log_llm_usage",
+    # v2.0 - API Key Rotator
+    "KeyRotator",
+    "KeyState",
+    "ProviderKeyPool",
+    "get_key_rotator",
+    "reset_key_rotator",
+    # v2.0 - OpenAI Validator
+    "OpenAIValidator",
+    "ValidationResult",
+    "ValidationIssue",
+    "ValidationSeverity",
+    "ValidatorConfidenceLevel",
+    "get_validator",
+    "reset_validator",
     # v2.0 - 4-Layer Analysis Architecture
     "SourceCredibility",
     "ImpactPath",

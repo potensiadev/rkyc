@@ -18,12 +18,14 @@ import hashlib
 import json
 import logging
 import os
+import re
+import threading
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Optional, Any
+from typing import Any, Optional
 
 import httpx
 
@@ -33,8 +35,38 @@ from app.worker.llm.circuit_breaker import (
     CircuitOpenError,
     get_circuit_breaker_manager,
 )
+from app.worker.llm.key_rotator import get_key_rotator, KeyRotator
 
 logger = logging.getLogger(__name__)
+
+# P0 Fix: Thread-safe event loop 관리
+_thread_local = threading.local()
+_event_loop_lock = threading.Lock()
+
+
+def _get_or_create_event_loop() -> asyncio.AbstractEventLoop:
+    """
+    P0 Fix: Thread-safe event loop 관리
+
+    스레드별로 독립된 event loop를 관리하여 race condition 방지.
+    Lock으로 TOCTOU 버그 방지.
+    """
+    # 먼저 running loop 확인 (이미 async 컨텍스트인 경우)
+    try:
+        return asyncio.get_running_loop()
+    except RuntimeError:
+        pass
+
+    # Thread-local storage에서 안전하게 loop 관리
+    with _event_loop_lock:
+        if hasattr(_thread_local, 'loop') and _thread_local.loop is not None:
+            if not _thread_local.loop.is_closed():
+                return _thread_local.loop
+
+        # 새 loop 생성 및 저장
+        loop = asyncio.new_event_loop()
+        _thread_local.loop = loop
+        return loop
 
 
 class SearchProviderType(str, Enum):
@@ -65,6 +97,57 @@ class SearchResult:
         }
 
 
+@dataclass
+class CrossCoverageResult:
+    """
+    Cross-Coverage 검색 결과
+
+    Perplexity 실패 필드 → Gemini 커버
+    Gemini 실패 필드 → Perplexity 커버
+    둘 다 실패 → null
+    """
+    merged_data: dict  # 필드별 최종 값
+    source_map: dict  # 필드별 출처: {"revenue_krw": "PERPLEXITY", "ceo_name": "GEMINI_CROSS_COVERAGE"}
+    field_details: list[dict]  # 필드별 상세 정보
+    perplexity_success: bool
+    gemini_success: bool
+    perplexity_citations: list[str] = field(default_factory=list)
+    gemini_citations: list[str] = field(default_factory=list)
+    timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
+
+    def to_dict(self) -> dict:
+        return {
+            "merged_data": self.merged_data,
+            "source_map": self.source_map,
+            "field_details": self.field_details,
+            "perplexity_success": self.perplexity_success,
+            "gemini_success": self.gemini_success,
+            "perplexity_citations": self.perplexity_citations,
+            "gemini_citations": self.gemini_citations,
+            "timestamp": self.timestamp,
+        }
+
+    @property
+    def both_failed(self) -> bool:
+        """둘 다 실패했는지 확인"""
+        return not self.perplexity_success and not self.gemini_success
+
+    def get_coverage_stats(self) -> dict:
+        """커버리지 통계"""
+        total = len(self.source_map)
+        perplexity_count = sum(1 for s in self.source_map.values() if "PERPLEXITY" in s)
+        gemini_count = sum(1 for s in self.source_map.values() if "GEMINI" in s)
+        both_failed = sum(1 for s in self.source_map.values() if s == "NONE")
+
+        return {
+            "total_fields": total,
+            "perplexity_covered": perplexity_count,
+            "gemini_covered": gemini_count,
+            "both_failed": both_failed,
+            "coverage_rate": (total - both_failed) / total if total > 0 else 0.0,
+        }
+
+
 class BaseSearchProvider(ABC):
     """검색 Provider 기본 클래스"""
 
@@ -79,6 +162,32 @@ class BaseSearchProvider(ABC):
         if self._client is None:
             self._client = httpx.AsyncClient(timeout=30.0)
         return self._client
+
+    async def cleanup(self) -> None:
+        """
+        P0 Fix: 리소스 정리 - AsyncClient 연결 닫기
+
+        사용 후 반드시 호출하여 TCP 연결 누수 방지
+        """
+        if self._client is not None:
+            try:
+                await self._client.aclose()
+            except Exception as e:
+                logger.warning(f"[SearchProvider] Failed to close client: {e}")
+            finally:
+                self._client = None
+
+    def __del__(self):
+        """소멸자에서 리소스 정리 시도 (best effort)"""
+        if self._client is not None:
+            try:
+                # 동기 컨텍스트에서는 경고만 로깅
+                logger.warning(
+                    f"[SearchProvider] {self.provider_type.value}: "
+                    "AsyncClient not properly closed. Call cleanup() explicitly."
+                )
+            except Exception:
+                pass
 
     @abstractmethod
     async def search(self, query: str) -> SearchResult:
@@ -137,15 +246,26 @@ class PerplexityProvider(BaseSearchProvider):
     API_URL = "https://api.perplexity.ai/chat/completions"
     MODEL = "sonar-pro"
 
+    def __init__(self, circuit_breaker: Optional[CircuitBreakerManager] = None):
+        super().__init__(circuit_breaker)
+        self.key_rotator = get_key_rotator()
+        self._current_key: Optional[str] = None
+
     def is_available(self) -> bool:
-        return bool(settings.PERPLEXITY_API_KEY)
+        # 다중 키 또는 기본 키 중 하나라도 있으면 사용 가능
+        key = self.key_rotator.get_key("perplexity")
+        return bool(key)
 
     async def search(self, query: str) -> SearchResult:
-        if not self.is_available():
+        # KeyRotator에서 키 가져오기
+        api_key = self.key_rotator.get_key("perplexity")
+        if not api_key:
             raise ValueError("Perplexity API key not configured")
 
+        self._current_key = api_key
+
         headers = {
-            "Authorization": f"Bearer {settings.PERPLEXITY_API_KEY}",
+            "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         }
 
@@ -162,24 +282,32 @@ class PerplexityProvider(BaseSearchProvider):
             "return_related_questions": False,
         }
 
-        response = await self.client.post(
-            self.API_URL,
-            headers=headers,
-            json=payload,
-        )
-        response.raise_for_status()
+        try:
+            response = await self.client.post(
+                self.API_URL,
+                headers=headers,
+                json=payload,
+            )
+            response.raise_for_status()
 
-        data = response.json()
-        content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-        citations = data.get("citations", [])
+            # 성공 시 키 마킹
+            self.key_rotator.mark_success("perplexity", api_key)
 
-        return SearchResult(
-            provider=self.provider_type,
-            content=content,
-            citations=citations,
-            raw_response=data,
-            confidence=0.9 if citations else 0.7,
-        )
+            data = response.json()
+            content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+            citations = data.get("citations", [])
+
+            return SearchResult(
+                provider=self.provider_type,
+                content=content,
+                citations=citations,
+                raw_response=data,
+                confidence=0.9 if citations else 0.7,
+            )
+        except Exception as e:
+            # 실패 시 키 마킹
+            self.key_rotator.mark_failed("perplexity", api_key)
+            raise
 
 
 class GeminiGroundingProvider(BaseSearchProvider):
@@ -187,16 +315,27 @@ class GeminiGroundingProvider(BaseSearchProvider):
 
     provider_type = SearchProviderType.GEMINI_GROUNDING
 
+    def __init__(self, circuit_breaker: Optional[CircuitBreakerManager] = None):
+        super().__init__(circuit_breaker)
+        self.key_rotator = get_key_rotator()
+        self._current_key: Optional[str] = None
+
     def is_available(self) -> bool:
-        return bool(settings.GOOGLE_API_KEY)
+        # 다중 키 또는 기본 키 중 하나라도 있으면 사용 가능
+        key = self.key_rotator.get_key("google")
+        return bool(key)
 
     async def search(self, query: str) -> SearchResult:
-        if not self.is_available():
+        # KeyRotator에서 키 가져오기
+        api_key = self.key_rotator.get_key("google")
+        if not api_key:
             raise ValueError("Google API key not configured")
+
+        self._current_key = api_key
 
         import google.generativeai as genai
 
-        genai.configure(api_key=settings.GOOGLE_API_KEY)
+        genai.configure(api_key=api_key)
 
         # Gemini 2.0 Flash with Google Search grounding
         model = genai.GenerativeModel(
@@ -204,33 +343,41 @@ class GeminiGroundingProvider(BaseSearchProvider):
             tools="google_search_retrieval",  # Enable Google Search grounding
         )
 
-        # Sync call wrapped in asyncio
-        loop = asyncio.get_event_loop()
-        response = await loop.run_in_executor(
-            None,
-            lambda: model.generate_content(query)
-        )
+        try:
+            # P0 Fix: Thread-safe event loop 사용
+            loop = _get_or_create_event_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: model.generate_content(query)
+            )
 
-        content = response.text if response.text else ""
+            # 성공 시 키 마킹
+            self.key_rotator.mark_success("google", api_key)
 
-        # Grounding metadata에서 citations 추출
-        citations = []
-        if hasattr(response, 'candidates') and response.candidates:
-            candidate = response.candidates[0]
-            if hasattr(candidate, 'grounding_metadata'):
-                grounding = candidate.grounding_metadata
-                if hasattr(grounding, 'grounding_chunks'):
-                    for chunk in grounding.grounding_chunks:
-                        if hasattr(chunk, 'web') and hasattr(chunk.web, 'uri'):
-                            citations.append(chunk.web.uri)
+            content = response.text if response.text else ""
 
-        return SearchResult(
-            provider=self.provider_type,
-            content=content,
-            citations=citations,
-            raw_response={"text": content},
-            confidence=0.8 if citations else 0.6,
-        )
+            # Grounding metadata에서 citations 추출
+            citations = []
+            if hasattr(response, 'candidates') and response.candidates:
+                candidate = response.candidates[0]
+                if hasattr(candidate, 'grounding_metadata'):
+                    grounding = candidate.grounding_metadata
+                    if hasattr(grounding, 'grounding_chunks'):
+                        for chunk in grounding.grounding_chunks:
+                            if hasattr(chunk, 'web') and hasattr(chunk.web, 'uri'):
+                                citations.append(chunk.web.uri)
+
+            return SearchResult(
+                provider=self.provider_type,
+                content=content,
+                citations=citations,
+                raw_response={"text": content},
+                confidence=0.8 if citations else 0.6,
+            )
+        except Exception as e:
+            # 실패 시 키 마킹
+            self.key_rotator.mark_failed("google", api_key)
+            raise
 
 
 class MultiSearchManager:
@@ -260,6 +407,21 @@ class MultiSearchManager:
     def get_available_providers(self) -> list[BaseSearchProvider]:
         """사용 가능한 Provider 목록"""
         return [p for p in self.providers if p.is_available()]
+
+    async def cleanup(self) -> None:
+        """
+        P0 Fix: 모든 Provider 리소스 정리
+
+        사용 후 반드시 호출하여 TCP 연결 누수 방지.
+        개별 Provider cleanup 실패는 로깅 후 계속 진행.
+        """
+        for provider in self.providers:
+            try:
+                await provider.cleanup()
+            except Exception as e:
+                logger.warning(
+                    f"[MultiSearchManager] Failed to cleanup {provider.provider_type.value}: {e}"
+                )
 
     async def search(
         self,
@@ -363,6 +525,163 @@ class MultiSearchManager:
 
         return successful
 
+    async def search_with_cross_coverage(
+        self,
+        query: str,
+        fields: list[str],
+    ) -> CrossCoverageResult:
+        """
+        Cross-Coverage 검색
+
+        로직:
+        1. Perplexity + Gemini 병렬 검색
+        2. 필드별로 결과 비교
+        3. Perplexity 실패 필드 → Gemini 값 사용
+        4. Gemini 실패 필드 → Perplexity 값 사용
+        5. 둘 다 실패 → null
+
+        Args:
+            query: 검색 쿼리
+            fields: 추출할 필드 목록
+
+        Returns:
+            CrossCoverageResult: 필드별 결과 및 소스 정보
+        """
+        from app.worker.llm.field_assignment import (
+            get_field_confidence_weight,
+            get_source_credibility,
+            requires_cross_validation,
+        )
+
+        # 병렬 검색 실행
+        results = await self.search_parallel(query, max_providers=2)
+
+        perplexity_result = None
+        gemini_result = None
+
+        for result in results:
+            if result.provider == SearchProviderType.PERPLEXITY:
+                perplexity_result = result
+            elif result.provider == SearchProviderType.GEMINI_GROUNDING:
+                gemini_result = result
+
+        # 필드별 Cross-Coverage 적용
+        merged_data = {}
+        source_map = {}
+        field_details = []
+
+        for field_name in fields:
+            p_value = None
+            g_value = None
+            p_source = None
+            g_source = None
+
+            # Perplexity 결과에서 필드 추출
+            if perplexity_result and perplexity_result.raw_response:
+                p_value = self._extract_field_from_response(
+                    perplexity_result.raw_response, field_name
+                )
+                if perplexity_result.citations:
+                    p_source = perplexity_result.citations[0] if perplexity_result.citations else None
+
+            # Gemini 결과에서 필드 추출
+            if gemini_result and gemini_result.raw_response:
+                g_value = self._extract_field_from_response(
+                    gemini_result.raw_response, field_name
+                )
+                if gemini_result.citations:
+                    g_source = gemini_result.citations[0] if gemini_result.citations else None
+
+            # Cross-Coverage 로직 적용
+            final_value = None
+            final_source = None
+            coverage_type = "NONE"
+
+            if p_value is not None and g_value is not None:
+                # 둘 다 있음 → 신뢰도 기반 선택
+                if requires_cross_validation(field_name):
+                    # Cross-Validation 필수 필드: 출처 신뢰도로 선택
+                    p_score = get_source_credibility(p_source) * get_field_confidence_weight(field_name, "perplexity")
+                    g_score = get_source_credibility(g_source) * get_field_confidence_weight(field_name, "gemini")
+
+                    if p_score >= g_score:
+                        final_value = p_value
+                        final_source = "PERPLEXITY"
+                    else:
+                        final_value = g_value
+                        final_source = "GEMINI"
+                    coverage_type = "CROSS_VALIDATED"
+                else:
+                    # 일반 필드: Perplexity 우선
+                    final_value = p_value
+                    final_source = "PERPLEXITY"
+                    coverage_type = "PERPLEXITY_PRIMARY"
+
+            elif p_value is not None:
+                # Perplexity만 성공
+                final_value = p_value
+                final_source = "PERPLEXITY"
+                coverage_type = "PERPLEXITY_ONLY"
+
+            elif g_value is not None:
+                # Gemini만 성공 (Perplexity 실패 커버)
+                final_value = g_value
+                final_source = "GEMINI_CROSS_COVERAGE"
+                coverage_type = "GEMINI_COVERAGE"
+
+            else:
+                # 둘 다 실패 → null
+                final_value = None
+                final_source = "NONE"
+                coverage_type = "BOTH_FAILED"
+
+            merged_data[field_name] = final_value
+            source_map[field_name] = final_source
+
+            field_details.append({
+                "field": field_name,
+                "value": final_value,
+                "source": final_source,
+                "coverage_type": coverage_type,
+                "perplexity_value": p_value,
+                "gemini_value": g_value,
+            })
+
+        return CrossCoverageResult(
+            merged_data=merged_data,
+            source_map=source_map,
+            field_details=field_details,
+            perplexity_success=perplexity_result is not None,
+            gemini_success=gemini_result is not None,
+            perplexity_citations=perplexity_result.citations if perplexity_result else [],
+            gemini_citations=gemini_result.citations if gemini_result else [],
+        )
+
+    def _extract_field_from_response(self, response: dict, field_name: str) -> Any:
+        """응답에서 특정 필드 추출 (JSON 파싱 시도)"""
+        # content 필드에서 JSON 추출 시도
+        content = response.get("content") or response.get("text", "")
+        if not content:
+            return None
+
+        # JSON 블록 추출 시도
+        json_match = re.search(r'```json\s*([\s\S]*?)\s*```', content)
+        if json_match:
+            try:
+                parsed = json.loads(json_match.group(1))
+                return parsed.get(field_name)
+            except json.JSONDecodeError:
+                pass
+
+        # 직접 JSON 파싱 시도
+        try:
+            parsed = json.loads(content)
+            return parsed.get(field_name)
+        except json.JSONDecodeError:
+            pass
+
+        return None
+
 
 # ============================================================
 # Singleton & Factory
@@ -379,9 +698,18 @@ def get_multi_search_manager() -> MultiSearchManager:
     return _multi_search_manager
 
 
-def reset_multi_search_manager() -> None:
-    """싱글톤 리셋 (테스트용)"""
+async def reset_multi_search_manager() -> None:
+    """
+    싱글톤 리셋 (테스트용)
+
+    P0 Fix: 리셋 전 리소스 정리
+    """
     global _multi_search_manager
+    if _multi_search_manager is not None:
+        try:
+            await _multi_search_manager.cleanup()
+        except Exception as e:
+            logger.warning(f"[MultiSearchManager] Failed to cleanup before reset: {e}")
     _multi_search_manager = None
 
 

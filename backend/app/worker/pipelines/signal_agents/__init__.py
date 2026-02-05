@@ -19,25 +19,39 @@ Sprint 4: Distributed Execution
 Celery group()으로 병렬 실행 후 결과 병합.
 """
 
-from app.worker.pipelines.signal_agents.base import BaseSignalAgent
-from app.worker.pipelines.signal_agents.direct_agent import DirectSignalAgent
-from app.worker.pipelines.signal_agents.industry_agent import IndustrySignalAgent
-from app.worker.pipelines.signal_agents.environment_agent import EnvironmentSignalAgent
-from app.worker.pipelines.signal_agents.orchestrator import (
-    SignalAgentOrchestrator,
-    get_signal_orchestrator,
-    reset_signal_orchestrator,
-    # Sprint 3: Data classes
-    AgentStatus,
-    AgentResult,
-    OrchestratorMetadata,
-    CrossValidationResult,
-    # Sprint 3: Concurrency limiter
-    ProviderConcurrencyLimiter,
-    get_concurrency_limiter,
-    # Sprint 4: Distributed execution
-    execute_distributed,
-)
+# P0 Fix: Lazy imports to prevent psycopg2 dependency on module access
+_LAZY_IMPORTS = {
+    # base.py
+    "BaseSignalAgent": "app.worker.pipelines.signal_agents.base",
+    # direct_agent.py
+    "DirectSignalAgent": "app.worker.pipelines.signal_agents.direct_agent",
+    # industry_agent.py
+    "IndustrySignalAgent": "app.worker.pipelines.signal_agents.industry_agent",
+    # environment_agent.py
+    "EnvironmentSignalAgent": "app.worker.pipelines.signal_agents.environment_agent",
+    # orchestrator.py
+    "SignalAgentOrchestrator": "app.worker.pipelines.signal_agents.orchestrator",
+    "get_signal_orchestrator": "app.worker.pipelines.signal_agents.orchestrator",
+    "reset_signal_orchestrator": "app.worker.pipelines.signal_agents.orchestrator",
+    "AgentStatus": "app.worker.pipelines.signal_agents.orchestrator",
+    "AgentResult": "app.worker.pipelines.signal_agents.orchestrator",
+    "OrchestratorMetadata": "app.worker.pipelines.signal_agents.orchestrator",
+    "CrossValidationResult": "app.worker.pipelines.signal_agents.orchestrator",
+    "ProviderConcurrencyLimiter": "app.worker.pipelines.signal_agents.orchestrator",
+    "get_concurrency_limiter": "app.worker.pipelines.signal_agents.orchestrator",
+    "execute_distributed": "app.worker.pipelines.signal_agents.orchestrator",
+}
+
+
+def __getattr__(name):
+    """Lazy import to prevent psycopg2 dependency on module access."""
+    if name in _LAZY_IMPORTS:
+        module_path = _LAZY_IMPORTS[name]
+        import importlib
+        module = importlib.import_module(module_path)
+        return getattr(module, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     # Agents

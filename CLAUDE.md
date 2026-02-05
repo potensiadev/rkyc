@@ -1782,6 +1782,81 @@ CLAUDE.md
   - Fallback: Gemini Grounding (GOOGLE_API_KEY 활용)
   - 추가 유료 API 없음! (Tavily, Brave 등 미사용)
   - `/admin/search-providers/health`로 상태 모니터링
+- **Cross-Coverage 검색** (세션 20):
+  - Perplexity 실패 필드 → Gemini 커버
+  - Gemini 실패 필드 → Perplexity 커버
+  - 둘 다 실패 → null (Layer 4 직행)
+- **필드 분담** (세션 20):
+  - PERPLEXITY_PRIMARY: revenue_krw, financial_history, export_ratio_pct, shareholders 등 (8개)
+  - GEMINI_ACCEPTABLE: ceo_name, business_summary, overseas_operations 등 (11개)
+  - CROSS_VALIDATION_REQUIRED: revenue_krw, export_ratio_pct, shareholders (3개)
+- **Structured Conflict Resolution** (세션 20):
+  - Rule-based: 출처 신뢰도, 숫자 정확도, 문자열 길이 기반 해결
+  - LLM-based: Rule 실패 시 OpenAI 판단 (Context 유지)
+  - source_map: 필드별 출처 추적
+
+### 세션 20 (2026-02-05) - Cross-Coverage + Structured Conflict Resolution ✅
+**목표**: Corp Profiling 품질 향상 - Layer 1 실패 처리 개선, 필드 분담, 충돌 해결
+
+**완료 항목**:
+
+#### 1. field_assignment.py - 한국어 특화 필드 분담
+- `FieldProvider` Enum: PERPLEXITY_PRIMARY, GEMINI_ACCEPTABLE, CROSS_VALIDATION
+- `FieldAssignment` 데이터클래스: 필드별 Provider, 신뢰도 가중치
+- **Perplexity 전담 필드** (8개): revenue_krw, financial_history, export_ratio_pct, shareholders, key_customers, key_materials, competitors, industry_overview
+- **Gemini 허용 필드** (11개): ceo_name, employee_count, founded_year, headquarters, business_summary, business_model, overseas_operations, overseas_business, country_exposure, supply_chain, macro_factors
+- **Cross-Validation 필수** (3개): revenue_krw, export_ratio_pct, shareholders
+- `SOURCE_CREDIBILITY`: 도메인별 신뢰도 (dart.fss.or.kr=100, 뉴스=60)
+- Helper 함수: get_field_assignment(), is_perplexity_primary(), requires_cross_validation(), select_best_value()
+
+#### 2. orchestrator.py - Layer 1 실패 시 Layer 4 직행
+- `OrchestratorResult`에 `source_map`, `layer1_both_failed` 필드 추가
+- Layer 1 둘 다 실패 감지 로직 추가
+- **핵심 변경**: Layer 1 실패 → Layer 2, 3 스킵 → Layer 4 직행
+- `provenance["skipped_layers"]`에 스킵된 레이어 기록
+
+#### 3. search_providers.py - Cross-Coverage 로직
+- `CrossCoverageResult` 데이터클래스: merged_data, source_map, field_details
+- `search_with_cross_coverage()` 메서드:
+  - Perplexity + Gemini 병렬 검색
+  - 필드별 Cross-Coverage 적용
+  - coverage_type: PERPLEXITY_ONLY, GEMINI_COVERAGE, CROSS_VALIDATED, BOTH_FAILED
+- `get_coverage_stats()`: 커버리지 통계 (perplexity_covered, gemini_covered, both_failed)
+
+#### 4. consensus_engine.py - Structured Conflict Resolution
+- `ConflictInfo`: 개별 충돌 정보 (perplexity_value, gemini_value, source_score, needs_llm_judgment)
+- `StructuredConflictInput`: OpenAI Context 유지를 위한 구조화 입력
+  - confirmed: 두 소스 일치 필드
+  - conflicts: LLM 판단 필요 충돌
+  - perplexity_only, gemini_only: 단일 소스 필드
+  - rule_resolved: Rule로 해결된 충돌
+- `StructuredConflictResolver`:
+  - `_try_rule_based_resolution()`: 출처 신뢰도 차이 20점 이상, 숫자 정확도, 문자열 길이
+  - `resolve()`: Rule → LLM 순차 해결
+  - `to_openai_prompt()`: 구조화된 충돌 정보 JSON
+- `ConflictResolutionResult`: resolved_profile, source_map, rule_resolved_count, llm_resolved_count
+
+**신규 파일**:
+```
+backend/app/worker/llm/field_assignment.py
+```
+
+**수정된 파일**:
+```
+backend/app/worker/llm/orchestrator.py
+backend/app/worker/llm/search_providers.py
+backend/app/worker/llm/consensus_engine.py
+backend/app/worker/llm/__init__.py
+CLAUDE.md
+```
+
+**아키텍처 개선**:
+| 항목 | 이전 | 이후 |
+|------|------|------|
+| Layer 1 실패 처리 | Layer 2, 3 시도 (데이터 없음) | Layer 4 직행 |
+| 필드 분담 | 암묵적 | 명시적 (field_assignment.py) |
+| 충돌 해결 | 단순 Perplexity 우선 | Rule-based + LLM 2단계 |
+| 출처 추적 | 없음 | source_map 필드 |
 
 ---
-*Last Updated: 2026-01-27 (세션 19 완료 - 검색 내장 LLM 2-Track, Perplexity 의존도 완화)*
+*Last Updated: 2026-02-05 (세션 20 완료 - Cross-Coverage, Structured Conflict Resolution)*

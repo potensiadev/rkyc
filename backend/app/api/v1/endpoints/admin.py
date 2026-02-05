@@ -747,3 +747,138 @@ async def get_search_providers_health():
             "GOOGLE_API_KEY": "설정됨" if settings.GOOGLE_API_KEY else "미설정",
         },
     }
+
+
+# ============================================================================
+# v2.0: API Key Rotator Status API
+# ============================================================================
+
+
+class KeyRotatorStatusResponse(BaseModel):
+    """Key Rotator 상태 응답"""
+    enabled: bool
+    providers: dict
+
+
+class KeyRotatorResetRequest(BaseModel):
+    """Key Rotator 리셋 요청"""
+    provider: Optional[str] = None  # None이면 전체 리셋
+
+
+class KeyRotatorResetResponse(BaseModel):
+    """Key Rotator 리셋 응답"""
+    success: bool
+    message: str
+    reset_providers: list[str]
+
+
+@router.get(
+    "/key-rotator/status",
+    response_model=KeyRotatorStatusResponse,
+    summary="API Key Rotator 상태 조회",
+    description="Perplexity/Google API 키 로테이션 상태를 조회합니다.",
+)
+async def get_key_rotator_status():
+    """
+    API Key Rotator 상태 조회
+
+    Returns:
+        KeyRotatorStatusResponse: 키 로테이션 상태
+    """
+    from app.worker.llm.key_rotator import get_key_rotator
+
+    rotator = get_key_rotator()
+    status = rotator.get_status()
+
+    return KeyRotatorStatusResponse(
+        enabled=status["enabled"],
+        providers=status["providers"],
+    )
+
+
+@router.post(
+    "/key-rotator/reset",
+    response_model=KeyRotatorResetResponse,
+    summary="API Key Rotator 리셋",
+    description="API 키 실패 상태를 리셋합니다. provider를 지정하면 해당 provider만 리셋합니다.",
+)
+async def reset_key_rotator(request: KeyRotatorResetRequest):
+    """
+    API Key Rotator 리셋
+
+    Args:
+        request: 리셋 요청 (provider 지정 가능)
+
+    Returns:
+        KeyRotatorResetResponse: 리셋 결과
+    """
+    from app.worker.llm.key_rotator import get_key_rotator
+
+    rotator = get_key_rotator()
+    reset_providers = []
+
+    if request.provider:
+        rotator.reset_provider(request.provider)
+        reset_providers.append(request.provider)
+    else:
+        rotator.reset_all()
+        reset_providers = list(rotator.pools.keys())
+
+    return KeyRotatorResetResponse(
+        success=True,
+        message=f"Reset {len(reset_providers)} provider(s)",
+        reset_providers=reset_providers,
+    )
+
+
+@router.get(
+    "/key-rotator/health",
+    summary="API Key Rotator 건강 상태",
+    description="API 키 로테이션의 건강 상태를 요약합니다.",
+)
+async def get_key_rotator_health():
+    """
+    API Key Rotator 건강 상태 요약
+
+    Returns:
+        dict: 건강 상태 요약
+    """
+    from app.worker.llm.key_rotator import get_key_rotator
+
+    rotator = get_key_rotator()
+    status = rotator.get_status()
+
+    issues = []
+    warnings = []
+
+    for provider, pool_status in status.get("providers", {}).items():
+        total_keys = pool_status.get("total_keys", 0)
+        available_keys = pool_status.get("available_keys", 0)
+
+        if total_keys == 0:
+            issues.append(f"{provider}: 키가 설정되지 않았습니다.")
+        elif available_keys == 0:
+            warnings.append(f"{provider}: 모든 키가 cooldown 중입니다.")
+        elif available_keys < total_keys:
+            warnings.append(f"{provider}: {total_keys - available_keys}/{total_keys} 키가 cooldown 중입니다.")
+
+    health_status = "healthy"
+    if issues:
+        health_status = "unhealthy"
+    elif warnings:
+        health_status = "degraded"
+
+    return {
+        "status": health_status,
+        "enabled": status["enabled"],
+        "issues": issues,
+        "warnings": warnings,
+        "summary": {
+            provider: {
+                "total": pool["total_keys"],
+                "available": pool["available_keys"],
+                "cooldown_seconds": pool["cooldown_seconds"],
+            }
+            for provider, pool in status.get("providers", {}).items()
+        },
+    }

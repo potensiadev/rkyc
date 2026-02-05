@@ -22,9 +22,9 @@ P2-3 Fix:
 
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from functools import lru_cache
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 from enum import Enum
 
 from app.worker.tracing import get_logger
@@ -160,7 +160,7 @@ class FieldConsensus:
 @dataclass
 class ConsensusMetadata:
     """합의 프로세스 메타데이터 (PRD v1.2)"""
-    consensus_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
+    consensus_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     perplexity_success: bool = True
     gemini_success: bool = True
     claude_success: bool = True
@@ -172,7 +172,7 @@ class ConsensusMetadata:
     # v1.1 추가 필드
     fallback_layer: int = 0  # 0: 정상, 1: Perplexity 실패, 2: Claude 실패, 3: Rule-based
     retry_count: int = 0
-    error_messages: list = field(default_factory=list)
+    error_messages: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -635,14 +635,14 @@ class FieldThresholds:
     numeric: float = 0.1  # 10% tolerance
 
     # 필드명 매핑
-    NAME_FIELDS: set = field(default_factory=lambda: {
+    NAME_FIELDS: set[str] = field(default_factory=lambda: {
         "ceo_name", "corp_name", "headquarters", "key_suppliers",
         "key_customers", "executives", "competitors",
     })
-    SUMMARY_FIELDS: set = field(default_factory=lambda: {
+    SUMMARY_FIELDS: set[str] = field(default_factory=lambda: {
         "business_summary", "industry_overview", "business_model",
     })
-    NUMERIC_FIELDS: set = field(default_factory=lambda: {
+    NUMERIC_FIELDS: set[str] = field(default_factory=lambda: {
         "revenue_krw", "export_ratio_pct", "employee_count", "founded_year",
     })
 
@@ -1019,3 +1019,448 @@ class ConsensusEngine:
 def get_consensus_engine() -> ConsensusEngine:
     """ConsensusEngine 인스턴스 반환"""
     return ConsensusEngine()
+
+
+# ============================================================================
+# Structured Conflict Resolution (OpenAI Context 유지)
+# ============================================================================
+
+
+@dataclass
+class ConflictInfo:
+    """개별 충돌 정보"""
+    field: str
+    perplexity_value: Any
+    gemini_value: Any
+    perplexity_source: Optional[str] = None
+    gemini_source: Optional[str] = None
+    perplexity_source_score: int = 50
+    gemini_source_score: int = 50
+    resolution_hint: str = ""  # Rule-based 해결 힌트
+    needs_llm_judgment: bool = False  # LLM 판단 필요 여부
+
+
+@dataclass
+class StructuredConflictInput:
+    """
+    OpenAI 합성을 위한 Structured Input
+
+    OpenAI가 context를 유지하며 충돌을 해결할 수 있도록
+    원본 쿼리, 확인된 필드, 충돌 필드, 단일 소스 필드를 구조화
+    """
+    corp_name: str
+    industry_name: str
+    original_query: str  # 원본 검색 쿼리 (맥락 유지)
+    confirmed: list[dict]  # 두 소스가 일치하는 필드
+    conflicts: list[ConflictInfo]  # 충돌 필드 (Rule로 해결 안 된 것만)
+    perplexity_only: list[dict]  # Perplexity만 값 있는 필드
+    gemini_only: list[dict]  # Gemini만 값 있는 필드
+    rule_resolved: list[dict]  # Rule-based로 이미 해결된 충돌
+
+    def to_openai_prompt(self) -> str:
+        """OpenAI 프롬프트용 JSON 생성"""
+        import json
+
+        return json.dumps({
+            "corp_name": self.corp_name,
+            "industry_name": self.industry_name,
+            "original_query": self.original_query,
+            "confirmed_fields": self.confirmed,
+            "conflicts_needing_judgment": [
+                {
+                    "field": c.field,
+                    "perplexity": {
+                        "value": c.perplexity_value,
+                        "source": c.perplexity_source,
+                        "source_credibility": c.perplexity_source_score,
+                    },
+                    "gemini": {
+                        "value": c.gemini_value,
+                        "source": c.gemini_source,
+                        "source_credibility": c.gemini_source_score,
+                    },
+                    "hint": c.resolution_hint,
+                }
+                for c in self.conflicts if c.needs_llm_judgment
+            ],
+            "perplexity_only_fields": self.perplexity_only,
+            "gemini_only_fields": self.gemini_only,
+            "rule_resolved_fields": self.rule_resolved,
+        }, ensure_ascii=False, indent=2)
+
+
+@dataclass
+class ConflictResolutionResult:
+    """충돌 해결 결과"""
+    resolved_profile: dict
+    source_map: dict  # {"field": "PERPLEXITY" | "GEMINI" | "OPENAI_RESOLVED"}
+    rule_resolved_count: int  # Rule로 해결된 충돌 수
+    llm_resolved_count: int  # LLM이 해결한 충돌 수
+    unresolved_count: int  # 미해결 충돌 수
+    resolution_details: list[dict]  # 해결 상세 내역
+
+
+class StructuredConflictResolver:
+    """
+    Structured Conflict Resolution
+
+    충돌 해결 2단계:
+    1. Rule-based: 출처 신뢰도, 날짜, 숫자 정확도 기반
+    2. LLM-based: Rule로 해결 안 되는 경우 OpenAI 판단
+
+    OpenAI Context 유지:
+    - 원본 쿼리 전달 (맥락)
+    - 출처 신뢰도 힌트 제공
+    - 구조화된 충돌 정보 전달
+    """
+
+    # 출처 도메인별 신뢰도 점수
+    SOURCE_CREDIBILITY = {
+        # 공시 (최고 신뢰도)
+        "dart.fss.or.kr": 100,
+        "kind.krx.co.kr": 100,
+        "opendart.fss.or.kr": 100,
+        # 공식 IR
+        "ir.": 95,
+        "investor.": 95,
+        # 정부/공공 통계
+        "kostat.go.kr": 95,
+        "kita.net": 90,
+        "kosis.kr": 90,
+        # 주요 언론
+        "hankyung.com": 80,
+        "mk.co.kr": 80,
+        "sedaily.com": 80,
+        "reuters.com": 85,
+        "bloomberg.com": 85,
+        # 일반 뉴스
+        "news.": 60,
+        "default": 50,
+    }
+
+    def __init__(self, similarity_threshold: float = 0.7):
+        self.similarity_threshold = similarity_threshold
+
+    def get_source_credibility(self, url: Optional[str]) -> int:
+        """URL에서 출처 신뢰도 점수 반환"""
+        if not url:
+            return self.SOURCE_CREDIBILITY["default"]
+
+        url_lower = url.lower()
+        for domain, score in self.SOURCE_CREDIBILITY.items():
+            if domain in url_lower:
+                return score
+        return self.SOURCE_CREDIBILITY["default"]
+
+    def build_structured_input(
+        self,
+        perplexity_profile: dict,
+        gemini_profile: dict,
+        corp_name: str,
+        industry_name: str,
+        original_query: str,
+        perplexity_citations: Optional[list[str]] = None,
+        gemini_citations: Optional[list[str]] = None,
+    ) -> StructuredConflictInput:
+        """
+        Structured Conflict Input 생성
+
+        1. 두 프로필 비교
+        2. 일치/충돌/단일소스 분류
+        3. Rule-based로 해결 가능한 충돌 미리 처리
+        """
+        confirmed = []
+        conflicts = []
+        perplexity_only = []
+        gemini_only = []
+        rule_resolved = []
+
+        all_fields = set(perplexity_profile.keys()) | set(gemini_profile.keys())
+        all_fields -= {"_source_urls", "_search_source", "_uncertainty_notes", "error", "error_type"}
+
+        p_source = perplexity_citations[0] if perplexity_citations else None
+        g_source = gemini_citations[0] if gemini_citations else None
+
+        for field in all_fields:
+            p_val = perplexity_profile.get(field)
+            g_val = gemini_profile.get(field)
+
+            # 둘 다 없음
+            if p_val is None and g_val is None:
+                continue
+
+            # Perplexity만 있음
+            if g_val is None:
+                perplexity_only.append({
+                    "field": field,
+                    "value": p_val,
+                    "source": p_source,
+                    "confidence": "MED",
+                })
+                continue
+
+            # Gemini만 있음
+            if p_val is None:
+                gemini_only.append({
+                    "field": field,
+                    "value": g_val,
+                    "source": g_source,
+                    "confidence": "LOW",  # Gemini 추론은 낮은 신뢰도
+                })
+                continue
+
+            # 둘 다 있음 - 비교
+            is_match, score, method = compare_values(p_val, g_val, self.similarity_threshold)
+
+            if is_match:
+                # 일치
+                confirmed.append({
+                    "field": field,
+                    "value": p_val,
+                    "sources": ["perplexity", "gemini"],
+                    "similarity": score,
+                    "method": method,
+                    "confidence": "HIGH",
+                })
+            else:
+                # 충돌 - Rule-based 해결 시도
+                p_score = self.get_source_credibility(p_source)
+                g_score = self.get_source_credibility(g_source)
+
+                conflict = ConflictInfo(
+                    field=field,
+                    perplexity_value=p_val,
+                    gemini_value=g_val,
+                    perplexity_source=p_source,
+                    gemini_source=g_source,
+                    perplexity_source_score=p_score,
+                    gemini_source_score=g_score,
+                )
+
+                # Rule-based 해결 시도
+                resolved, reason = self._try_rule_based_resolution(
+                    field, p_val, g_val, p_score, g_score
+                )
+
+                if resolved is not None:
+                    # Rule로 해결됨
+                    rule_resolved.append({
+                        "field": field,
+                        "resolved_value": resolved,
+                        "resolution_reason": reason,
+                        "perplexity_value": p_val,
+                        "gemini_value": g_val,
+                    })
+                else:
+                    # LLM 판단 필요
+                    conflict.needs_llm_judgment = True
+                    conflict.resolution_hint = reason
+                    conflicts.append(conflict)
+
+        return StructuredConflictInput(
+            corp_name=corp_name,
+            industry_name=industry_name,
+            original_query=original_query,
+            confirmed=confirmed,
+            conflicts=conflicts,
+            perplexity_only=perplexity_only,
+            gemini_only=gemini_only,
+            rule_resolved=rule_resolved,
+        )
+
+    def _try_rule_based_resolution(
+        self,
+        field: str,
+        p_val: Any,
+        g_val: Any,
+        p_score: int,
+        g_score: int,
+    ) -> tuple[Optional[Any], str]:
+        """
+        Rule-based 충돌 해결 시도
+
+        Returns:
+            (resolved_value, reason): 해결된 값과 이유, 해결 못하면 (None, hint)
+        """
+        # Rule 1: 출처 신뢰도 차이가 큰 경우 (20점 이상)
+        score_diff = abs(p_score - g_score)
+        if score_diff >= 20:
+            if p_score > g_score:
+                return p_val, f"Perplexity source more credible ({p_score} vs {g_score})"
+            else:
+                return g_val, f"Gemini source more credible ({g_score} vs {p_score})"
+
+        # Rule 2: 숫자 필드 - 더 정밀한 값 선택
+        if isinstance(p_val, (int, float)) and isinstance(g_val, (int, float)):
+            # 비율/퍼센트 필드 (0-100 범위): 소수점이 더 정밀
+            both_in_ratio_range = (0 <= float(p_val) <= 100) and (0 <= float(g_val) <= 100)
+
+            if both_in_ratio_range:
+                # 소수점 유무 확인 (35.5 vs 36)
+                p_has_decimal = isinstance(p_val, float) and p_val != int(p_val)
+                g_has_decimal = isinstance(g_val, float) and g_val != int(g_val)
+
+                if p_has_decimal and not g_has_decimal:
+                    return p_val, "More precise decimal value for ratio/percentage"
+                if g_has_decimal and not p_has_decimal:
+                    return g_val, "More precise decimal value for ratio/percentage"
+
+            # 둘 다 같은 정밀도면 Perplexity 우선 (한국 공시 데이터 강점)
+            return p_val, "Same precision, Perplexity preferred for Korean financial data"
+
+        # Rule 3: 문자열 길이 - 더 상세한 값 선택 (단, 너무 길면 제외)
+        if isinstance(p_val, str) and isinstance(g_val, str):
+            p_len = len(p_val)
+            g_len = len(g_val)
+
+            if p_len > 500 or g_len > 500:
+                # 너무 긴 값은 LLM 판단 필요
+                return None, "Both values too long, need LLM judgment"
+
+            if abs(p_len - g_len) > 50:
+                # 길이 차이가 크면 더 상세한 것 선택
+                if p_len > g_len:
+                    return p_val, "More detailed (longer) value"
+                else:
+                    return g_val, "More detailed (longer) value"
+
+        # Rule 4: 리스트 - 더 많은 항목 선택
+        if isinstance(p_val, list) and isinstance(g_val, list):
+            if len(p_val) != len(g_val):
+                if len(p_val) > len(g_val):
+                    return p_val, "More comprehensive list"
+                else:
+                    return g_val, "More comprehensive list"
+
+        # Rule로 해결 불가 - LLM 판단 필요
+        return None, f"Similar credibility ({p_score} vs {g_score}), need contextual judgment"
+
+    def resolve(
+        self,
+        structured_input: StructuredConflictInput,
+        llm_resolution_fn: Optional[Callable[[str], dict]] = None,
+    ) -> ConflictResolutionResult:
+        """
+        충돌 해결 실행
+
+        Args:
+            structured_input: 구조화된 충돌 정보
+            llm_resolution_fn: LLM 호출 함수 (Optional)
+                signature: fn(prompt: str) -> dict[str, Any]
+
+        Returns:
+            ConflictResolutionResult
+        """
+        resolved_profile = {}
+        source_map = {}
+        resolution_details = []
+
+        # 1. 확인된 필드 (일치)
+        for item in structured_input.confirmed:
+            field = item["field"]
+            resolved_profile[field] = item["value"]
+            source_map[field] = "CONFIRMED_BOTH"
+            resolution_details.append({
+                "field": field,
+                "type": "confirmed",
+                "value": item["value"],
+            })
+
+        # 2. Rule로 해결된 충돌
+        for item in structured_input.rule_resolved:
+            field = item["field"]
+            resolved_profile[field] = item["resolved_value"]
+            source_map[field] = "RULE_RESOLVED"
+            resolution_details.append({
+                "field": field,
+                "type": "rule_resolved",
+                "value": item["resolved_value"],
+                "reason": item["resolution_reason"],
+            })
+
+        # 3. Perplexity만 있는 필드
+        for item in structured_input.perplexity_only:
+            field = item["field"]
+            resolved_profile[field] = item["value"]
+            source_map[field] = "PERPLEXITY"
+            resolution_details.append({
+                "field": field,
+                "type": "perplexity_only",
+                "value": item["value"],
+            })
+
+        # 4. Gemini만 있는 필드
+        for item in structured_input.gemini_only:
+            field = item["field"]
+            resolved_profile[field] = item["value"]
+            source_map[field] = "GEMINI_INFERRED"
+            resolution_details.append({
+                "field": field,
+                "type": "gemini_only",
+                "value": item["value"],
+            })
+
+        # 5. LLM 판단 필요한 충돌
+        llm_resolved_count = 0
+        unresolved_count = 0
+
+        if structured_input.conflicts and llm_resolution_fn:
+            # LLM 호출
+            try:
+                prompt = structured_input.to_openai_prompt()
+                llm_result = llm_resolution_fn(prompt)
+
+                if isinstance(llm_result, dict):
+                    for conflict in structured_input.conflicts:
+                        if conflict.field in llm_result:
+                            resolved_profile[conflict.field] = llm_result[conflict.field]
+                            source_map[conflict.field] = "OPENAI_RESOLVED"
+                            llm_resolved_count += 1
+                            resolution_details.append({
+                                "field": conflict.field,
+                                "type": "llm_resolved",
+                                "value": llm_result[conflict.field],
+                            })
+                        else:
+                            # LLM이 해결 못한 경우 Perplexity 우선
+                            resolved_profile[conflict.field] = conflict.perplexity_value
+                            source_map[conflict.field] = "PERPLEXITY_DEFAULT"
+                            unresolved_count += 1
+                            resolution_details.append({
+                                "field": conflict.field,
+                                "type": "unresolved_default",
+                                "value": conflict.perplexity_value,
+                            })
+            except Exception as e:
+                logger.warning(f"LLM resolution failed: {e}")
+                # LLM 실패 시 Perplexity 우선
+                for conflict in structured_input.conflicts:
+                    resolved_profile[conflict.field] = conflict.perplexity_value
+                    source_map[conflict.field] = "PERPLEXITY_FALLBACK"
+                    unresolved_count += 1
+        else:
+            # LLM 함수 없으면 Perplexity 우선
+            for conflict in structured_input.conflicts:
+                resolved_profile[conflict.field] = conflict.perplexity_value
+                source_map[conflict.field] = "PERPLEXITY_DEFAULT"
+                unresolved_count += 1
+                resolution_details.append({
+                    "field": conflict.field,
+                    "type": "no_llm_default",
+                    "value": conflict.perplexity_value,
+                })
+
+        return ConflictResolutionResult(
+            resolved_profile=resolved_profile,
+            source_map=source_map,
+            rule_resolved_count=len(structured_input.rule_resolved),
+            llm_resolved_count=llm_resolved_count,
+            unresolved_count=unresolved_count,
+            resolution_details=resolution_details,
+        )
+
+
+# Factory function
+def get_conflict_resolver() -> StructuredConflictResolver:
+    """StructuredConflictResolver 인스턴스 반환"""
+    return StructuredConflictResolver()

@@ -52,6 +52,36 @@ from app.worker.llm.search_providers import (
 
 logger = logging.getLogger(__name__)
 
+# P0 Fix: Thread-safe event loop 관리
+import threading
+_thread_local = threading.local()
+_event_loop_lock = threading.Lock()
+
+
+def _get_or_create_event_loop() -> asyncio.AbstractEventLoop:
+    """
+    P0 Fix: Thread-safe event loop 관리 (TOCTOU 방지)
+
+    스레드별로 독립된 event loop를 관리하여 race condition 방지.
+    Lock으로 is_closed() 체크와 사용 사이의 경쟁 조건 방지.
+    """
+    # 먼저 running loop 확인 (이미 async 컨텍스트인 경우)
+    try:
+        return asyncio.get_running_loop()
+    except RuntimeError:
+        pass
+
+    # Thread-local storage에서 안전하게 loop 관리 (Lock으로 TOCTOU 방지)
+    with _event_loop_lock:
+        if hasattr(_thread_local, 'loop') and _thread_local.loop is not None:
+            if not _thread_local.loop.is_closed():
+                return _thread_local.loop
+
+        # 새 loop 생성 및 저장
+        loop = asyncio.new_event_loop()
+        _thread_local.loop = loop
+        return loop
+
 
 class FallbackLayer(str, Enum):
     """Fallback Layer 식별자"""
@@ -73,6 +103,8 @@ class OrchestratorResult:
     provenance: dict = field(default_factory=dict)
     execution_time_ms: int = 0
     trace_id: str = ""  # P2-2: 분산 추적용 Trace ID
+    source_map: dict = field(default_factory=dict)  # 필드별 출처 추적: {"revenue_krw": "PERPLEXITY", ...}
+    layer1_both_failed: bool = False  # Layer 1 둘 다 실패 플래그
 
     def to_dict(self) -> dict:
         """결과를 딕셔너리로 변환"""
@@ -85,6 +117,8 @@ class OrchestratorResult:
             "provenance": self.provenance,
             "execution_time_ms": self.execution_time_ms,
             "trace_id": self.trace_id,
+            "source_map": self.source_map,
+            "layer1_both_failed": self.layer1_both_failed,
         }
 
 
@@ -130,16 +164,19 @@ class MultiAgentOrchestrator:
 
     4-Layer Fallback을 조율하며, Circuit Breaker와 통합됨.
 
-    실행 순서:
+    실행 순서 (v2.0 - 순차 Fallback):
     1. Cache 확인 (Layer 0)
-    2. Perplexity 검색 + Gemini 검증 (Layer 1 + 1.5) - **병렬 실행 (ADR-009)**
-    3. Claude 합성 (Layer 2) - Consensus Engine 사용
-    4. Rule-Based Merge (Layer 3)
-    5. Graceful Degradation (Layer 4)
+    2. Perplexity 검색 (Layer 1) - Primary Search
+    3. Gemini 검색 (Layer 1.5) - Perplexity 실패 시에만 Fallback
+    4. OpenAI 검증 (Layer 2) - Validation (검색 아님)
+    5. Rule-Based Merge (Layer 3)
+    6. Graceful Degradation (Layer 4)
 
-    Sprint 1 Enhancement:
-    - Layer 1 + 1.5 병렬 실행으로 25% 속도 향상
-    - ThreadPoolExecutor를 사용한 sync-to-async 변환
+    v2.0 핵심 변경:
+    - Perplexity 성공하면 Gemini 호출 안 함 (비용 절약)
+    - Perplexity 실패 시에만 Gemini 시도
+    - OpenAI는 검증 전용 (검색 기능 없음)
+    - 타임아웃 30초로 단축
     """
 
     # Provider별 동시 요청 제한 (Rate Limit 보호)
@@ -147,7 +184,17 @@ class MultiAgentOrchestrator:
         "perplexity": 5,
         "gemini": 10,
         "claude": 3,
+        "openai": 5,
     }
+
+    # v2.0: 타임아웃 설정 (초)
+    TIMEOUT_PERPLEXITY = 30  # 기존 45초에서 단축
+    TIMEOUT_GEMINI = 30
+    TIMEOUT_OPENAI_VALIDATION = 15
+
+    # v2.0: 성공 판정 기준 (필드 수)
+    MIN_FIELDS_FULL_SUCCESS = 15  # 완전 성공
+    MIN_FIELDS_PARTIAL_SUCCESS = 5  # 부분 성공
 
     def __init__(
         self,
@@ -177,8 +224,28 @@ class MultiAgentOrchestrator:
         self._multi_search_manager: Optional[MultiSearchManager] = None
         self._use_multi_search: bool = False  # 활성화 시 Perplexity 실패 시 대안 Provider 시도
 
-        # Parallel mode flag (default: True for Sprint 1)
-        self.parallel_mode = True
+        # Parallel mode flag (default: False for v2.0 - 순차 Fallback)
+        self.parallel_mode = False
+
+        # v2.0: OpenAI Validation function
+        self._openai_validation_fn: Optional[Callable] = None
+
+        # Shutdown flag
+        self._shutdown = False
+
+    def __del__(self):
+        """리소스 정리 - ThreadPoolExecutor shutdown"""
+        self.shutdown()
+
+    def shutdown(self):
+        """ThreadPoolExecutor 안전하게 종료"""
+        if not self._shutdown and self._executor:
+            try:
+                self._executor.shutdown(wait=False)
+                self._shutdown = True
+                logger.debug("[Orchestrator] ThreadPoolExecutor shutdown completed")
+            except Exception as e:
+                logger.warning(f"[Orchestrator] ThreadPoolExecutor shutdown error: {e}")
 
     def set_perplexity_search(self, fn: Callable):
         """Perplexity 검색 함수 주입"""
@@ -193,8 +260,12 @@ class MultiAgentOrchestrator:
         self._cache_lookup_fn = fn
 
     def set_gemini_search(self, fn: Callable):
-        """Gemini 검색 함수 주입 (병렬 모드용)"""
+        """Gemini 검색 함수 주입 (Fallback 모드용)"""
         self._gemini_search_fn = fn
+
+    def set_openai_validation(self, fn: Callable):
+        """OpenAI 검증 함수 주입 (v2.0 Layer 2)"""
+        self._openai_validation_fn = fn
 
     def set_multi_search_manager(self, manager: MultiSearchManager, use_as_fallback: bool = True):
         """
@@ -299,17 +370,120 @@ class MultiAgentOrchestrator:
         # Layer 1 + 1.5: Perplexity + Gemini
         perplexity_result = None
         gemini_validation = None
+        layer1_both_failed = False
+        source_map = {}  # 필드별 출처 추적
 
         try:
             perplexity_result, gemini_validation = self._try_perplexity_gemini(
                 corp_name, industry_name, provenance, error_messages
             )
             retry_count += 1
+
+            # source_map 초기 설정
+            if perplexity_result and not perplexity_result.get("error"):
+                for key in perplexity_result.keys():
+                    if not key.startswith("_") and perplexity_result[key] is not None:
+                        source_map[key] = perplexity_result.get("_search_source", "PERPLEXITY")
+            if gemini_validation and gemini_validation.get("enriched_fields"):
+                for key in gemini_validation["enriched_fields"].keys():
+                    if key not in source_map:
+                        source_map[key] = "GEMINI"
+
         except (CircuitOpenError, AllProvidersFailedError) as e:
             error_messages.append(f"Layer 1: {str(e)}")
             logger.warning(f"[Orchestrator] Layer 1 failed: {e}")
+            layer1_both_failed = True
 
-        # Layer 2: Claude Synthesis (Consensus Engine)
+        # Layer 1 둘 다 실패 체크
+        if not layer1_both_failed:
+            perplexity_ok = perplexity_result and not perplexity_result.get("error")
+            gemini_ok = gemini_validation and gemini_validation.get("enriched_fields")
+            layer1_both_failed = not perplexity_ok and not gemini_ok
+
+        # [핵심 수정] Layer 1 둘 다 실패 시 → Layer 4 직행 (Layer 2, 3 스킵)
+        if layer1_both_failed:
+            logger.warning(
+                f"[Orchestrator][{trace_id}] Layer 1 both failed - skipping to Layer 4"
+            )
+            provenance["layer1_both_failed"] = True
+            provenance["skipped_layers"] = ["CLAUDE_SYNTHESIS", "RULE_BASED"]
+
+            degraded_profile = self._graceful_degradation(
+                existing_profile,
+                corp_name,
+                industry_name,
+                industry_code,
+                provenance,
+            )
+
+            error_messages.append("Layer 1 both providers failed - graceful degradation")
+
+            return OrchestratorResult(
+                profile=degraded_profile,
+                fallback_layer=FallbackLayer.GRACEFUL_DEGRADATION,
+                retry_count=retry_count,
+                error_messages=error_messages,
+                provenance=provenance,
+                execution_time_ms=int((time.time() - start_time) * 1000),
+                trace_id=trace_id,
+                source_map=source_map,
+                layer1_both_failed=True,
+            )
+
+        # Layer 2 (v2.0): OpenAI Validation - 검색 결과 검증
+        # P0 Fix: _openai_validation_fn이 설정되어 있으면 검색 결과 검증 수행
+        if perplexity_result and self._openai_validation_fn:
+            provenance["layers_attempted"].append("OPENAI_VALIDATION")
+            try:
+                # 검색 결과의 소스 확인
+                search_source = perplexity_result.get("_search_source", "UNKNOWN")
+
+                # OpenAI Validation 호출
+                validation_result = self._openai_validation_fn(
+                    perplexity_result,
+                    corp_name,
+                    industry_name,
+                    search_source,
+                )
+
+                # ValidationResult 처리
+                if hasattr(validation_result, 'is_valid'):
+                    provenance["openai_validation_valid"] = validation_result.is_valid
+                    provenance["openai_validation_confidence"] = (
+                        validation_result.confidence.value
+                        if hasattr(validation_result.confidence, 'value')
+                        else str(validation_result.confidence)
+                    )
+
+                    # 검증된 프로필로 교체 (오류 수정 적용)
+                    if hasattr(validation_result, 'validated_profile') and validation_result.validated_profile:
+                        perplexity_result.update(validation_result.validated_profile)
+                        provenance["openai_validation_applied"] = True
+
+                    # 이슈 로깅
+                    if hasattr(validation_result, 'issues') and validation_result.issues:
+                        issue_count = len(validation_result.issues)
+                        error_issues = [i for i in validation_result.issues if hasattr(i, 'severity') and i.severity.value == "ERROR"]
+                        if error_issues:
+                            provenance["openai_validation_errors"] = len(error_issues)
+                            logger.warning(
+                                f"[Orchestrator][{trace_id}] OpenAI validation found {len(error_issues)} errors"
+                            )
+
+                    logger.info(
+                        f"[Orchestrator][{trace_id}] OpenAI validation completed: "
+                        f"valid={validation_result.is_valid}"
+                    )
+                else:
+                    logger.warning(f"[Orchestrator] OpenAI validation returned unexpected format")
+
+            except Exception as e:
+                error_messages.append(f"OpenAI Validation: {str(e)}")
+                provenance["openai_validation_error"] = str(e)
+                logger.warning(f"[Orchestrator] OpenAI validation failed: {e}")
+                # 검증 실패해도 계속 진행 (non-blocking)
+
+        # Layer 2.5: Claude Synthesis (Consensus Engine)
         if perplexity_result or gemini_validation:
             try:
                 consensus_result = self._try_claude_synthesis(
@@ -325,6 +499,10 @@ class MultiAgentOrchestrator:
                 retry_count += 1
 
                 if consensus_result and consensus_result.get("profile"):
+                    # source_map 업데이트 (Consensus 결과 반영)
+                    if consensus_result.get("metadata") and hasattr(consensus_result["metadata"], "field_sources"):
+                        source_map.update(consensus_result["metadata"].field_sources)
+
                     logger.info(f"[Orchestrator][{trace_id}] Layer 2 success (Claude synthesis)")
                     return OrchestratorResult(
                         profile=consensus_result["profile"],
@@ -335,6 +513,7 @@ class MultiAgentOrchestrator:
                         provenance=provenance,
                         execution_time_ms=int((time.time() - start_time) * 1000),
                         trace_id=trace_id,
+                        source_map=source_map,
                     )
             except (CircuitOpenError, AllProvidersFailedError) as e:
                 error_messages.append(f"Layer 2: {str(e)}")
@@ -352,6 +531,10 @@ class MultiAgentOrchestrator:
         )
 
         if rule_based_profile and self._is_profile_sufficient(rule_based_profile):
+            # source_map 업데이트 (Rule-based 결과)
+            if provenance.get("rule_based_sources"):
+                source_map.update(provenance["rule_based_sources"])
+
             logger.info(f"[Orchestrator][{trace_id}] Layer 3 success (Rule-based merge)")
             return OrchestratorResult(
                 profile=rule_based_profile,
@@ -361,6 +544,7 @@ class MultiAgentOrchestrator:
                 provenance=provenance,
                 execution_time_ms=int((time.time() - start_time) * 1000),
                 trace_id=trace_id,
+                source_map=source_map,
             )
 
         # Layer 4: Graceful Degradation
@@ -386,6 +570,8 @@ class MultiAgentOrchestrator:
             provenance=provenance,
             execution_time_ms=int((time.time() - start_time) * 1000),
             trace_id=trace_id,
+            source_map=source_map,
+            layer1_both_failed=layer1_both_failed,
         )
 
     # =========================================================================
@@ -495,7 +681,8 @@ class MultiAgentOrchestrator:
         # 모든 태스크 완료 대기 (최대 45초)
         done, not_done = concurrent.futures.wait(
             futures.values(),
-            timeout=45.0,
+            # P0 Fix: 상수 사용 (병렬 모드는 max timeout + 여유 5초)
+            timeout=max(self.TIMEOUT_PERPLEXITY, self.TIMEOUT_GEMINI) + 5,
             return_when=concurrent.futures.ALL_COMPLETED
         )
 
@@ -584,13 +771,8 @@ class MultiAgentOrchestrator:
                 # 검색 쿼리 생성
                 query = f"{corp_name} {industry_name} 기업 정보 매출 사업 현황"
 
-                # 동기 래퍼로 비동기 호출 (thread 내부이므로 새 event loop 필요)
-                import asyncio
-                try:
-                    loop = asyncio.get_event_loop()
-                except RuntimeError:
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
+                # P1 Fix: Thread-safe event loop 사용
+                loop = _get_or_create_event_loop()
 
                 search_result: SearchResult = loop.run_until_complete(
                     self._multi_search_manager.search(
@@ -656,21 +838,59 @@ class MultiAgentOrchestrator:
         error_messages: list[str],
     ) -> tuple[Optional[dict], Optional[dict]]:
         """
-        순차 모드: 기존 방식 (Perplexity → Gemini validation)
+        v2.0 순차 Fallback 모드: Perplexity 먼저 → 실패 시에만 Gemini
 
-        Gemini는 Perplexity 결과가 있을 때만 검증 수행
+        핵심 변경:
+        - Perplexity 성공하면 Gemini 호출 안 함 (비용 절약)
+        - Perplexity 실패 시에만 Gemini Fallback 시도
+        - 타임아웃 30초로 단축
+
+        Returns:
+            (search_result, None) - Gemini는 더 이상 validation 역할 안 함
         """
-        perplexity_result = None
-        gemini_validation = None
+        search_result = None
+        search_source = None
 
-        # Layer 1: Perplexity Search
+        # Layer 1: Perplexity Search (Primary)
+        perplexity_success = False
         if self.circuit_breaker.is_available("perplexity"):
             try:
                 if self._perplexity_search_fn:
-                    perplexity_result = self._perplexity_search_fn(corp_name, industry_name)
-                    self.circuit_breaker.record_success("perplexity")
-                    provenance["perplexity_success"] = True
-                    logger.info(f"[Orchestrator] Perplexity search success for {corp_name}")
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                        future = executor.submit(
+                            self._perplexity_search_fn, corp_name, industry_name
+                        )
+                        try:
+                            search_result = future.result(timeout=self.TIMEOUT_PERPLEXITY)
+                            # 성공 판정: 에러 없고 필드 수 충분
+                            if search_result and not search_result.get("error"):
+                                field_count = self._count_profile_fields(search_result)
+                                if field_count >= self.MIN_FIELDS_PARTIAL_SUCCESS:
+                                    perplexity_success = True
+                                    search_source = "PERPLEXITY"
+                                    self.circuit_breaker.record_success("perplexity")
+                                    provenance["perplexity_success"] = True
+                                    provenance["perplexity_field_count"] = field_count
+                                    logger.info(
+                                        f"[Orchestrator] Perplexity success for {corp_name}: "
+                                        f"{field_count} fields"
+                                    )
+                                else:
+                                    # 부분 실패: 필드 수 부족
+                                    error_messages.append(
+                                        f"Perplexity: insufficient fields ({field_count})"
+                                    )
+                                    provenance["perplexity_partial"] = True
+                                    provenance["perplexity_field_count"] = field_count
+                            else:
+                                error_msg = search_result.get("error", "empty_result") if search_result else "empty_result"
+                                error_messages.append(f"Perplexity: {error_msg}")
+                                provenance["perplexity_error"] = error_msg
+                        except concurrent.futures.TimeoutError:
+                            error_messages.append(f"Perplexity: timeout ({self.TIMEOUT_PERPLEXITY}s)")
+                            provenance["perplexity_error"] = "timeout"
+                            self.circuit_breaker.record_failure("perplexity", "timeout")
                 else:
                     logger.warning("[Orchestrator] Perplexity search function not configured")
             except Exception as e:
@@ -682,29 +902,152 @@ class MultiAgentOrchestrator:
             error_messages.append("Perplexity circuit breaker is OPEN")
             provenance["perplexity_circuit_open"] = True
 
-        # Layer 1.5: Gemini Validation (순차 - Perplexity 결과 필요)
-        if perplexity_result and self.circuit_breaker.is_available("gemini"):
+        # Layer 1.5: Gemini Fallback (Perplexity 실패 시에만)
+        if not perplexity_success and self.circuit_breaker.is_available("gemini"):
+            logger.info(f"[Orchestrator] Perplexity failed, trying Gemini fallback for {corp_name}")
+            provenance["gemini_fallback_attempted"] = True
+            gemini_fn_failed = False
+
             try:
-                gemini_validation = self.gemini.validate(
-                    perplexity_result=perplexity_result,
-                    corp_name=corp_name,
-                    industry_name=industry_name,
-                )
-                self.circuit_breaker.record_success("gemini")
-                provenance["gemini_validation_success"] = True
-                logger.info(f"[Orchestrator] Gemini validation success for {corp_name}")
+                # P1 Fix: Gemini 검색 함수 먼저 시도, 실패 시 MultiSearchManager 시도
+                # (이전에는 둘 중 하나만 시도했음)
+                if self._gemini_search_fn:
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                        future = executor.submit(
+                            self._gemini_search_fn, corp_name, industry_name
+                        )
+                        try:
+                            gemini_result = future.result(timeout=self.TIMEOUT_GEMINI)
+                            if gemini_result and not gemini_result.get("error"):
+                                field_count = self._count_profile_fields(gemini_result)
+                                if field_count >= self.MIN_FIELDS_PARTIAL_SUCCESS:
+                                    search_result = gemini_result
+                                    search_source = "GEMINI_FALLBACK"
+                                    self.circuit_breaker.record_success("gemini")
+                                    provenance["gemini_fallback_success"] = True
+                                    provenance["gemini_field_count"] = field_count
+                                    logger.info(
+                                        f"[Orchestrator] Gemini fallback success for {corp_name}: "
+                                        f"{field_count} fields"
+                                    )
+                                else:
+                                    gemini_fn_failed = True
+                                    provenance["gemini_partial"] = True
+                                    logger.warning(f"[Orchestrator] Gemini returned insufficient fields ({field_count})")
+                            else:
+                                gemini_fn_failed = True
+                                error_msg = gemini_result.get("error", "empty_result") if gemini_result else "empty_result"
+                                provenance["gemini_fn_error"] = error_msg
+                        except concurrent.futures.TimeoutError:
+                            gemini_fn_failed = True
+                            provenance["gemini_fn_error"] = "timeout"
+                            self.circuit_breaker.record_failure("gemini", "timeout")
+                else:
+                    gemini_fn_failed = True  # 함수 미설정
+
+                # P1 Fix: Gemini 함수 실패 시 MultiSearchManager로 2차 시도
+                if gemini_fn_failed and self._use_multi_search and self._multi_search_manager:
+                    logger.info(f"[Orchestrator] Gemini function failed, trying MultiSearchManager")
+                    provenance["gemini_multisearch_attempted"] = True
+
+                    gemini_result = self._safe_gemini_fallback_search(corp_name, industry_name)
+                    if gemini_result and not gemini_result.get("error"):
+                        search_result = gemini_result
+                        search_source = "GEMINI_GROUNDING"
+                        self.circuit_breaker.record_success("gemini")
+                        provenance["gemini_fallback_success"] = True
+                    else:
+                        error_msg = gemini_result.get("error") if gemini_result else "no_result"
+                        error_messages.append(f"Gemini: {error_msg}")
+                        provenance["gemini_error"] = error_msg
+                elif gemini_fn_failed:
+                    # MultiSearchManager 미설정
+                    error_messages.append("Gemini: fallback not available")
+                    provenance["gemini_error"] = "no_fallback_configured"
+
             except Exception as e:
                 self.circuit_breaker.record_failure("gemini", str(e))
                 error_messages.append(f"Gemini: {str(e)}")
-                provenance["gemini_validation_error"] = str(e)
-                logger.warning(f"[Orchestrator] Gemini validation failed: {e}")
-        elif not perplexity_result:
-            logger.debug("[Orchestrator] Skipping Gemini - no Perplexity result")
-        else:
+                provenance["gemini_error"] = str(e)
+                logger.warning(f"[Orchestrator] Gemini fallback failed: {e}")
+        elif not perplexity_success:
             error_messages.append("Gemini circuit breaker is OPEN")
             provenance["gemini_circuit_open"] = True
+        else:
+            # Perplexity 성공 → Gemini 스킵
+            provenance["gemini_skipped"] = "perplexity_success"
+            logger.debug(f"[Orchestrator] Skipping Gemini - Perplexity succeeded for {corp_name}")
 
-        return perplexity_result, gemini_validation
+        # 결과에 소스 정보 추가
+        if search_result:
+            search_result["_search_source"] = search_source
+
+        # v2.0: Gemini validation 역할 제거 → None 반환
+        return search_result, None
+
+    def _safe_gemini_fallback_search(self, corp_name: str, industry_name: str) -> Optional[dict]:
+        """Gemini Grounding을 사용한 Fallback 검색"""
+        try:
+            query = f"{corp_name} {industry_name} 기업 정보 매출 사업 현황 경쟁사 주요 고객"
+
+            # P1 Fix: Thread-safe event loop 사용
+            loop = _get_or_create_event_loop()
+
+            from app.worker.llm.search_providers import SearchProviderType
+            search_result = loop.run_until_complete(
+                self._multi_search_manager.search(
+                    query=query,
+                    preferred_provider=SearchProviderType.GEMINI_GROUNDING,
+                )
+            )
+
+            if search_result and search_result.content:
+                return {
+                    "content": search_result.content,
+                    "citations": search_result.citations,
+                    "source": "GEMINI_GROUNDING",
+                    "confidence": search_result.confidence,
+                }
+            return {"error": "empty_result"}
+        except Exception as e:
+            logger.warning(f"[Orchestrator] Gemini fallback search exception: {e}")
+            return {"error": str(e)}
+
+    def _count_profile_fields(self, profile: dict) -> int:
+        """프로필에서 유효한 필드 수 카운트"""
+        if not profile:
+            return 0
+        count = 0
+        for key, value in profile.items():
+            # 메타 필드 제외
+            if key.startswith("_"):
+                continue
+            # None, 빈 문자열, 빈 리스트 제외
+            if value is None:
+                continue
+            if isinstance(value, str) and not value.strip():
+                continue
+            if isinstance(value, list) and not value:
+                continue
+            # P2 Fix: dict인 경우 내부에 유효한 값이 있는지 확인
+            if isinstance(value, dict):
+                if not value:  # 빈 dict
+                    continue
+                # 중첩된 dict의 모든 값이 None/빈값인지 확인
+                has_valid_nested = False
+                for nested_val in value.values():
+                    if nested_val is not None:
+                        if isinstance(nested_val, str) and not nested_val.strip():
+                            continue
+                        if isinstance(nested_val, (list, dict)) and not nested_val:
+                            continue
+                        has_valid_nested = True
+                        break
+                if not has_valid_nested:
+                    continue
+            count += 1
+        return count
 
     # =========================================================================
     # Layer 2: Claude Synthesis (Consensus Engine)
@@ -790,11 +1133,15 @@ class MultiAgentOrchestrator:
                 return {
                     "profile": consensus_result.profile,
                     "metadata": ConsensusMetadata(
-                        total_sources=len(sources),
-                        agreement_ratio=consensus_result.metadata.matched_fields / max(consensus_result.metadata.total_fields, 1),
-                        fields_merged=[fc.field_name for fc in consensus_result.field_details],
-                        discrepancies=[fc.field_name for fc in consensus_result.field_details if fc.discrepancy],
-                        fallback_layer=FallbackLayer.CLAUDE_SYNTHESIS.value,
+                        perplexity_success=True,
+                        gemini_success=gemini_validation is not None,
+                        claude_success=True,
+                        total_fields=consensus_result.metadata.total_fields,
+                        matched_fields=consensus_result.metadata.matched_fields,
+                        discrepancy_fields=consensus_result.metadata.discrepancy_fields,
+                        enriched_fields=consensus_result.metadata.enriched_fields,
+                        overall_confidence=consensus_result.metadata.overall_confidence,
+                        fallback_layer=2,  # 2: Claude Synthesis layer
                         retry_count=consensus_result.metadata.retry_count,
                         error_messages=consensus_result.metadata.error_messages,
                     ),

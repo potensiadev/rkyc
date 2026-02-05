@@ -46,8 +46,26 @@ from app.worker.llm.orchestrator import (
     get_orchestrator,
 )
 from app.worker.llm.circuit_breaker import get_circuit_breaker_manager
+from app.worker.llm.key_rotator import get_key_rotator
+from app.worker.llm.validator import get_validator, ValidationResult
+from app.worker.llm.search_providers import get_multi_search_manager
 
 logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# v2.0 Architecture Configuration
+# ============================================================================
+
+# v2 아키텍처 활성화 플래그
+# True: 순차 Fallback (Perplexity → Gemini), OpenAI Validation
+# False: 기존 병렬 모드 (Perplexity + Gemini 동시)
+USE_V2_ARCHITECTURE: bool = True
+
+# v2.0 타임아웃 설정 (초)
+V2_TIMEOUT_PERPLEXITY = 30  # 기존 45초에서 단축
+V2_TIMEOUT_GEMINI = 30
+V2_TIMEOUT_OPENAI_VALIDATION = 15
 
 
 # ============================================================================
@@ -2009,13 +2027,30 @@ class CorpProfilingPipeline:
             )
         )
 
+        # v2.0 Architecture: 순차 Fallback 모드 설정
+        if USE_V2_ARCHITECTURE:
+            logger.info(f"[v2.0] Using sequential fallback architecture")
+            self.orchestrator.set_parallel_mode(False)  # 순차 모드
+            self.orchestrator.set_gemini_search(
+                lambda cn, ind: self._sync_gemini_fallback_search(cn, ind)
+            )
+            self.orchestrator.set_openai_validation(
+                lambda profile, cn, ind, src: self._sync_openai_validation(profile, cn, ind, src, llm_service)
+            )
+            # Multi-Search 활성화 (Perplexity 실패 시 Gemini Grounding)
+            self.orchestrator.enable_multi_search(True)
+        else:
+            logger.info(f"[v1] Using parallel architecture")
+            self.orchestrator.set_parallel_mode(True)  # 병렬 모드
+
         # Get existing profile for potential enrichment (but don't use as cache if skip_cache)
         # P0-2 Fix: 캐시 조회는 여기서 한 번만 수행, orchestrator에는 결과 전달
         existing_profile = None if skip_cache else await self._get_cached_profile(corp_id, db_session)
 
         # P0-1 Fix: Execute orchestrator in thread pool to avoid blocking event loop
         # Orchestrator는 동기 함수이므로 run_in_executor로 래핑
-        loop = asyncio.get_event_loop()
+        # P0 Fix: asyncio.get_running_loop() 사용 (async 컨텍스트에서 안전)
+        loop = asyncio.get_running_loop()
         orchestrator_result = await loop.run_in_executor(
             self._executor,
             lambda: self.orchestrator.execute(
@@ -2300,6 +2335,140 @@ class CorpProfilingPipeline:
         logger.info(f"3-Phase search completed for {corp_name}: {len(merged_profile.get('source_urls', []))} sources")
         return merged_profile
 
+    # =========================================================================
+    # v2.0 Architecture Methods
+    # =========================================================================
+
+    def _sync_gemini_fallback_search(
+        self,
+        corp_name: str,
+        industry_name: str,
+    ) -> dict:
+        """
+        v2.0: Gemini Grounding을 사용한 Fallback 검색
+
+        Perplexity 실패 시에만 호출됨.
+        MultiSearchManager를 통해 Gemini Grounding 검색 수행.
+        """
+        from app.worker.llm.prompts import build_corp_profile_query
+
+        logger.info(f"[v2.0] Gemini fallback search for {corp_name}")
+
+        # P0 Fix: KeyRotator와 api_key를 try 블록 밖에서 초기화
+        # 실패 시에도 동일한 키를 마킹할 수 있도록 함
+        key_rotator = get_key_rotator()
+        api_key = key_rotator.get_key("google")
+
+        if not api_key:
+            logger.warning("[v2.0] Google API key not available")
+            return {"error": "Google API key not configured"}
+
+        try:
+            # 검색 쿼리 생성
+            query = build_corp_profile_query(corp_name, industry_name, group=0)
+
+            # Gemini Grounding 호출
+            import google.generativeai as genai
+            genai.configure(api_key=api_key)
+
+            model = genai.GenerativeModel(
+                model_name="gemini-2.0-flash-exp",
+                tools="google_search_retrieval",
+            )
+
+            response = model.generate_content(query)
+            content = response.text if response.text else ""
+
+            # Citations 추출
+            citations = []
+            if hasattr(response, 'candidates') and response.candidates:
+                candidate = response.candidates[0]
+                if hasattr(candidate, 'grounding_metadata'):
+                    grounding = candidate.grounding_metadata
+                    if hasattr(grounding, 'grounding_chunks'):
+                        for chunk in grounding.grounding_chunks:
+                            if hasattr(chunk, 'web') and hasattr(chunk.web, 'uri'):
+                                citations.append(chunk.web.uri)
+
+            # 성공 기록
+            key_rotator.mark_success("google", api_key)
+
+            logger.info(f"[v2.0] Gemini fallback success for {corp_name}: {len(citations)} citations")
+
+            return {
+                "content": content,
+                "citations": citations,
+                "source": "GEMINI_GROUNDING",
+                "_search_source": "GEMINI_FALLBACK",
+            }
+
+        except Exception as e:
+            logger.error(f"[v2.0] Gemini fallback failed for {corp_name}: {e}")
+            # P0 Fix: 원래 사용한 api_key를 실패 마킹 (새 키를 가져오지 않음)
+            try:
+                key_rotator.mark_failed("google", api_key)
+            except Exception:
+                pass
+            return {"error": str(e)}
+
+    def _sync_openai_validation(
+        self,
+        profile: dict,
+        corp_name: str,
+        industry_name: str,
+        source: str,
+        llm_service=None,
+    ) -> ValidationResult:
+        """
+        v2.0: OpenAI를 사용한 프로필 검증
+
+        Layer 2에서 호출됨.
+        Hallucination 탐지, 범위 검증, 내부 일관성 검증 수행.
+        """
+        logger.info(f"[v2.0] OpenAI validation for {corp_name} (source={source})")
+
+        try:
+            # Validator 인스턴스 가져오기
+            validator = get_validator()
+
+            # 기본 검증 수행
+            result = validator.validate(
+                profile=profile,
+                corp_name=corp_name,
+                industry_name=industry_name,
+                source=source,
+            )
+
+            # 경고 수 기반 로깅
+            error_count = len([i for i in result.issues if i.severity.value == "ERROR"])
+            warning_count = len([i for i in result.issues if i.severity.value == "WARNING"])
+
+            logger.info(
+                f"[v2.0] Validation completed for {corp_name}: "
+                f"valid={result.is_valid}, confidence={result.confidence.value}, "
+                f"errors={error_count}, warnings={warning_count}"
+            )
+
+            return result
+
+        except Exception as e:
+            logger.error(f"[v2.0] OpenAI validation failed for {corp_name}: {e}")
+            # 검증 실패 시에도 프로필 사용 가능 (경고만)
+            from app.worker.llm.validator import (
+                ValidationResult, ConfidenceLevel, ValidationIssue, ValidationSeverity
+            )
+            return ValidationResult(
+                is_valid=True,  # 검증 실패해도 프로필은 사용
+                confidence=ConfidenceLevel.LOW,
+                issues=[ValidationIssue(
+                    field_name="validation",
+                    severity=ValidationSeverity.WARNING,
+                    message=f"Validation failed: {str(e)}",
+                )],
+                validated_profile=profile,
+                validation_metadata={"error": str(e)},
+            )
+
     def _sync_perplexity_search_legacy(
         self,
         corp_name: str,
@@ -2582,10 +2751,36 @@ class CorpProfilingPipeline:
             for d in discrepancies:
                 discrepancy_text += f"- {d.get('field')}: {d.get('issue')}\n"
 
+        # Build industry hints text (P0-FIX: 누락된 파라미터 추가)
+        industry_hints = getattr(self, '_industry_hints', {})
+        industry_hints_text = ""
+        if industry_hints:
+            materials = industry_hints.get("typical_materials", [])[:5]
+            suppliers = industry_hints.get("typical_suppliers", [])[:5]
+            markets = industry_hints.get("export_markets", [])[:5]
+            risks = industry_hints.get("risk_factors", [])[:3]
+            growth = industry_hints.get("growth_drivers", [])[:3]
+
+            hints_parts = []
+            if materials:
+                hints_parts.append(f"- 이 업종 주요 원자재: {', '.join(materials)}")
+            if suppliers:
+                hints_parts.append(f"- 이 업종 주요 공급사 유형: {', '.join(suppliers)}")
+            if markets:
+                hints_parts.append(f"- 이 업종 주요 수출국: {', '.join(markets)}")
+            if risks:
+                hints_parts.append(f"- 업종 리스크 요인: {', '.join(risks)}")
+            if growth:
+                hints_parts.append(f"- 업종 성장 동력: {', '.join(growth)}")
+
+            if hints_parts:
+                industry_hints_text = "\n## 업종 특성 힌트 (추론 시 참고)\n" + "\n".join(hints_parts)
+
         return PROFILE_EXTRACTION_USER_PROMPT.format(
             corp_name=corp_name,
             industry_name=industry_name,
             search_results=sources_text + discrepancy_text,
+            industry_hints_text=industry_hints_text,
         )
 
     async def _get_cached_profile(self, corp_id: str, db_session) -> Optional[dict]:
@@ -2705,6 +2900,20 @@ class CorpProfilingPipeline:
                 "_source_urls": raw_results.get("citations", []),
             }
 
+        # Build industry hints text (P0-FIX: 누락된 파라미터 추가)
+        industry_hints = getattr(self, '_industry_hints', {})
+        industry_hints_text = ""
+        if industry_hints:
+            hints_parts = []
+            materials = industry_hints.get("typical_materials", [])[:5]
+            if materials:
+                hints_parts.append(f"- 이 업종 주요 원자재: {', '.join(materials)}")
+            suppliers = industry_hints.get("typical_suppliers", [])[:5]
+            if suppliers:
+                hints_parts.append(f"- 이 업종 주요 공급사 유형: {', '.join(suppliers)}")
+            if hints_parts:
+                industry_hints_text = "\n## 업종 특성 힌트 (추론 시 참고)\n" + "\n".join(hints_parts)
+
         messages = [
             {"role": "system", "content": PROFILE_EXTRACTION_SYSTEM_PROMPT},
             {
@@ -2713,6 +2922,7 @@ class CorpProfilingPipeline:
                     corp_name=corp_name,
                     industry_name=industry_name,
                     search_results=raw_results.get("content", "검색 결과 없음"),
+                    industry_hints_text=industry_hints_text,
                 ),
             },
         ]
@@ -3003,8 +3213,29 @@ class CorpProfilingPipeline:
                         search_failed = EXCLUDED.search_failed,
                         validation_warnings = EXCLUDED.validation_warnings,
                         status = EXCLUDED.status,
-                        fetched_at = EXCLUDED.fetched_at,
-                        expires_at = EXCLUDED.expires_at,
+                        -- P2-2 Fix: 조건부 TTL 업데이트 (동기 버전)
+                        fetched_at = CASE
+                            WHEN EXCLUDED.is_fallback = false AND rkyc_corp_profile.is_fallback = true
+                                THEN EXCLUDED.fetched_at
+                            WHEN EXCLUDED.profile_confidence IN ('HIGH', 'MED')
+                                 AND rkyc_corp_profile.profile_confidence = 'LOW'
+                                THEN EXCLUDED.fetched_at
+                            WHEN rkyc_corp_profile.expires_at IS NULL
+                                 OR rkyc_corp_profile.expires_at < NOW()
+                                THEN EXCLUDED.fetched_at
+                            ELSE rkyc_corp_profile.fetched_at
+                        END,
+                        expires_at = CASE
+                            WHEN EXCLUDED.is_fallback = false AND rkyc_corp_profile.is_fallback = true
+                                THEN EXCLUDED.expires_at
+                            WHEN EXCLUDED.profile_confidence IN ('HIGH', 'MED')
+                                 AND rkyc_corp_profile.profile_confidence = 'LOW'
+                                THEN EXCLUDED.expires_at
+                            WHEN rkyc_corp_profile.expires_at IS NULL
+                                 OR rkyc_corp_profile.expires_at < NOW()
+                                THEN EXCLUDED.expires_at
+                            ELSE rkyc_corp_profile.expires_at
+                        END,
                         updated_at = NOW()
                 """)
 

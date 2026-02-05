@@ -127,6 +127,21 @@ class Settings(BaseSettings):
     PERPLEXITY_API_KEY: str = Field(default="", description="Perplexity API key for external search")
 
     # =========================================================================
+    # API Key Rotation (다중 키 지원)
+    # =========================================================================
+    # Perplexity 다중 키 (로테이션용)
+    PERPLEXITY_API_KEY_1: str = Field(default="", description="Perplexity API key 1")
+    PERPLEXITY_API_KEY_2: str = Field(default="", description="Perplexity API key 2")
+    PERPLEXITY_API_KEY_3: str = Field(default="", description="Perplexity API key 3")
+    # Google 다중 키 (로테이션용)
+    GOOGLE_API_KEY_1: str = Field(default="", description="Google API key 1")
+    GOOGLE_API_KEY_2: str = Field(default="", description="Google API key 2")
+    GOOGLE_API_KEY_3: str = Field(default="", description="Google API key 3")
+    # 키 로테이션 설정
+    KEY_ROTATION_ENABLED: bool = Field(default=True, description="Enable API key rotation")
+    KEY_ROTATION_FAILURE_COOLDOWN: int = Field(default=300, description="Cooldown seconds for failed key")
+
+    # =========================================================================
     # Multi-Search Provider Configuration (검색 내장 LLM 2-Track)
     # =========================================================================
     # 검색 가능 LLM: Perplexity, Gemini (OpenAI/Claude는 검색 기능 없음)

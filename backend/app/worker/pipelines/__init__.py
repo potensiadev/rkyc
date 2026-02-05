@@ -1,35 +1,60 @@
 # Pipeline Steps
-from app.worker.pipelines.snapshot import SnapshotPipeline, NoSnapshotError, NoCorporationError
-from app.worker.pipelines.doc_ingest import DocIngestPipeline, DocumentProcessingError
-from app.worker.pipelines.context import ContextPipeline
-from app.worker.pipelines.external_search import ExternalSearchPipeline
-from app.worker.pipelines.signal_extraction import SignalExtractionPipeline
-from app.worker.pipelines.validation import ValidationPipeline
-from app.worker.pipelines.deduplication import DeduplicationPipeline, deduplicate_within_batch
-from app.worker.pipelines.index import IndexPipeline, DuplicateSignalError
-from app.worker.pipelines.insight import InsightPipeline
-from app.worker.pipelines.expert_insight import (
-    ExpertInsightPipeline,
-    generate_actionable_checklist,
-    generate_early_warning_dashboard,
-    get_quality_report,
-)
-from app.worker.pipelines.corp_profiling import (
-    CorpProfilingPipeline,
-    get_corp_profiling_pipeline,
-    CorpProfileValidator,
-    EnvironmentQuerySelector,
-    ProfileEvidenceCreator,
-)
+# P0 Fix: Lazy imports to prevent psycopg2 dependency on module access
+# This allows importing submodules without DB driver installed
 
-# Sprint 2: Signal Multi-Agent Architecture (ADR-009)
-from app.worker.pipelines.signal_agents import (
-    BaseSignalAgent,
-    DirectSignalAgent,
-    IndustrySignalAgent,
-    EnvironmentSignalAgent,
-    SignalAgentOrchestrator,
-)
+_LAZY_IMPORTS = {
+    # snapshot.py
+    "SnapshotPipeline": "app.worker.pipelines.snapshot",
+    "NoSnapshotError": "app.worker.pipelines.snapshot",
+    "NoCorporationError": "app.worker.pipelines.snapshot",
+    # doc_ingest.py
+    "DocIngestPipeline": "app.worker.pipelines.doc_ingest",
+    "DocumentProcessingError": "app.worker.pipelines.doc_ingest",
+    # context.py
+    "ContextPipeline": "app.worker.pipelines.context",
+    # external_search.py
+    "ExternalSearchPipeline": "app.worker.pipelines.external_search",
+    # signal_extraction.py
+    "SignalExtractionPipeline": "app.worker.pipelines.signal_extraction",
+    # validation.py
+    "ValidationPipeline": "app.worker.pipelines.validation",
+    # deduplication.py
+    "DeduplicationPipeline": "app.worker.pipelines.deduplication",
+    "deduplicate_within_batch": "app.worker.pipelines.deduplication",
+    # index.py
+    "IndexPipeline": "app.worker.pipelines.index",
+    "DuplicateSignalError": "app.worker.pipelines.index",
+    # insight.py
+    "InsightPipeline": "app.worker.pipelines.insight",
+    # expert_insight.py
+    "ExpertInsightPipeline": "app.worker.pipelines.expert_insight",
+    "generate_actionable_checklist": "app.worker.pipelines.expert_insight",
+    "generate_early_warning_dashboard": "app.worker.pipelines.expert_insight",
+    "get_quality_report": "app.worker.pipelines.expert_insight",
+    # corp_profiling.py
+    "CorpProfilingPipeline": "app.worker.pipelines.corp_profiling",
+    "get_corp_profiling_pipeline": "app.worker.pipelines.corp_profiling",
+    "CorpProfileValidator": "app.worker.pipelines.corp_profiling",
+    "EnvironmentQuerySelector": "app.worker.pipelines.corp_profiling",
+    "ProfileEvidenceCreator": "app.worker.pipelines.corp_profiling",
+    # signal_agents (Sprint 2)
+    "BaseSignalAgent": "app.worker.pipelines.signal_agents",
+    "DirectSignalAgent": "app.worker.pipelines.signal_agents",
+    "IndustrySignalAgent": "app.worker.pipelines.signal_agents",
+    "EnvironmentSignalAgent": "app.worker.pipelines.signal_agents",
+    "SignalAgentOrchestrator": "app.worker.pipelines.signal_agents",
+}
+
+
+def __getattr__(name):
+    """Lazy import to prevent psycopg2 dependency on module access."""
+    if name in _LAZY_IMPORTS:
+        module_path = _LAZY_IMPORTS[name]
+        import importlib
+        module = importlib.import_module(module_path)
+        return getattr(module, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "SnapshotPipeline",

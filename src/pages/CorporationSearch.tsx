@@ -4,8 +4,21 @@ import { Search, Building2, ChevronRight, AlertCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
+import { useQueries } from "@tanstack/react-query";
 import { useCorporations, useSignals } from "@/hooks/useApi";
+import { getCorporationSnapshot, ApiSnapshot } from "@/lib/api";
 import { buildSignalCountsByCorpId, getCorpSignalCountsFromMap } from "@/data/signals";
+
+// 금액 포맷팅 함수 (억원 단위)
+function formatLoanBalance(amountKrw: number | undefined | null): string {
+  if (!amountKrw) return "-";
+  const amountInBillion = amountKrw / 100_000_000; // 억원 단위
+  if (amountInBillion >= 1) {
+    return `${amountInBillion.toFixed(1)}억원`;
+  }
+  const amountInMillion = amountKrw / 10_000; // 만원 단위
+  return `${amountInMillion.toFixed(0)}만원`;
+}
 
 const signalTypeConfig = {
   direct: { label: "직접", className: "bg-primary/10 text-primary" },
@@ -20,6 +33,32 @@ export default function CorporationSearch() {
   // API에서 데이터 로드
   const { data: corporations = [], isLoading, error } = useCorporations();
   const { data: signals = [] } = useSignals();
+
+  // 모든 기업의 스냅샷을 병렬로 가져오기
+  const snapshotQueries = useQueries({
+    queries: corporations.map((corp) => ({
+      queryKey: ["snapshot", corp.id],
+      queryFn: () => getCorporationSnapshot(corp.id),
+      enabled: corporations.length > 0,
+      staleTime: 5 * 60 * 1000, // 5분
+      retry: false, // 스냅샷 없는 경우 재시도 안함
+    })),
+  });
+
+  // 스냅샷에서 여신 잔액 맵 생성
+  const loanBalanceMap = useMemo(() => {
+    const map = new Map<string, number>();
+    snapshotQueries.forEach((query, index) => {
+      if (query.data) {
+        const snapshot = query.data as ApiSnapshot;
+        const loanAmount = snapshot.snapshot_json?.credit?.loan_summary?.total_exposure_krw;
+        if (loanAmount) {
+          map.set(corporations[index]?.id, loanAmount);
+        }
+      }
+    });
+    return map;
+  }, [snapshotQueries, corporations]);
 
   // Precompute signal counts map once when signals change - O(n) build, O(1) lookup
   const signalCountsMap = useMemo(
@@ -144,15 +183,26 @@ export default function CorporationSearch() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-1.5">
-                        {corp.recentSignalTypes.map((type) => (
-                          <span key={type} className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${signalTypeConfig[type].className}`}>
-                            {signalTypeConfig[type].label}
+                        {/* 시그널 카운트에서 signal types 계산 */}
+                        {signalCounts.direct > 0 && (
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${signalTypeConfig.direct.className}`}>
+                            {signalTypeConfig.direct.label}
                           </span>
-                        ))}
+                        )}
+                        {signalCounts.industry > 0 && (
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${signalTypeConfig.industry.className}`}>
+                            {signalTypeConfig.industry.label}
+                          </span>
+                        )}
+                        {signalCounts.environment > 0 && (
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${signalTypeConfig.environment.className}`}>
+                            {signalTypeConfig.environment.label}
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="px-6 py-4 text-sm text-muted-foreground">
-                      {corp.bankRelationship.loanBalance || "-"}
+                      {formatLoanBalance(loanBalanceMap.get(corp.id))}
                     </td>
                     <td className="px-6 py-4">
                       <ChevronRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
