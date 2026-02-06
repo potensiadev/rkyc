@@ -15,6 +15,11 @@ Sprint 4: Distributed Execution
 - Celery group() 분산 실행
 - Admin 모니터링 API
 
+Sprint 5: Rule-Based Signal Generator (2026-02-06)
+- Internal Snapshot에서 결정론적 시그널 생성
+- LLM 의존 없이 OVERDUE, GRADE_CHANGE 등 100% 감지 보장
+- PM 결정: 이전 스냅샷 필수, 임계값 ±10%/365일
+
 각 Agent는 전문화된 프롬프트와 검증 로직을 가짐.
 Celery group()으로 병렬 실행 후 결과 병합.
 """
@@ -40,6 +45,10 @@ _LAZY_IMPORTS = {
     "ProviderConcurrencyLimiter": "app.worker.pipelines.signal_agents.orchestrator",
     "get_concurrency_limiter": "app.worker.pipelines.signal_agents.orchestrator",
     "execute_distributed": "app.worker.pipelines.signal_agents.orchestrator",
+    # rule_based_generator.py (Sprint 5)
+    "RuleBasedSignalGenerator": "app.worker.pipelines.signal_agents.rule_based_generator",
+    "get_rule_based_generator": "app.worker.pipelines.signal_agents.rule_based_generator",
+    "reset_rule_based_generator": "app.worker.pipelines.signal_agents.rule_based_generator",
 }
 
 
@@ -73,4 +82,8 @@ __all__ = [
     "get_concurrency_limiter",
     # Sprint 4: Distributed execution
     "execute_distributed",
+    # Sprint 5: Rule-Based Generator
+    "RuleBasedSignalGenerator",
+    "get_rule_based_generator",
+    "reset_rule_based_generator",
 ]

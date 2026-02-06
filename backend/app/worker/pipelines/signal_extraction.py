@@ -24,6 +24,12 @@ Sprint 3/4 Enhancements (ADR-009):
 - Graceful Degradation with partial_failure tracking
 - Provider Concurrency Limiting
 - OrchestratorMetadata for monitoring
+
+Sprint 5 Rule-Based Signal Generator (2026-02-06):
+- Internal Snapshot에서 결정론적 시그널 생성
+- OVERDUE_FLAG_ON, INTERNAL_RISK_GRADE_CHANGE 등 100% 감지 보장
+- LLM Agent 호출 전에 Rule-Based 시그널 먼저 생성
+- 중복 방지: event_signature 기반 deduplication
 """
 
 import json
@@ -53,6 +59,12 @@ from app.worker.pipelines.signal_agents import (
     get_signal_orchestrator,
 )
 from app.worker.pipelines.signal_agents.orchestrator import OrchestratorMetadata
+
+# Sprint 5: Rule-Based Signal Generator
+from app.worker.pipelines.signal_agents.rule_based_generator import (
+    RuleBasedSignalGenerator,
+    get_rule_based_generator,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -129,12 +141,15 @@ class SignalExtractionPipeline:
         self.llm = LLMService()
         self.use_multi_agent = use_multi_agent
 
+        # Sprint 5: Rule-Based Signal Generator (항상 사용)
+        self._rule_based_generator = get_rule_based_generator()
+
         if use_multi_agent:
             self._orchestrator = get_signal_orchestrator()
-            logger.info("SignalExtractionPipeline initialized with Multi-Agent mode")
+            logger.info("SignalExtractionPipeline initialized with Multi-Agent mode + Rule-Based Generator")
         else:
             self._orchestrator = None
-            logger.info("SignalExtractionPipeline initialized with Legacy mode")
+            logger.info("SignalExtractionPipeline initialized with Legacy mode + Rule-Based Generator")
 
     def _build_enhanced_system_prompt(self, corp_name: str, industry_name: str) -> str:
         """
@@ -271,9 +286,15 @@ class SignalExtractionPipeline:
         - Graceful Degradation with partial_failure tracking
         - OrchestratorMetadata for monitoring
 
+        Sprint 5 (2026-02-06):
+        - Rule-Based Signal Generator 먼저 실행
+        - Internal Snapshot에서 결정론적 시그널 추출 (OVERDUE, GRADE_CHANGE 등)
+        - LLM Agent 결과와 병합 (중복 제거)
+
         All agents run in parallel, results are merged and deduplicated.
         """
         corp_id = context.get("corp_id", "")
+        corp_name = context.get("corp_name", "")
 
         logger.info(
             f"Multi-Agent extraction: "
@@ -282,10 +303,41 @@ class SignalExtractionPipeline:
             f"environment_events={len(context.get('environment_events', []))}"
         )
 
+        all_signals = []
+
+        # =====================================================================
+        # Sprint 5: Rule-Based Signal Generator 먼저 실행
+        # =====================================================================
+        try:
+            rule_based_signals = self._rule_based_generator.generate(
+                corp_id=corp_id,
+                corp_name=corp_name,
+                snapshot=context.get("snapshot_json", {}),
+                prev_snapshot=context.get("previous_snapshot_json"),  # 이전 스냅샷 (있으면)
+            )
+
+            if rule_based_signals:
+                logger.info(
+                    f"[Rule-Based Generator] Generated {len(rule_based_signals)} "
+                    f"deterministic signals for {corp_name}"
+                )
+                # Enrich with context metadata
+                for signal in rule_based_signals:
+                    signal["corp_id"] = corp_id
+                    signal["snapshot_version"] = context.get("snapshot_version", 0)
+                all_signals.extend(rule_based_signals)
+
+        except Exception as e:
+            logger.warning(f"Rule-Based Generator failed for {corp_id}: {e}")
+            # Continue with LLM agents even if rule-based fails
+
+        # =====================================================================
+        # LLM-based Multi-Agent Extraction
+        # =====================================================================
         try:
             # Execute all 3 agents via orchestrator
             # Sprint 3/4: Returns tuple (signals, metadata)
-            signals, metadata = self._orchestrator.execute(context)
+            llm_signals, metadata = self._orchestrator.execute(context)
 
             # Log orchestrator metadata for monitoring
             self._log_orchestrator_metadata(corp_id, metadata)
@@ -297,19 +349,40 @@ class SignalExtractionPipeline:
                     f"failed_agents={metadata.failed_agents}"
                 )
 
+            # =====================================================================
+            # Sprint 5: Merge Rule-Based + LLM signals with deduplication
+            # =====================================================================
+            existing_signatures = {s.get("event_signature") for s in all_signals}
+            for signal in llm_signals:
+                sig = signal.get("event_signature", "")
+                if sig and sig not in existing_signatures:
+                    all_signals.append(signal)
+                    existing_signatures.add(sig)
+                elif not sig:
+                    # No signature, add anyway (shouldn't happen)
+                    all_signals.append(signal)
+
             logger.info(
-                f"SIGNAL stage completed [Multi-Agent]: "
-                f"extracted {len(signals)} signals, "
+                f"SIGNAL stage completed [Multi-Agent + Rule-Based]: "
+                f"rule_based={len(rule_based_signals) if 'rule_based_signals' in dir() else 0}, "
+                f"llm={len(llm_signals)}, "
+                f"total={len(all_signals)}, "
                 f"conflicts={metadata.conflicts_detected}, "
                 f"needs_review={metadata.needs_review_count}"
             )
-            return signals
+            return all_signals
 
         except Exception as e:
             logger.error(
                 f"Multi-Agent extraction failed for corp_id={corp_id}: {e}"
             )
-            # Fallback to legacy mode on failure
+            # If we have rule-based signals, return them
+            if all_signals:
+                logger.warning(
+                    f"LLM agents failed, returning {len(all_signals)} rule-based signals only"
+                )
+                return all_signals
+            # Fallback to legacy mode on complete failure
             logger.warning("Falling back to Legacy mode...")
             return self._execute_legacy(context)
 
@@ -362,10 +435,38 @@ class SignalExtractionPipeline:
         - Backward compatibility
         - Fallback when multi-agent fails
         - Comparison testing
+
+        Sprint 5: Rule-Based Generator도 여기서 실행
         """
         corp_id = context.get("corp_id", "")
         corp_name = context.get("corp_name", "")
         industry_name = context.get("industry_name", "")
+
+        all_signals = []
+
+        # =====================================================================
+        # Sprint 5: Rule-Based Signal Generator 먼저 실행
+        # =====================================================================
+        try:
+            rule_based_signals = self._rule_based_generator.generate(
+                corp_id=corp_id,
+                corp_name=corp_name,
+                snapshot=context.get("snapshot_json", {}),
+                prev_snapshot=context.get("previous_snapshot_json"),
+            )
+
+            if rule_based_signals:
+                logger.info(
+                    f"[Rule-Based Generator] Generated {len(rule_based_signals)} "
+                    f"deterministic signals for {corp_name}"
+                )
+                for signal in rule_based_signals:
+                    signal["corp_id"] = corp_id
+                    signal["snapshot_version"] = context.get("snapshot_version", 0)
+                all_signals.extend(rule_based_signals)
+
+        except Exception as e:
+            logger.warning(f"Rule-Based Generator failed for {corp_id}: {e}")
 
         # 해커톤 최적화: 향상된 시스템 프롬프트 사용
         enhanced_system_prompt = self._build_enhanced_system_prompt(
@@ -417,31 +518,53 @@ class SignalExtractionPipeline:
         try:
             # Call LLM for signal extraction with enhanced prompt
             # P0-FIX: Use sync version since execute() is not async
-            signals = self.llm.extract_signals_sync(
+            llm_signals = self.llm.extract_signals_sync(
                 context=context,
                 system_prompt=enhanced_system_prompt,
                 user_prompt=user_prompt,
             )
 
-            # Enrich signals with metadata
-            enriched_signals = []
-            for signal in signals:
+            # Enrich LLM signals with metadata
+            existing_signatures = {s.get("event_signature") for s in all_signals}
+
+            for signal in llm_signals:
                 enriched = self._enrich_signal(signal, context)
                 if enriched:
-                    enriched_signals.append(enriched)
+                    # Sprint 5: Deduplication - skip if already exists from Rule-Based
+                    sig = enriched.get("event_signature", "")
+                    if sig and sig not in existing_signatures:
+                        all_signals.append(enriched)
+                        existing_signatures.add(sig)
+                    elif not sig:
+                        all_signals.append(enriched)
+
+            rule_based_count = len([s for s in all_signals if "RULE_BASED" in s.get("event_signature", "")])
+            llm_count = len(all_signals) - rule_based_count
 
             logger.info(
-                f"SIGNAL stage completed [Legacy]: extracted {len(enriched_signals)} signals"
+                f"SIGNAL stage completed [Legacy + Rule-Based]: "
+                f"rule_based={rule_based_count}, llm={llm_count}, total={len(all_signals)}"
             )
-            return enriched_signals
+            return all_signals
 
         except AllProvidersFailedError as e:
             logger.error(f"All LLM providers failed for corp_id={corp_id}: {e}")
-            # Return empty list on LLM failure (pipeline continues with no signals)
+            # Sprint 5: Return rule-based signals even if LLM fails
+            if all_signals:
+                logger.warning(
+                    f"LLM failed, returning {len(all_signals)} rule-based signals only"
+                )
+                return all_signals
             return []
 
         except Exception as e:
             logger.error(f"Signal extraction failed for corp_id={corp_id}: {e}")
+            # Sprint 5: Return rule-based signals on error
+            if all_signals:
+                logger.warning(
+                    f"LLM error, returning {len(all_signals)} rule-based signals only"
+                )
+                return all_signals
             raise
 
     def _enrich_signal(self, signal: dict, context: dict) -> Optional[dict]:
