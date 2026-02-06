@@ -229,22 +229,22 @@ export default function CorporateDetailPage() {
           <section>
             <h2 className="text-base font-semibold text-foreground mb-3 pb-2 border-b border-border flex items-center justify-between">
               <span>요약 (Executive Summary)</span>
-              {loanInsight && (
+              {loanInsight?.insight && (
                 <span className={`text-xs px-2 py-1 rounded ${
-                  loanInsight.stance.level === 'CAUTION' ? 'bg-red-50 text-red-600 border border-red-200' :
-                  loanInsight.stance.level === 'MONITORING' ? 'bg-orange-50 text-orange-600 border border-orange-200' :
-                  loanInsight.stance.level === 'STABLE' ? 'bg-green-50 text-green-600 border border-green-200' :
-                  loanInsight.stance.level === 'POSITIVE' ? 'bg-blue-50 text-blue-600 border border-blue-200' :
+                  loanInsight.insight.stance.level === 'CAUTION' ? 'bg-red-50 text-red-600 border border-red-200' :
+                  loanInsight.insight.stance.level === 'MONITORING' ? 'bg-orange-50 text-orange-600 border border-orange-200' :
+                  loanInsight.insight.stance.level === 'STABLE' ? 'bg-green-50 text-green-600 border border-green-200' :
+                  loanInsight.insight.stance.level === 'POSITIVE' ? 'bg-blue-50 text-blue-600 border border-blue-200' :
                   'bg-gray-50 text-gray-600 border border-gray-200'
                 }`}>
-                  {loanInsight.stance.label}
+                  {loanInsight.insight.stance.label}
                 </span>
               )}
             </h2>
             <div className="text-sm text-muted-foreground space-y-2 leading-relaxed">
               {/* LLM 생성 Executive Summary 우선 사용 */}
-              {loanInsight?.executive_summary ? (
-                <p className="text-foreground">{loanInsight.executive_summary}</p>
+              {loanInsight?.insight?.executive_summary ? (
+                <p className="text-foreground">{loanInsight.insight.executive_summary}</p>
               ) : (
                 /* Fallback: 기존 하드코딩 템플릿 */
                 <>
@@ -409,7 +409,7 @@ export default function CorporateDetailPage() {
           <Separator />
 
           {/* ============================================================ */}
-          {/* Loan Insight Section - AI 여신 참고 의견 */}
+          {/* Loan Insight Section - AI 여신 참고 의견 (조건부: 여신 유무 확인) */}
           {/* ============================================================ */}
           <section>
             <h2 className="text-base font-semibold text-foreground mb-3 pb-2 border-b border-border flex items-center justify-between">
@@ -417,15 +417,15 @@ export default function CorporateDetailPage() {
                 <FileWarning className="w-4 h-4" />
                 여신 참고 관점 요약 (AI Risk Opinion)
               </span>
-              {loanInsight && (
+              {loanInsight?.insight && (
                 <span className={`text-xs px-2 py-1 rounded ${
-                  loanInsight.stance.level === 'CAUTION' ? 'bg-red-50 text-red-600 border border-red-200' :
-                  loanInsight.stance.level === 'MONITORING' ? 'bg-orange-50 text-orange-600 border border-orange-200' :
-                  loanInsight.stance.level === 'STABLE' ? 'bg-green-50 text-green-600 border border-green-200' :
-                  loanInsight.stance.level === 'POSITIVE' ? 'bg-blue-50 text-blue-600 border border-blue-200' :
+                  loanInsight.insight.stance.level === 'CAUTION' ? 'bg-red-50 text-red-600 border border-red-200' :
+                  loanInsight.insight.stance.level === 'MONITORING' ? 'bg-orange-50 text-orange-600 border border-orange-200' :
+                  loanInsight.insight.stance.level === 'STABLE' ? 'bg-green-50 text-green-600 border border-green-200' :
+                  loanInsight.insight.stance.level === 'POSITIVE' ? 'bg-blue-50 text-blue-600 border border-blue-200' :
                   'bg-gray-50 text-gray-600 border border-gray-200'
                 }`}>
-                  {loanInsight.stance.label}
+                  {loanInsight.insight.stance.label}
                 </span>
               )}
             </h2>
@@ -433,15 +433,28 @@ export default function CorporateDetailPage() {
             {isLoadingLoanInsight ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="w-5 h-5 animate-spin text-muted-foreground mr-2" />
-                <span className="text-sm text-muted-foreground">AI 분석 결과를 불러오는 중...</span>
+                <span className="text-sm text-muted-foreground">여신 정보를 확인하는 중...</span>
               </div>
-            ) : loanInsightError ? (
-              <div className="bg-muted/30 rounded-lg p-4 text-center">
-                <AlertCircle className="w-5 h-5 text-orange-500 mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground">AI 분석이 아직 생성되지 않았습니다.</p>
-                <p className="text-xs text-muted-foreground mt-1">"정보 갱신" 버튼을 클릭하면 자동 생성됩니다.</p>
+            ) : loanInsight && !loanInsight.has_loan ? (
+              /* 여신이 없는 경우 */
+              <div className="bg-gray-50 rounded-lg p-6 text-center border border-gray-200">
+                <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-3">
+                  <FileWarning className="w-6 h-6 text-gray-400" />
+                </div>
+                <p className="text-sm font-medium text-gray-600">당행 여신이 없습니다</p>
+                <p className="text-xs text-muted-foreground mt-1">해당 기업에 대한 여신 거래가 없어 AI 분석이 제공되지 않습니다.</p>
               </div>
-            ) : loanInsight ? (
+            ) : loanInsight && loanInsight.has_loan && !loanInsight.insight ? (
+              /* 여신은 있지만 분석이 아직 안 된 경우 */
+              <div className="bg-blue-50 rounded-lg p-6 text-center border border-blue-200">
+                <Loader2 className="w-6 h-6 animate-spin text-blue-500 mx-auto mb-3" />
+                <p className="text-sm font-medium text-blue-700">분석 중입니다</p>
+                <p className="text-xs text-blue-600 mt-1">
+                  여신 금액: {((loanInsight.total_exposure_krw || 0) / 100000000).toFixed(1)}억원
+                </p>
+                <p className="text-xs text-muted-foreground mt-2">잠시 후 페이지를 새로고침해 주세요.</p>
+              </div>
+            ) : loanInsight?.insight ? (
               <div className="bg-slate-50 rounded-lg p-5 border border-slate-200 space-y-5">
                 {/* 2x2 Grid: 리스크/기회 요인 */}
                 <div className="grid grid-cols-2 gap-6">
@@ -452,8 +465,8 @@ export default function CorporateDetailPage() {
                       핵심 리스크 요인
                     </h3>
                     <ul className="space-y-2">
-                      {loanInsight.key_risks.length > 0 ? (
-                        loanInsight.key_risks.map((risk, idx) => (
+                      {loanInsight.insight.key_risks.length > 0 ? (
+                        loanInsight.insight.key_risks.map((risk, idx) => (
                           <li key={idx} className="text-sm text-foreground/80 flex items-start">
                             <span className="text-red-500 mr-2">•</span>
                             {risk}
@@ -472,8 +485,8 @@ export default function CorporateDetailPage() {
                       핵심 기회 요인
                     </h3>
                     <ul className="space-y-2">
-                      {(loanInsight.key_opportunities?.length > 0) ? (
-                        loanInsight.key_opportunities.map((opp, idx) => (
+                      {(loanInsight.insight.key_opportunities?.length > 0) ? (
+                        loanInsight.insight.key_opportunities.map((opp, idx) => (
                           <li key={idx} className="text-sm text-foreground/80 flex items-start">
                             <span className="text-green-500 mr-2">•</span>
                             {opp}
@@ -487,14 +500,14 @@ export default function CorporateDetailPage() {
                 </div>
 
                 {/* Mitigating Factors - 상쇄 요인이 있을 때만 표시 */}
-                {loanInsight.mitigating_factors.length > 0 && (
+                {loanInsight.insight.mitigating_factors.length > 0 && (
                   <div className="pt-4 border-t border-slate-200">
                     <h3 className="text-sm font-semibold text-blue-700 mb-3 flex items-center">
                       <CheckCircle className="w-4 h-4 mr-2" />
                       리스크 상쇄 요인
                     </h3>
                     <ul className="space-y-2">
-                      {loanInsight.mitigating_factors.map((factor, idx) => (
+                      {loanInsight.insight.mitigating_factors.map((factor, idx) => (
                         <li key={idx} className="text-sm text-foreground/80 flex items-start">
                           <span className="text-blue-500 mr-2">•</span>
                           {factor}
@@ -511,8 +524,8 @@ export default function CorporateDetailPage() {
                     심사역 확인 체크리스트
                   </h3>
                   <div className="space-y-2 bg-white p-3 rounded border border-slate-200">
-                    {loanInsight.action_items.length > 0 ? (
-                      loanInsight.action_items.map((item, idx) => (
+                    {loanInsight.insight.action_items.length > 0 ? (
+                      loanInsight.insight.action_items.map((item, idx) => (
                         <div key={idx} className="flex items-start text-sm">
                           <div className="mr-3 pt-0.5">
                             <div className="w-4 h-4 border-2 border-slate-300 rounded-sm"></div>
@@ -529,16 +542,16 @@ export default function CorporateDetailPage() {
                 {/* Metadata */}
                 <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t border-slate-200">
                   <span>
-                    시그널 {loanInsight.signal_count}건 분석 (위험 {loanInsight.risk_count}, 기회 {loanInsight.opportunity_count})
+                    시그널 {loanInsight.insight.signal_count}건 분석 (위험 {loanInsight.insight.risk_count}, 기회 {loanInsight.insight.opportunity_count})
                   </span>
                   <span className="flex items-center gap-2">
-                    {loanInsight.is_fallback && (
+                    {loanInsight.insight.is_fallback && (
                       <span className="text-orange-500">Rule-based</span>
                     )}
-                    {loanInsight.generation_model && (
-                      <span>모델: {loanInsight.generation_model}</span>
+                    {loanInsight.insight.generation_model && (
+                      <span>모델: {loanInsight.insight.generation_model}</span>
                     )}
-                    <span>생성: {new Date(loanInsight.generated_at).toLocaleDateString('ko-KR')}</span>
+                    <span>생성: {new Date(loanInsight.insight.generated_at).toLocaleDateString('ko-KR')}</span>
                   </span>
                 </div>
 

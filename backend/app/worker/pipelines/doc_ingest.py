@@ -108,6 +108,7 @@ class DocIngestPipeline:
         result = {
             "documents_processed": 0,
             "facts_extracted": 0,
+            "facts": [],  # v2.1: 실제 facts 리스트 반환 (context.py 연동)
             "doc_summaries": {},
             "errors": [],
         }
@@ -134,6 +135,9 @@ class DocIngestPipeline:
                         facts = self._get_existing_facts(db, doc.doc_id)
                         if facts:
                             result["doc_summaries"][doc.doc_type.value] = self._facts_to_summary(facts)
+                            # v2.1: 기존 facts도 결과에 포함 (context.py 연동)
+                            result["facts"].extend(facts)
+                            result["facts_extracted"] += len(facts)
                         continue
 
                 try:
@@ -141,10 +145,12 @@ class DocIngestPipeline:
                     facts_data = self._process_document(db, doc, corp_id)
 
                     if facts_data:
+                        extracted_facts = facts_data.get("facts", [])
                         result["documents_processed"] += 1
-                        result["facts_extracted"] += len(facts_data.get("facts", []))
+                        result["facts_extracted"] += len(extracted_facts)
+                        result["facts"].extend(extracted_facts)  # v2.1: facts 리스트에 추가
                         result["doc_summaries"][doc.doc_type.value] = self._facts_to_summary(
-                            facts_data.get("facts", [])
+                            extracted_facts
                         )
 
                 except DocumentProcessingError as e:
@@ -172,6 +178,7 @@ class DocIngestPipeline:
             f"DOC_INGEST stage completed: "
             f"processed={result['documents_processed']}, "
             f"facts={result['facts_extracted']}, "
+            f"facts_list_len={len(result['facts'])}, "
             f"errors={len(result['errors'])}"
         )
 

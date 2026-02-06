@@ -752,10 +752,11 @@ export async function getCorporationReport(corpId: string): Promise<ApiReportRes
 }
 
 // ============================================================
-// Loan Insight API
+// Loan Insight API (조건부 - 여신 유무 확인)
 // ============================================================
 
-export interface ApiLoanInsightResponse {
+// Loan Insight 내부 데이터 (insight 필드)
+export interface ApiLoanInsightData {
   insight_id: string;
   corp_id: string;
   stance: {
@@ -763,10 +764,10 @@ export interface ApiLoanInsightResponse {
     label: string;  // 한글 라벨
     color: string;  // red, orange, green, blue
   };
-  executive_summary: string | null;  // 사업개요 + 비즈니스모델 + 핵심 시그널 요약
+  executive_summary: string | null;
   narrative: string;
   key_risks: string[];
-  key_opportunities: string[];  // 핵심 기회 요인
+  key_opportunities: string[];
   mitigating_factors: string[];
   action_items: string[];
   signal_count: number;
@@ -775,6 +776,15 @@ export interface ApiLoanInsightResponse {
   generation_model: string | null;
   is_fallback: boolean;
   generated_at: string;
+}
+
+// 조건부 응답 형식 (여신 유무 포함)
+export interface ApiLoanInsightResponse {
+  has_loan: boolean;
+  total_exposure_krw: number;
+  message?: string;  // 여신 없거나 분석 대기 중 메시지
+  insight_exists?: boolean;  // 여신 있지만 분석 안 된 경우 false
+  insight: ApiLoanInsightData | null;
 }
 
 export interface ApiLoanInsightExistsResponse {

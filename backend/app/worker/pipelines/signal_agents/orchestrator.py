@@ -1376,11 +1376,13 @@ def get_signal_orchestrator() -> SignalAgentOrchestrator:
         - parallel_mode=True
         - max_workers=3
         - enable_concurrency_limit=True
-        - agent_timeout=60.0
+        - agent_timeout=30.0 (v2.1: 30초로 단축하여 hang 방지)
     """
     global _orchestrator_instance
     if _orchestrator_instance is None:
-        _orchestrator_instance = SignalAgentOrchestrator()
+        _orchestrator_instance = SignalAgentOrchestrator(
+            agent_timeout=30.0  # v2.1: 30초 타임아웃 (hang 방지)
+        )
     return _orchestrator_instance
 
 

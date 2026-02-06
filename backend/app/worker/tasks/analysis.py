@@ -286,8 +286,9 @@ def run_analysis_pipeline(self, job_id: str, corp_id: str, skip_cache: bool = Fa
     doc_ingest_pipeline = DocIngestPipeline()
     external_pipeline = ExternalSearchPipeline()
     context_pipeline = ContextPipeline()
-    # P0-FIX: 해커톤 시연용으로 Legacy mode 사용 (Multi-Agent hang 이슈)
-    signal_pipeline = SignalExtractionPipeline(use_multi_agent=False)
+    # v2.1: Multi-Agent 활성화 (30초 타임아웃으로 hang 방지)
+    # 타임아웃 시 Legacy 모드로 자동 fallback
+    signal_pipeline = SignalExtractionPipeline(use_multi_agent=True)
     validation_pipeline = ValidationPipeline()
     dedup_pipeline = DeduplicationPipeline()
     index_pipeline = IndexPipeline()

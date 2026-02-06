@@ -57,10 +57,12 @@ logger = logging.getLogger(__name__)
 # v2.0 Architecture Configuration
 # ============================================================================
 
-# v2 아키텍처 활성화 플래그
-# True: 순차 Fallback (Perplexity → Gemini), OpenAI Validation
-# False: 기존 병렬 모드 (Perplexity + Gemini 동시)
-USE_V2_ARCHITECTURE: bool = True
+# v2.1 아키텍처 플래그: 항상 Perplexity + Gemini 병렬 실행
+# 두 Provider 모두 호출하여 데이터 최대 수집, Cross-Coverage로 결합
+# - Perplexity 실패 시 Gemini 데이터로 커버
+# - Gemini 실패 시 Perplexity 데이터로 커버
+# - 둘 다 성공 시 field_assignment 기반으로 최적 값 선택
+USE_V2_ARCHITECTURE: bool = False  # False = 병렬 모드 (데이터 최대 수집)
 
 # v2.0 타임아웃 설정 (초)
 V2_TIMEOUT_PERPLEXITY = 30  # 기존 45초에서 단축
@@ -2027,21 +2029,33 @@ class CorpProfilingPipeline:
             )
         )
 
-        # v2.0 Architecture: 순차 Fallback 모드 설정
+        # v2.1 Architecture: 항상 병렬 모드로 데이터 최대 수집
+        # Perplexity + Gemini 둘 다 호출, Cross-Coverage로 결합
         if USE_V2_ARCHITECTURE:
+            # (현재 비활성화됨) 순차 Fallback 모드
             logger.info(f"[v2.0] Using sequential fallback architecture")
-            self.orchestrator.set_parallel_mode(False)  # 순차 모드
+            self.orchestrator.set_parallel_mode(False)
             self.orchestrator.set_gemini_search(
                 lambda cn, ind: self._sync_gemini_fallback_search(cn, ind)
             )
             self.orchestrator.set_openai_validation(
                 lambda profile, cn, ind, src: self._sync_openai_validation(profile, cn, ind, src, llm_service)
             )
-            # Multi-Search 활성화 (Perplexity 실패 시 Gemini Grounding)
             self.orchestrator.enable_multi_search(True)
         else:
-            logger.info(f"[v1] Using parallel architecture")
-            self.orchestrator.set_parallel_mode(True)  # 병렬 모드
+            # 병렬 모드: Perplexity + Gemini 동시 실행으로 데이터 최대 수집
+            logger.info(f"[v2.1] Using parallel architecture (maximum data collection)")
+            self.orchestrator.set_parallel_mode(True)  # 병렬 모드 활성화
+            # Gemini 검색도 설정하여 데이터 보완
+            self.orchestrator.set_gemini_search(
+                lambda cn, ind: self._sync_gemini_fallback_search(cn, ind)
+            )
+            # OpenAI Validation은 병렬 모드에서도 Cross-Validation에 사용
+            self.orchestrator.set_openai_validation(
+                lambda profile, cn, ind, src: self._sync_openai_validation(profile, cn, ind, src, llm_service)
+            )
+            # Multi-Search 활성화 (Cross-Coverage 지원)
+            self.orchestrator.enable_multi_search(True)
 
         # Get existing profile for potential enrichment (but don't use as cache if skip_cache)
         # P0-2 Fix: 캐시 조회는 여기서 한 번만 수행, orchestrator에는 결과 전달

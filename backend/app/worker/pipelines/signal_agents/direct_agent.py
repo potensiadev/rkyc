@@ -126,7 +126,7 @@ class DirectSignalAgent(BaseSignalAgent):
 """
 
     def get_user_prompt(self, context: dict) -> str:
-        """Build user prompt with internal snapshot and direct events."""
+        """Build user prompt with internal snapshot, document facts, and direct events."""
         corp_name = context.get("corp_name", "")
         corp_reg_no = context.get("corp_reg_no", "")
         industry_name = context.get("industry_name", "")
@@ -144,6 +144,14 @@ class DirectSignalAgent(BaseSignalAgent):
             ensure_ascii=False,
             indent=2,
         )
+
+        # v2.1: Get document facts (from DOC_INGEST pipeline)
+        document_facts = context.get("document_facts", [])
+        document_facts_str = json.dumps(
+            document_facts,
+            ensure_ascii=False,
+            indent=2,
+        ) if document_facts else "없음"
 
         # Previous snapshot for comparison (if available)
         prev_snapshot = context.get("previous_snapshot_json", {})
@@ -168,6 +176,11 @@ class DirectSignalAgent(BaseSignalAgent):
 {prev_snapshot_str}
 ```
 
+# 제출 문서에서 추출된 Facts (evidence_type: DOC 사용)
+```json
+{document_facts_str}
+```
+
 # 기업 직접 관련 외부 이벤트
 ```json
 {direct_events}
@@ -178,6 +191,7 @@ class DirectSignalAgent(BaseSignalAgent):
 
 **체크리스트**:
 □ 내부 스냅샷에서 연체, 등급, 담보, 여신 변화 확인
+□ 제출 문서에서 주주변경, 재무변동, 임원변경 등 확인 (evidence_type: "DOC" 사용)
 □ 대표이사/주주구조 변경 확인
 □ 재무제표 급변 확인 (매출/영업이익 ±20%)
 □ 직접 뉴스에서 기업 관련 이벤트 확인

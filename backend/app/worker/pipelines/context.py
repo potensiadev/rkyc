@@ -87,6 +87,7 @@ class ContextPipeline:
 
         logger.info(
             f"CONTEXT stage completed: corp_name={context['corp_name']}, "
+            f"document_facts={len(context['document_facts'])}, "
             f"external_events={len(context['external_events'])} "
             f"(direct={len(context['direct_events'])}, "
             f"industry={len(context['industry_events'])}, "

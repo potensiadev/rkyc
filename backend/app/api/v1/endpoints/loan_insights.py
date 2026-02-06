@@ -1,12 +1,17 @@
 """
 Loan Insight API Endpoints
 Pre-generated Loan Insight 조회
+
+조건부 적용:
+- 여신 금액이 있는 경우에만 Loan Insight 제공
+- 여신이 없으면 "당행 여신이 없습니다" 메시지 반환
 """
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
-from typing import Optional
+from typing import Optional, Tuple
 from datetime import datetime
 
 from app.core.database import get_db
@@ -15,7 +20,37 @@ from app.schemas.loan_insight import LoanInsightResponse, LoanInsightStanceSchem
 router = APIRouter()
 
 
-@router.get("/{corp_id}", response_model=LoanInsightResponse)
+async def check_loan_status(db: AsyncSession, corp_id: str) -> Tuple[bool, Optional[int]]:
+    """
+    Internal Snapshot에서 여신 상태 확인.
+
+    Returns:
+        Tuple[has_loan, total_exposure_krw]
+    """
+    result = await db.execute(
+        text("""
+            SELECT
+                isl.snapshot_json->'credit'->>'has_loan' as has_loan,
+                (isl.snapshot_json->'credit'->'loan_summary'->>'total_exposure_krw')::BIGINT as total_exposure_krw
+            FROM rkyc_internal_snapshot_latest latest
+            JOIN rkyc_internal_snapshot isl ON latest.snapshot_id = isl.snapshot_id
+            WHERE latest.corp_id = :corp_id
+        """),
+        {"corp_id": corp_id},
+    )
+    row = result.fetchone()
+
+    if not row:
+        return False, None
+
+    has_loan = row.has_loan == 'true' if row.has_loan else False
+    total_exposure = row.total_exposure_krw
+
+    # has_loan이 True이거나 total_exposure가 0보다 크면 여신 있음
+    return (has_loan or (total_exposure is not None and total_exposure > 0)), total_exposure
+
+
+@router.get("/{corp_id}")
 async def get_loan_insight(
     corp_id: str,
     db: AsyncSession = Depends(get_db),
@@ -23,8 +58,29 @@ async def get_loan_insight(
     """
     Get pre-generated Loan Insight for a corporation.
 
-    Returns 404 if no Loan Insight exists (analysis not run yet).
+    조건부 응답:
+    1. 여신이 없는 경우: has_loan=false, message="당행 여신이 없습니다"
+    2. 여신이 있고 Insight가 있는 경우: 정상 Loan Insight 반환
+    3. 여신이 있고 Insight가 없는 경우: has_loan=true, insight_exists=false (분석 대기 중)
+
+    NOTE: "AI 분석이 아직 생성되지 않았습니다"는 절대 표시하지 않음
     """
+    # Step 1: 여신 상태 확인
+    has_loan, total_exposure = await check_loan_status(db, corp_id)
+
+    if not has_loan:
+        # 여신이 없는 경우 - 별도 응답 (200 OK)
+        return JSONResponse(
+            status_code=200,
+            content={
+                "has_loan": False,
+                "total_exposure_krw": 0,
+                "message": "당행 여신이 없습니다",
+                "insight": None,
+            }
+        )
+
+    # Step 2: 여신이 있는 경우 - Loan Insight 조회
     result = await db.execute(
         text("""
             SELECT
@@ -41,35 +97,45 @@ async def get_loan_insight(
     row = result.fetchone()
 
     if not row:
-        raise HTTPException(
-            status_code=404,
-            detail={
-                "error_code": "LOAN_INSIGHT_NOT_FOUND",
-                "message": f"Loan Insight not found for corp_id={corp_id}. Run analysis first.",
-            },
+        # 여신은 있지만 Insight가 없는 경우 (분석 대기 중)
+        return JSONResponse(
+            status_code=200,
+            content={
+                "has_loan": True,
+                "total_exposure_krw": total_exposure,
+                "insight_exists": False,
+                "message": "분석 중입니다. 잠시 후 다시 확인해 주세요.",
+                "insight": None,
+            }
         )
 
-    return LoanInsightResponse(
-        insight_id=row.insight_id,
-        corp_id=row.corp_id,
-        stance=LoanInsightStanceSchema(
-            level=row.stance_level,
-            label=row.stance_label,
-            color=row.stance_color,
-        ),
-        executive_summary=row.executive_summary,
-        narrative=row.narrative,
-        key_risks=row.key_risks or [],
-        key_opportunities=row.key_opportunities or [],
-        mitigating_factors=row.mitigating_factors or [],
-        action_items=row.action_items or [],
-        signal_count=row.signal_count,
-        risk_count=row.risk_count,
-        opportunity_count=row.opportunity_count,
-        generation_model=row.generation_model,
-        is_fallback=row.is_fallback,
-        generated_at=row.generated_at,
-    )
+    # 정상 Loan Insight 반환
+    return {
+        "has_loan": True,
+        "total_exposure_krw": total_exposure,
+        "insight_exists": True,
+        "insight": {
+            "insight_id": str(row.insight_id),
+            "corp_id": row.corp_id,
+            "stance": {
+                "level": row.stance_level,
+                "label": row.stance_label,
+                "color": row.stance_color,
+            },
+            "executive_summary": row.executive_summary,
+            "narrative": row.narrative,
+            "key_risks": row.key_risks or [],
+            "key_opportunities": row.key_opportunities or [],
+            "mitigating_factors": row.mitigating_factors or [],
+            "action_items": row.action_items or [],
+            "signal_count": row.signal_count,
+            "risk_count": row.risk_count,
+            "opportunity_count": row.opportunity_count,
+            "generation_model": row.generation_model,
+            "is_fallback": row.is_fallback,
+            "generated_at": row.generated_at.isoformat() if row.generated_at else None,
+        }
+    }
 
 
 @router.get("/{corp_id}/exists")
