@@ -673,7 +673,7 @@ export default function CorporateDetailPage() {
                     <p className="text-sm text-muted-foreground italic">-</p>
                   )}
                   {/* 핵심 지표 inline */}
-                  <div className="mt-3 pt-3 border-t border-slate-200 flex items-center gap-6 text-sm">
+                  <div className="mt-3 pt-3 border-t border-slate-200 flex flex-wrap items-center gap-6 text-sm">
                     <div>
                       <span className="text-muted-foreground">연간 매출</span>
                       <span className="ml-2 font-medium">{profile.revenue_krw ? formatKRW(profile.revenue_krw) : '-'}</span>
@@ -682,10 +682,16 @@ export default function CorporateDetailPage() {
                       <span className="text-muted-foreground">수출 비중</span>
                       <span className="ml-2 font-medium">{typeof profile.export_ratio_pct === 'number' ? `${profile.export_ratio_pct}%` : '-'}</span>
                     </div>
+                    {profile.employee_count && (
+                      <div>
+                        <span className="text-muted-foreground">임직원수</span>
+                        <span className="ml-2 font-medium">{profile.employee_count.toLocaleString()}명</span>
+                      </div>
+                    )}
                     {profile.business_model && (
                       <div>
                         <span className="text-muted-foreground">비즈니스</span>
-                        <span className="ml-2 font-medium">B2B</span>
+                        <span className="ml-2 font-medium">{profile.business_model}</span>
                       </div>
                     )}
                   </div>
@@ -905,8 +911,12 @@ export default function CorporateDetailPage() {
                         Fallback
                       </span>
                     )}
-                    {profile.consensus_metadata?.fallback_layer !== undefined && profile.consensus_metadata.fallback_layer > 0 && (
-                      <span>Layer {profile.consensus_metadata.fallback_layer}</span>
+                    {profile.consensus_metadata?.fallback_layer !== undefined && profile.consensus_metadata.fallback_layer !== 0 && (
+                      <span className="text-xs bg-slate-100 px-2 py-0.5 rounded">
+                        {typeof profile.consensus_metadata.fallback_layer === 'string'
+                          ? profile.consensus_metadata.fallback_layer.replace(/_/g, ' ')
+                          : `Layer ${profile.consensus_metadata.fallback_layer}`}
+                      </span>
                     )}
                   </div>
                 </div>

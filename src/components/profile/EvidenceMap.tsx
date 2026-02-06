@@ -20,7 +20,7 @@ import {
   Link2,
   Globe,
 } from 'lucide-react';
-import type { FieldProvenance, ProfileConfidence } from '@/types/profile';
+import type { FieldProvenance, ProfileConfidence, FallbackLayerType } from '@/types/profile';
 import { Button } from '@/components/ui/button';
 
 interface EvidenceMapProps {
@@ -34,7 +34,7 @@ interface EvidenceMapProps {
     total_fields: number;
     matched_fields: number;
     discrepancy_fields: number;
-    fallback_layer: number;
+    fallback_layer: FallbackLayerType;
   };
 }
 
@@ -201,8 +201,12 @@ export function EvidenceMap({
                 {consensusMetadata.discrepancy_fields > 0 && (
                   <span className="text-orange-600">불일치 {consensusMetadata.discrepancy_fields}개</span>
                 )}
-                {consensusMetadata.fallback_layer > 1 && (
-                  <span className="text-gray-500">Fallback Layer {consensusMetadata.fallback_layer}</span>
+                {consensusMetadata.fallback_layer !== 0 && consensusMetadata.fallback_layer !== 'CACHE' && (
+                  <span className="text-gray-500">
+                    {typeof consensusMetadata.fallback_layer === 'string'
+                      ? consensusMetadata.fallback_layer.replace(/_/g, ' ')
+                      : `Fallback Layer ${consensusMetadata.fallback_layer}`}
+                  </span>
                 )}
               </div>
             </div>

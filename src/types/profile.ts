@@ -72,6 +72,15 @@ export interface Shareholder {
 // Consensus Metadata (PRD v1.2)
 // ============================================================================
 
+// Fallback Layer names from backend FallbackLayer enum
+export type FallbackLayerType =
+  | 'CACHE'
+  | 'PERPLEXITY_GEMINI'
+  | 'CLAUDE_SYNTHESIS'
+  | 'RULE_BASED'
+  | 'GRACEFUL_DEGRADATION'
+  | number;  // Also accepts numeric values for backwards compatibility
+
 export interface ConsensusMetadata {
   consensus_at: string | null;
   perplexity_success: boolean;
@@ -82,7 +91,7 @@ export interface ConsensusMetadata {
   discrepancy_fields: number;
   enriched_fields: number;
   overall_confidence: ProfileConfidence;
-  fallback_layer: number;  // 0: Cache, 1: Perplexity, 1.5: Gemini, 2: Claude, 3: Rule-Based, 4: Degradation
+  fallback_layer: FallbackLayerType;  // Can be string enum or number
   retry_count: number;
   error_messages: string[];
 }

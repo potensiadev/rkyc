@@ -1111,18 +1111,21 @@ class CorpProfileValidator:
                     elif not (0 <= pct <= 100):
                         errors.append(f"supply_chain.supplier_countries[{country}] out of range: {pct}")
 
-        # single_source_risk should be boolean
+        # single_source_risk should be a list of strings (단일 조달처 위험 품목 목록)
+        # or boolean for backwards compatibility
         single_source_risk = supply_chain.get("single_source_risk")
-        if single_source_risk is not None and not isinstance(single_source_risk, bool):
-            errors.append("supply_chain.single_source_risk must be boolean")
+        if single_source_risk is not None:
+            if not isinstance(single_source_risk, (list, bool)):
+                errors.append("supply_chain.single_source_risk must be a list or boolean")
 
-        # raw_material_import_ratio should be numeric 0-100
-        import_ratio = supply_chain.get("raw_material_import_ratio")
+        # material_import_ratio_pct should be numeric 0-100
+        # Check both field names for backwards compatibility
+        import_ratio = supply_chain.get("material_import_ratio_pct") or supply_chain.get("raw_material_import_ratio")
         if import_ratio is not None:
             if not isinstance(import_ratio, (int, float)):
-                errors.append("supply_chain.raw_material_import_ratio must be numeric")
+                errors.append("supply_chain.material_import_ratio_pct must be numeric")
             elif not (0 <= import_ratio <= 100):
-                errors.append(f"supply_chain.raw_material_import_ratio out of range: {import_ratio}")
+                errors.append(f"supply_chain.material_import_ratio_pct out of range: {import_ratio}")
 
         return errors
 
@@ -2114,6 +2117,58 @@ class CorpProfilingPipeline:
             query_details=details,
         )
 
+    def _normalize_supply_chain(self, supply_chain: Any) -> dict:
+        """
+        Normalize supply_chain data structure.
+
+        Ensures:
+        - key_suppliers is a list of strings
+        - supplier_countries is a dict with numeric values
+        - single_source_risk is a list of strings (normalized from various types)
+        - material_import_ratio_pct is numeric or None
+        """
+        if not supply_chain or not isinstance(supply_chain, dict):
+            return {}
+
+        normalized = {
+            "key_suppliers": [],
+            "supplier_countries": {},
+            "single_source_risk": [],
+            "material_import_ratio_pct": None,
+        }
+
+        # key_suppliers - ensure list of strings
+        key_suppliers = supply_chain.get("key_suppliers")
+        if key_suppliers:
+            if isinstance(key_suppliers, list):
+                normalized["key_suppliers"] = [str(s) for s in key_suppliers if s]
+            elif isinstance(key_suppliers, str):
+                normalized["key_suppliers"] = [key_suppliers]
+
+        # supplier_countries - ensure dict with numeric values
+        supplier_countries = supply_chain.get("supplier_countries")
+        if supplier_countries and isinstance(supplier_countries, dict):
+            normalized["supplier_countries"] = {
+                str(k): v if isinstance(v, (int, float)) else 0
+                for k, v in supplier_countries.items()
+            }
+
+        # single_source_risk - normalize using the helper function
+        single_source_risk = supply_chain.get("single_source_risk")
+        normalized["single_source_risk"] = normalize_single_source_risk(single_source_risk)
+
+        # material_import_ratio_pct - ensure numeric or None
+        import_ratio = supply_chain.get("material_import_ratio_pct") or supply_chain.get("raw_material_import_ratio")
+        if import_ratio is not None:
+            try:
+                ratio_val = float(import_ratio)
+                if 0 <= ratio_val <= 100:
+                    normalized["material_import_ratio_pct"] = int(ratio_val)
+            except (ValueError, TypeError):
+                pass
+
+        return normalized
+
     def _build_final_profile(
         self,
         orchestrator_result: OrchestratorResult,
@@ -2182,7 +2237,8 @@ class CorpProfilingPipeline:
             "key_customers": raw_profile.get("key_customers", []),
             "overseas_operations": raw_profile.get("overseas_operations", []),
             # PRD v1.2 new fields - Supply chain & Overseas
-            "supply_chain": raw_profile.get("supply_chain", {}),
+            # Normalize supply_chain to ensure proper structure
+            "supply_chain": self._normalize_supply_chain(raw_profile.get("supply_chain", {})),
             "overseas_business": raw_profile.get("overseas_business", {}),
             "shareholders": raw_profile.get("shareholders", []),
             # Metadata
