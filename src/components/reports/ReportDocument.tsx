@@ -1,10 +1,10 @@
 import { Separator } from "@/components/ui/separator";
-import { useCorporationReport, useCorpProfile } from "@/hooks/useApi";
+import { useCorporationReport, useCorpProfile, useCorporation, useCorporationSnapshot, useLoanInsight } from "@/hooks/useApi";
 import {
   formatDate,
 } from "@/data/signals";
 import { Signal, SIGNAL_TYPE_CONFIG, Evidence } from "@/types/signal";
-import { Loader2, AlertTriangle, Info, CheckCircle, Search, FileText } from "lucide-react";
+import { Loader2, AlertTriangle, Info, CheckCircle, Search, FileText, Building2, Landmark, TrendingUp, Package, Target, Globe, Factory, Users, AlertCircle, FileWarning } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 interface ReportDocumentProps {
@@ -22,6 +22,15 @@ interface ReportDocumentProps {
   };
 }
 
+// 금액 포맷팅 헬퍼
+function formatKRW(value: number | null | undefined): string {
+  if (value === null || value === undefined) return '-';
+  if (value >= 1_0000_0000_0000) return `${(value / 1_0000_0000_0000).toFixed(1)}조원`;
+  if (value >= 1_0000_0000) return `${(value / 1_0000_0000).toFixed(0)}억원`;
+  if (value >= 1_0000) return `${(value / 1_0000).toFixed(0)}만원`;
+  return `${value.toLocaleString()}원`;
+}
+
 const ReportDocument = ({
   corporationId,
   sectionsToShow = {
@@ -37,9 +46,17 @@ const ReportDocument = ({
   }
 }: ReportDocumentProps) => {
   // Use new Report API hook - includes error handling
-  const { data: report, isLoading, error, refetch } = useCorporationReport(corporationId);
-  // Profile API for shareholders (only show when profiling is complete)
+  const { data: report, isLoading: isLoadingReport, error: reportError, refetch } = useCorporationReport(corporationId);
+  // Profile API for Value Chain section
   const { data: profile } = useCorpProfile(corporationId);
+  // Corporation detail for company overview (CEO, address, etc.)
+  const { data: corporation, isLoading: isLoadingCorp } = useCorporation(corporationId);
+  // Snapshot for bank relationship
+  const { data: snapshot } = useCorporationSnapshot(corporationId);
+  // Loan Insight (조건부)
+  const { data: loanInsightData, isLoading: isLoadingLoanInsight } = useLoanInsight(corporationId);
+
+  const isLoading = isLoadingReport || isLoadingCorp;
 
   if (isLoading) {
     return (
@@ -84,25 +101,6 @@ const ReportDocument = ({
           </div>
         </div>
 
-        {/* Signal Summary Skeleton */}
-        <div className="mb-8 space-y-4">
-          <div className="h-6 bg-muted rounded w-1/4" />
-          <div className="space-y-4 pl-4 border-l-2 border-muted">
-            <div className="space-y-2">
-              <div className="h-4 bg-muted rounded w-1/3" />
-              <div className="h-4 bg-muted rounded w-full" />
-            </div>
-            <div className="space-y-2">
-              <div className="h-4 bg-muted rounded w-1/3" />
-              <div className="h-4 bg-muted rounded w-5/6" />
-            </div>
-            <div className="space-y-2">
-              <div className="h-4 bg-muted rounded w-1/3" />
-              <div className="h-4 bg-muted rounded w-4/5" />
-            </div>
-          </div>
-        </div>
-
         {/* Timeline Skeleton */}
         <div className="mb-8 space-y-4">
           <div className="h-6 bg-muted rounded w-1/4" />
@@ -121,7 +119,7 @@ const ReportDocument = ({
   }
 
   // Error state handling
-  if (error) {
+  if (reportError) {
     return (
       <div className="text-center py-8 space-y-4">
         <div className="text-red-500 flex items-center justify-center gap-2">
@@ -129,7 +127,7 @@ const ReportDocument = ({
           리포트 데이터를 불러오는 중 오류가 발생했습니다.
         </div>
         <p className="text-sm text-muted-foreground">
-          {(error as Error)?.message || '네트워크 오류가 발생했습니다.'}
+          {(reportError as Error)?.message || 'Failed to fetch'}
         </p>
         <button
           onClick={() => refetch()}
@@ -158,7 +156,12 @@ const ReportDocument = ({
     );
   }
 
-  const { corporation, summary_stats, signals, evidence_list, loan_insight, corp_profile } = report;
+  const { summary_stats, signals, evidence_list, loan_insight: reportLoanInsight, corp_profile } = report;
+  // Use corporation from dedicated API for richer data, fallback to report
+  const corpName = corporation?.name || report.corporation.name;
+  const corpBizNo = corporation?.businessNumber || report.corporation.business_number;
+  const corpIndustry = corporation?.industry || report.corporation.industry;
+  const corpIndustryCode = corporation?.industryCode || report.corporation.industry_code;
 
   // Signal Counts
   const signalCounts = summary_stats;
@@ -173,7 +176,7 @@ const ReportDocument = ({
   const industrySignals = signals.filter(s => s.signal_type === "INDUSTRY");
   const environmentSignals = signals.filter(s => s.signal_type === "ENVIRONMENT");
 
-  // 영향 구분별 그룹화 Helper (API types vs Frontend types mixing here, handling simple string checks)
+  // 영향 구분별 그룹화 Helper
   const getImpactLabel = (signalsList: any[]): string => {
     const riskCount = signalsList.filter(s => s.impact_direction === "RISK").length;
     const oppCount = signalsList.filter(s => s.impact_direction === "OPPORTUNITY").length;
@@ -199,17 +202,19 @@ const ReportDocument = ({
       INTERNAL_FIELD: "내부 데이터",
       DOC: "문서",
       EXTERNAL: "외부",
-      // sub-mappings if needed from frontend types
       news: "뉴스",
       disclosure: "공시",
       report: "리포트",
       regulation: "정책",
       internal: "내부",
     };
-    // fallback if API returns new codes
     if (type === "INTERNAL_FIELD") return "내부";
     return labels[type] || type;
   };
+
+  // Use loanInsight from dedicated API (has more fields) or fallback to report
+  const loanInsight = loanInsightData?.insight || null;
+  const hasLoan = loanInsightData?.has_loan ?? (snapshot?.snapshot_json?.credit?.has_loan || corporation?.bankRelationship?.hasRelationship || false);
 
   return (
     <div className="report-document bg-white text-foreground font-sans print:p-0" style={{ fontFamily: 'Pretendard, "Malgun Gothic", "맑은 고딕", sans-serif' }}>
@@ -220,7 +225,7 @@ const ReportDocument = ({
             rKYC 기업 시그널 분석 보고서
           </h1>
           <div className="text-lg font-semibold text-foreground mb-6">
-            {corporation.name}
+            {corpName}
           </div>
           <div className="text-sm text-muted-foreground space-y-1">
             <p>보고서 생성일: {currentDate}</p>
@@ -235,64 +240,73 @@ const ReportDocument = ({
       {/* Executive Summary */}
       {sectionsToShow.summary && (
         <section className="mb-8 break-inside-avoid">
-          <h2 className="text-lg font-semibold text-foreground mb-4 pb-2 border-b border-border">
-            요약 (Executive Summary)
+          <h2 className="text-lg font-semibold text-foreground mb-4 pb-2 border-b border-border flex items-center justify-between">
+            <span>요약 (Executive Summary)</span>
+            {loanInsight && (
+              <span className={`text-xs px-2 py-1 rounded ${
+                loanInsight.stance.level === 'CAUTION' ? 'bg-red-50 text-red-600 border border-red-200' :
+                loanInsight.stance.level === 'MONITORING' ? 'bg-orange-50 text-orange-600 border border-orange-200' :
+                loanInsight.stance.level === 'STABLE' ? 'bg-green-50 text-green-600 border border-green-200' :
+                loanInsight.stance.level === 'POSITIVE' ? 'bg-blue-50 text-blue-600 border border-blue-200' :
+                'bg-gray-50 text-gray-600 border border-gray-200'
+              }`}>
+                {loanInsight.stance.label}
+              </span>
+            )}
           </h2>
           <div className="text-sm text-muted-foreground space-y-3 leading-relaxed">
-            <p>
-              본 보고서는 {corporation.name}에 대해 rKYC 시스템이 감지한 총 {summary_stats.total}건의 시그널을 분석한 결과입니다.
-            </p>
-            <p>
-              직접 시그널 {summary_stats.direct}건, 산업 시그널 {summary_stats.industry}건,
-              환경 시그널 {summary_stats.environment}건이 감지되었으며,
-              이 중 <span className="text-risk font-medium font-bold">위험 요인 {summary_stats.risk}건</span>,
-              <span className="text-opportunity font-medium font-bold"> 기회 요인 {summary_stats.opportunity}건</span>입니다.
-            </p>
-            <p>
+            {/* LLM 생성 Executive Summary 우선 사용 */}
+            {loanInsight?.executive_summary ? (
+              <p className="text-foreground">{loanInsight.executive_summary}</p>
+            ) : (
+              <>
+                <p>
+                  본 보고서는 <strong className="text-foreground">{corpName}</strong>에 대해 rKYC 시스템이 감지한 총 {summary_stats.total}건의 시그널을 분석한 결과입니다.
+                </p>
+                <p>
+                  직접 시그널 {summary_stats.direct}건, 산업 시그널 {summary_stats.industry}건,
+                  환경 시그널 {summary_stats.environment}건이 감지되었으며,
+                  이 중 <span className="text-red-600 font-medium">위험 요인 {summary_stats.risk}건</span>,
+                  <span className="text-blue-600 font-medium"> 기회 요인 {summary_stats.opportunity}건</span>입니다.
+                </p>
+              </>
+            )}
+            <p className="text-xs">
               아래 내용은 실시간 수집된 데이터와 AI 분석 모델(Claude Opus/Gemini Pro)을 통해 생성되었습니다.
             </p>
           </div>
         </section>
       )}
 
-      {/* Company Overview */}
+      {/* Company Overview - CorporateDetailPage와 동일하게 */}
       {sectionsToShow.companyOverview && (
         <section className="mb-8 break-inside-avoid">
-          <h2 className="text-lg font-semibold text-foreground mb-4 pb-2 border-b border-border">
+          <h2 className="text-lg font-semibold text-foreground mb-4 pb-2 border-b border-border flex items-center gap-2">
+            <Building2 className="w-4 h-4" />
             기업 개요
           </h2>
-          <div className="text-sm space-y-2">
-            <div className="flex">
-              <span className="w-32 text-muted-foreground">기업명</span>
-              <span className="text-foreground font-medium">{corporation.name}</span>
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div className="space-y-2">
+              <div className="flex"><span className="w-28 text-muted-foreground">기업명</span><span>{corpName}</span></div>
+              <div className="flex"><span className="w-28 text-muted-foreground">사업자등록번호</span><span>{corpBizNo || '-'}</span></div>
+              <div className="flex"><span className="w-28 text-muted-foreground">업종</span><span>{corpIndustry}</span></div>
+              <div className="flex"><span className="w-28 text-muted-foreground">업종코드</span><span>{corpIndustryCode}</span></div>
+              {corporation?.bizType && <div className="flex"><span className="w-28 text-muted-foreground">업태</span><span>{corporation.bizType}</span></div>}
             </div>
-            {corporation.business_number && (
-              <div className="flex">
-                <span className="w-32 text-muted-foreground">사업자등록번호</span>
-                <span className="text-foreground">{corporation.business_number}</span>
-              </div>
-            )}
-            <div className="flex">
-              <span className="w-32 text-muted-foreground">업종</span>
-              <span className="text-foreground">{corporation.industry} ({corporation.industry_code})</span>
+            <div className="space-y-2">
+              <div className="flex"><span className="w-28 text-muted-foreground">대표이사</span><span>{corporation?.ceo || '-'}</span></div>
+              {corporation?.corpRegNo && <div className="flex"><span className="w-28 text-muted-foreground">법인등록번호</span><span>{corporation.corpRegNo}</span></div>}
+              {corporation?.foundedYear && corporation.foundedYear > 0 && <div className="flex"><span className="w-28 text-muted-foreground">설립년도</span><span>{corporation.foundedYear}년</span></div>}
+              {corporation?.headquarters && <div className="flex"><span className="w-28 text-muted-foreground">본사 소재지</span><span>{corporation.headquarters}</span></div>}
+              <div className="flex"><span className="w-28 text-muted-foreground">사업자 유형</span><span>{corporation?.isCorporation ? '법인사업자' : '개인사업자'}</span></div>
             </div>
-            {corporation.has_loan && (
-              <div className="flex">
-                <span className="w-32 text-muted-foreground">당행 거래 여부</span>
-                <span className="text-foreground font-medium text-blue-600">여신 보유 중</span>
-              </div>
-            )}
-            {corporation.internal_rating && (
-              <div className="flex">
-                <span className="w-32 text-muted-foreground">내부 등급</span>
-                <span className="text-foreground">{corporation.internal_rating}</span>
-              </div>
-            )}
-            {/* 주요 주주: Profile 데이터가 있을 때만 표시 */}
-            {profile?.shareholders && profile.shareholders.length > 0 && (
-              <div className="flex">
-                <span className="w-32 text-muted-foreground shrink-0">주요 주주</span>
-                <span className="text-foreground">
+          </div>
+          {/* 주요 주주 */}
+          {profile?.shareholders && profile.shareholders.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-border">
+              <div className="flex text-sm">
+                <span className="w-28 text-muted-foreground shrink-0">주요 주주</span>
+                <span>
                   {profile.shareholders.map((sh, i) => (
                     <span key={i}>
                       {sh.name} ({sh.ownership_pct}%)
@@ -301,12 +315,266 @@ const ReportDocument = ({
                   ))}
                 </span>
               </div>
-            )}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Bank Relationship - CorporateDetailPage와 동일하게 */}
+      {(snapshot?.snapshot_json?.credit?.has_loan || corporation?.bankRelationship?.hasRelationship) && (
+        <section className="mb-8 break-inside-avoid">
+          <h2 className="text-lg font-semibold text-foreground mb-4 pb-2 border-b border-border flex items-center gap-2">
+            <Landmark className="w-4 h-4" />
+            당행 거래 현황
+          </h2>
+          <div className={`rounded-lg border ${snapshot?.snapshot_json?.credit?.loan_summary?.overdue_flag ? 'border-red-200 bg-red-50/30' : 'border-border bg-muted/30'}`}>
+            {/* 1행: 금액 정보 + 담보 */}
+            <div className="flex items-center justify-between px-4 py-3 text-sm border-b border-border/50">
+              <div className="flex items-center gap-6">
+                <div>
+                  <span className="text-muted-foreground text-xs">수신</span>
+                  <span className="ml-2 font-medium">{corporation?.bankRelationship?.depositBalance || "-"}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground text-xs">여신</span>
+                  <span className="ml-2 font-medium">
+                    {snapshot?.snapshot_json?.credit?.loan_summary?.total_exposure_krw
+                      ? `${(snapshot.snapshot_json.credit.loan_summary.total_exposure_krw / 100000000).toFixed(0)}억원`
+                      : corporation?.bankRelationship?.loanBalance || "-"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground text-xs">외환</span>
+                  <span className="ml-2 font-medium">{corporation?.bankRelationship?.fxTransactions || "-"}</span>
+                </div>
+              </div>
+              {/* 담보 정보 */}
+              {snapshot?.snapshot_json?.collateral?.has_collateral && (
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground text-xs">담보</span>
+                  {snapshot.snapshot_json.collateral.total_collateral_value_krw && (
+                    <span className="font-medium">
+                      {`${(snapshot.snapshot_json.collateral.total_collateral_value_krw / 100000000).toFixed(0)}억원`}
+                    </span>
+                  )}
+                  <div className="flex gap-1">
+                    {snapshot.snapshot_json.collateral.collateral_types?.map((type: string, i: number) => {
+                      const typeMap: Record<string, string> = {
+                        'REAL_ESTATE': '부동산',
+                        'DEPOSIT': '예금',
+                        'SECURITIES': '유가증권',
+                        'INVENTORY': '재고',
+                        'EQUIPMENT': '기계설비',
+                        'RECEIVABLES': '매출채권',
+                        'GUARANTEE': '보증',
+                      };
+                      return (
+                        <span key={i} className="text-xs bg-muted px-1.5 py-0.5 rounded">
+                          {typeMap[type] || type}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+            {/* 2행: 상태 배지들 + 갱신일 */}
+            <div className="flex items-center justify-between px-4 py-2.5">
+              <div className="flex items-center gap-2">
+                {/* KYC 상태 */}
+                {snapshot?.snapshot_json?.corp?.kyc_status && (
+                  <>
+                    <span className={`px-2 py-0.5 rounded text-xs ${snapshot.snapshot_json.corp.kyc_status.is_kyc_completed
+                        ? 'bg-green-100 text-green-700'
+                        : 'bg-yellow-100 text-yellow-700'
+                      }`}>
+                      {snapshot.snapshot_json.corp.kyc_status.is_kyc_completed ? 'KYC완료' : 'KYC미완료'}
+                    </span>
+                    <span className={`px-2 py-0.5 rounded text-xs ${snapshot.snapshot_json.corp.kyc_status.internal_risk_grade === 'HIGH'
+                        ? 'bg-red-100 text-red-700'
+                        : snapshot.snapshot_json.corp.kyc_status.internal_risk_grade === 'MED'
+                          ? 'bg-yellow-100 text-yellow-700'
+                          : 'bg-green-100 text-green-700'
+                      }`}>
+                      {snapshot.snapshot_json.corp.kyc_status.internal_risk_grade === 'HIGH' ? '고위험' :
+                       snapshot.snapshot_json.corp.kyc_status.internal_risk_grade === 'MED' ? '중위험' : '저위험'}
+                    </span>
+                  </>
+                )}
+                {/* 연체 발생 */}
+                {snapshot?.snapshot_json?.credit?.loan_summary?.overdue_flag && (
+                  <span className="px-2 py-0.5 rounded text-xs bg-red-500 text-white font-medium">
+                    연체발생
+                  </span>
+                )}
+              </div>
+              {/* 갱신일 */}
+              {snapshot?.snapshot_json?.corp?.kyc_status?.last_kyc_updated && (
+                <span className="text-xs text-muted-foreground">
+                  갱신: {snapshot.snapshot_json.corp.kyc_status.last_kyc_updated}
+                </span>
+              )}
+            </div>
           </div>
         </section>
       )}
 
-      {/* 기업 인텔리전스 (방안 3: 2단 레이아웃) - CorporateDetailPage와 동일 */}
+      {/* Loan Insight Section - CorporateDetailPage와 동일하게 */}
+      {sectionsToShow.loanInsight && (
+        <section className="mb-8 break-inside-avoid">
+          <h2 className="text-lg font-semibold text-foreground mb-4 pb-2 border-b border-border flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <FileWarning className="w-4 h-4" />
+              여신 참고 관점 요약 (AI Risk Opinion)
+            </span>
+            {loanInsight && (
+              <Badge
+                variant="outline"
+                className={`
+                  ${loanInsight.stance.level === 'CAUTION' ? 'bg-red-50 text-red-600 border-red-200' : ''}
+                  ${loanInsight.stance.level === 'MONITORING' ? 'bg-orange-50 text-orange-600 border-orange-200' : ''}
+                  ${loanInsight.stance.level === 'STABLE' ? 'bg-green-50 text-green-600 border-green-200' : ''}
+                  ${loanInsight.stance.level === 'POSITIVE' ? 'bg-blue-50 text-blue-600 border-blue-200' : ''}
+                `}
+              >
+                {loanInsight.stance.label}
+              </Badge>
+            )}
+          </h2>
+
+          {isLoadingLoanInsight ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-5 h-5 animate-spin text-muted-foreground mr-2" />
+              <span className="text-sm text-muted-foreground">여신 정보를 확인하는 중...</span>
+            </div>
+          ) : !hasLoan ? (
+            /* 여신이 없는 경우 */
+            <div className="bg-gray-50 rounded-lg p-6 text-center border border-gray-200">
+              <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-3">
+                <FileWarning className="w-6 h-6 text-gray-400" />
+              </div>
+              <p className="text-sm font-medium text-gray-600">당행 여신이 없습니다</p>
+              <p className="text-xs text-muted-foreground mt-1">해당 기업에 대한 여신 거래가 없어 AI 분석이 제공되지 않습니다.</p>
+            </div>
+          ) : hasLoan && !loanInsight ? (
+            /* 여신은 있지만 분석이 아직 안 된 경우 */
+            <div className="bg-blue-50 rounded-lg p-6 text-center border border-blue-200">
+              <Loader2 className="w-6 h-6 animate-spin text-blue-500 mx-auto mb-3" />
+              <p className="text-sm font-medium text-blue-700">분석 중입니다</p>
+              <p className="text-xs text-muted-foreground mt-2">잠시 후 페이지를 새로고침해 주세요.</p>
+            </div>
+          ) : loanInsight ? (
+            <div className="bg-slate-50 rounded-lg p-5 border border-slate-200 space-y-5">
+              {/* 2x2 Grid: 리스크/기회 요인 */}
+              <div className="grid grid-cols-2 gap-6">
+                {/* Risk Drivers */}
+                <div>
+                  <h3 className="text-sm font-semibold text-red-700 mb-3 flex items-center">
+                    <AlertTriangle className="w-4 h-4 mr-2" />
+                    핵심 리스크 요인
+                  </h3>
+                  <ul className="space-y-2">
+                    {loanInsight.key_risks && loanInsight.key_risks.length > 0 ? (
+                      loanInsight.key_risks.map((risk: string, idx: number) => (
+                        <li key={idx} className="text-sm text-foreground/80 flex items-start">
+                          <span className="text-red-500 mr-2">•</span>
+                          {risk}
+                        </li>
+                      ))
+                    ) : (
+                      <li className="text-sm text-muted-foreground italic">식별된 심각한 리스크가 없습니다.</li>
+                    )}
+                  </ul>
+                </div>
+
+                {/* Key Opportunities */}
+                <div>
+                  <h3 className="text-sm font-semibold text-green-700 mb-3 flex items-center">
+                    <TrendingUp className="w-4 h-4 mr-2" />
+                    핵심 기회 요인
+                  </h3>
+                  <ul className="space-y-2">
+                    {loanInsight.key_opportunities && loanInsight.key_opportunities.length > 0 ? (
+                      loanInsight.key_opportunities.map((opp: string, idx: number) => (
+                        <li key={idx} className="text-sm text-foreground/80 flex items-start">
+                          <span className="text-green-500 mr-2">•</span>
+                          {opp}
+                        </li>
+                      ))
+                    ) : (
+                      <li className="text-sm text-muted-foreground italic">식별된 기회 요인이 없습니다.</li>
+                    )}
+                  </ul>
+                </div>
+              </div>
+
+              {/* Mitigating Factors */}
+              {loanInsight.mitigating_factors && loanInsight.mitigating_factors.length > 0 && (
+                <div className="pt-4 border-t border-slate-200">
+                  <h3 className="text-sm font-semibold text-blue-700 mb-3 flex items-center">
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    리스크 상쇄 요인
+                  </h3>
+                  <ul className="space-y-2">
+                    {loanInsight.mitigating_factors.map((factor: string, idx: number) => (
+                      <li key={idx} className="text-sm text-foreground/80 flex items-start">
+                        <span className="text-blue-500 mr-2">•</span>
+                        {factor}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <Separator />
+
+              {/* Action Items */}
+              <div>
+                <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center">
+                  <Search className="w-4 h-4 mr-2" />
+                  심사역 확인 체크리스트
+                </h3>
+                <div className="space-y-2 bg-white p-3 rounded border border-slate-200">
+                  {loanInsight.action_items && loanInsight.action_items.length > 0 ? (
+                    loanInsight.action_items.map((item: string, idx: number) => (
+                      <div key={idx} className="flex items-start text-sm">
+                        <div className="mr-3 pt-0.5">
+                          <div className="w-4 h-4 border-2 border-slate-300 rounded-sm"></div>
+                        </div>
+                        <span className="text-foreground/90">{item}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-sm text-muted-foreground">추가 확인이 필요한 특이사항이 없습니다.</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Metadata */}
+              <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t border-slate-200">
+                <span>
+                  시그널 {loanInsight.signal_count || 0}건 분석 (위험 {loanInsight.risk_count || 0}, 기회 {loanInsight.opportunity_count || 0})
+                </span>
+                <span className="flex items-center gap-2">
+                  {loanInsight.is_fallback && (
+                    <span className="text-orange-500">Rule-based</span>
+                  )}
+                  {loanInsight.generation_model && (
+                    <span>모델: {loanInsight.generation_model}</span>
+                  )}
+                  <span>생성: {loanInsight.generated_at ? new Date(loanInsight.generated_at).toLocaleDateString('ko-KR') : '-'}</span>
+                </span>
+              </div>
+
+              <p className="italic text-xs text-muted-foreground text-right">
+                * 본 의견은 AI 모델이 생성한 참고 자료이며, 은행의 공식 심사 의견을 대체하지 않습니다.
+              </p>
+            </div>
+          ) : null}
+        </section>
+      )}
+
+      {/* 기업 인텔리전스 - CorporateDetailPage와 동일하게 (2단 레이아웃) */}
       {sectionsToShow.valueChain && profile && (
         <section className="mb-8 break-inside-avoid">
           <h2 className="text-lg font-semibold text-foreground mb-4 pb-2 border-b border-border">
@@ -322,19 +590,25 @@ const ReportDocument = ({
               <p className="text-sm text-muted-foreground italic">-</p>
             )}
             {/* 핵심 지표 inline */}
-            <div className="mt-3 pt-3 border-t border-slate-200 flex items-center gap-6 text-sm">
+            <div className="mt-3 pt-3 border-t border-slate-200 flex flex-wrap items-center gap-6 text-sm">
               <div>
                 <span className="text-muted-foreground">연간 매출</span>
-                <span className="ml-2 font-medium">{profile.revenue_krw ? `${(profile.revenue_krw / 100000000).toLocaleString()}억원` : '-'}</span>
+                <span className="ml-2 font-medium">{profile.revenue_krw ? formatKRW(profile.revenue_krw) : '-'}</span>
               </div>
               <div>
                 <span className="text-muted-foreground">수출 비중</span>
                 <span className="ml-2 font-medium">{typeof profile.export_ratio_pct === 'number' ? `${profile.export_ratio_pct}%` : '-'}</span>
               </div>
+              {profile.employee_count && (
+                <div>
+                  <span className="text-muted-foreground">임직원수</span>
+                  <span className="ml-2 font-medium">{profile.employee_count.toLocaleString()}명</span>
+                </div>
+              )}
               {profile.business_model && (
                 <div>
                   <span className="text-muted-foreground">비즈니스</span>
-                  <span className="ml-2 font-medium">B2B</span>
+                  <span className="ml-2 font-medium">{profile.business_model}</span>
                 </div>
               )}
             </div>
@@ -344,7 +618,10 @@ const ReportDocument = ({
           <div className="grid grid-cols-2 gap-4 mb-4">
             {/* 좌측: 밸류체인 */}
             <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-3">
-              <h3 className="text-sm font-semibold text-foreground">밸류체인</h3>
+              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Package className="w-4 h-4 text-slate-500" />
+                밸류체인
+              </h3>
 
               {/* 공급사 */}
               <div>
@@ -391,7 +668,10 @@ const ReportDocument = ({
               {/* 단일 조달처 위험 */}
               {profile.supply_chain?.single_source_risk?.length > 0 && (
                 <div className="pt-2 border-t border-slate-200">
-                  <span className="text-xs text-red-600">⚠ 단일 조달처 위험</span>
+                  <span className="text-xs text-red-600 flex items-center gap-1">
+                    <AlertTriangle className="w-3 h-3" />
+                    단일 조달처 위험
+                  </span>
                   <div className="flex flex-wrap gap-1 mt-1">
                     {profile.supply_chain.single_source_risk.map((r, i) => (
                       <span key={i} className="text-xs bg-red-50 text-red-700 border border-red-200 px-2 py-0.5 rounded">{r}</span>
@@ -417,7 +697,10 @@ const ReportDocument = ({
 
             {/* 우측: 시장 포지션 */}
             <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-3">
-              <h3 className="text-sm font-semibold text-foreground">시장 포지션</h3>
+              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Target className="w-4 h-4 text-slate-500" />
+                시장 포지션
+              </h3>
 
               {/* 경쟁사 */}
               <div>
@@ -458,7 +741,10 @@ const ReportDocument = ({
 
               {/* 주요 주주 */}
               <div className="pt-2 border-t border-slate-200">
-                <span className="text-xs text-muted-foreground">주요 주주</span>
+                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Users className="w-3 h-3" />
+                  주요 주주
+                </span>
                 <div className="flex flex-wrap gap-1 mt-1">
                   {profile.shareholders?.length > 0 ? (
                     profile.shareholders.map((sh, i) => (
@@ -475,7 +761,10 @@ const ReportDocument = ({
               {/* 해외 사업 */}
               {(profile.overseas_business?.subsidiaries?.length > 0 || profile.overseas_business?.manufacturing_countries?.length > 0) && (
                 <div className="pt-2 border-t border-slate-200">
-                  <span className="text-xs text-muted-foreground">해외 사업</span>
+                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Factory className="w-3 h-3" />
+                    해외 사업
+                  </span>
                   <div className="flex flex-wrap gap-1 mt-1">
                     {profile.overseas_business?.subsidiaries?.map((sub, i) => (
                       <span key={i} className="text-xs bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded">
@@ -496,7 +785,8 @@ const ReportDocument = ({
           {/* 글로벌 노출 (Full Width) */}
           {profile.country_exposure && Object.keys(profile.country_exposure).length > 0 && (
             <div className="flex items-center gap-3 px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg mb-4">
-              <span className="text-sm text-blue-900 font-medium">🌐 글로벌 노출:</span>
+              <Globe className="w-4 h-4 text-blue-600" />
+              <span className="text-sm text-blue-900 font-medium">글로벌 노출:</span>
               <div className="flex gap-2">
                 {Object.entries(profile.country_exposure).map(([country, pct]) => (
                   <span key={country} className="text-sm text-blue-700">
@@ -601,7 +891,6 @@ const ReportDocument = ({
                       </span>
                       <span className="text-foreground">{signal.title}</span>
                     </div>
-                    {/* Only show short summary here if timeline is verbose setting, but keeping clean for now */}
                   </div>
                 </div>
               ))}
@@ -653,108 +942,6 @@ const ReportDocument = ({
               <p className="text-sm text-muted-foreground">수집된 근거가 없습니다.</p>
             </div>
           )}
-        </section>
-      )}
-
-      {/* Loan Reference Insight - AI Risk Manager Opinion */}
-      {(corporation.has_loan || sectionsToShow.loanInsight) && loan_insight && (
-        <section className="mb-8">
-          <h2 className="text-lg font-semibold text-foreground mb-4 pb-2 border-b border-border flex items-center justify-between">
-            <span>여신 참고 관점 요약 (AI Risk Opinion)</span>
-            <Badge
-              variant="outline"
-              className={`
-                ${loan_insight.stance.level === 'CAUTION' ? 'bg-red-50 text-red-600 border-red-200' : ''}
-                ${loan_insight.stance.level === 'MONITORING' ? 'bg-orange-50 text-orange-600 border-orange-200' : ''}
-                ${loan_insight.stance.level === 'STABLE' ? 'bg-green-50 text-green-600 border-green-200' : ''}
-                ${loan_insight.stance.level === 'POSITIVE' ? 'bg-blue-50 text-blue-600 border-blue-200' : ''}
-              `}
-            >
-              {loan_insight.stance.label}
-            </Badge>
-          </h2>
-
-          <div className="bg-slate-50 rounded-lg p-5 border border-slate-200 space-y-6">
-
-            {/* Narrative */}
-            <div>
-              <h3 className="text-sm font-semibold text-foreground mb-2">종합 소견</h3>
-              <p className="text-sm text-foreground/80 leading-relaxed whitespace-pre-wrap">
-                {loan_insight.narrative}
-              </p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-6">
-              {/* Risk Drivers */}
-              <div>
-                <h3 className="text-sm font-semibold text-red-700 mb-3 flex items-center">
-                  <AlertTriangle className="w-4 h-4 mr-2" />
-                  핵심 리스크 요인
-                </h3>
-                <ul className="space-y-2">
-                  {loan_insight.key_risks.length > 0 ? (
-                    loan_insight.key_risks.map((risk, idx) => (
-                      <li key={idx} className="text-sm text-foreground/80 flex items-start">
-                        <span className="text-red-500 mr-2">•</span>
-                        {risk}
-                      </li>
-                    ))
-                  ) : (
-                    <li className="text-sm text-muted-foreground italic">식별된 심각한 리스크가 없습니다.</li>
-                  )}
-                </ul>
-              </div>
-
-              {/* Mitigating Factors */}
-              <div>
-                <h3 className="text-sm font-semibold text-blue-700 mb-3 flex items-center">
-                  <CheckCircle className="w-4 h-4 mr-2" />
-                  리스크 상쇄/기회 요인
-                </h3>
-                <ul className="space-y-2">
-                  {loan_insight.mitigating_factors.length > 0 ? (
-                    loan_insight.mitigating_factors.map((factor, idx) => (
-                      <li key={idx} className="text-sm text-foreground/80 flex items-start">
-                        <span className="text-blue-500 mr-2">•</span>
-                        {factor}
-                      </li>
-                    ))
-                  ) : (
-                    <li className="text-sm text-muted-foreground italic">특이 상쇄 요인이 없습니다.</li>
-                  )}
-                </ul>
-              </div>
-            </div>
-
-            <Separator />
-
-            {/* Action Items */}
-            <div>
-              <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center">
-                <Search className="w-4 h-4 mr-2" />
-                심사역 확인 체크리스트
-              </h3>
-              <div className="space-y-2 bg-white p-3 rounded border border-slate-200">
-                {loan_insight.action_items.length > 0 ? (
-                  loan_insight.action_items.map((item, idx) => (
-                    <div key={idx} className="flex items-start text-sm">
-                      <div className="mr-3 pt-0.5">
-                        <div className="w-4 h-4 border-2 border-slate-300 rounded-sm"></div>
-                      </div>
-                      <span className="text-foreground/90">{item}</span>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-sm text-muted-foreground">추가 확인이 필요한 특이사항이 없습니다.</p>
-                )}
-              </div>
-            </div>
-
-          </div>
-
-          <p className="italic text-xs text-muted-foreground mt-4 text-right">
-            * 본 의견은 AI 모델이 생성한 참고 자료이며, 은행의 공식 심사 의견을 대체하지 않습니다.
-          </p>
         </section>
       )}
 

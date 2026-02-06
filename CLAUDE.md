@@ -1858,5 +1858,15 @@ CLAUDE.md
 | 충돌 해결 | 단순 Perplexity 우선 | Rule-based + LLM 2단계 |
 | 출처 추적 | 없음 | source_map 필드 |
 
+### 세션 21 (2026-02-07) - P0 필드 기반 검색 라우팅 (롤백)
+**목표**: Multi-Agent 개선 P0 - 필드별 검색 분담 활성화
+
+**결과**: ❌ 롤백 결정
+- 해커톤 시연 안정성 우선
+- 검증되지 않은 코드로 인한 시연 실패 위험 회피
+- 기존 시스템 30초 검색 → 정상 작동 유지
+
+**향후 계획**: 해커톤 이후 P0~P3 재검토
+
 ---
-*Last Updated: 2026-02-05 (세션 20 완료 - Cross-Coverage, Structured Conflict Resolution)*
+*Last Updated: 2026-02-07 (세션 21 - P0 롤백)*

@@ -18,6 +18,7 @@ import ReportsPage from "./pages/ReportsPage";
 // import NewKycAnalysisPage from "./pages/NewKycAnalysisPage";
 // import NewKycReportPage from "./pages/NewKycReportPage";
 import SettingsPage from "./pages/SettingsPage";
+import DesignShowcasePage from "./pages/DesignShowcasePage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -45,6 +46,7 @@ const App = () => (
           <Route path="/new-kyc/report/:jobId" element={<NewKycReportPage />} />
           */}
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/design-showcase" element={<DesignShowcasePage />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
