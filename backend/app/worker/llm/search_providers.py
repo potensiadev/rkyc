@@ -206,7 +206,7 @@ class BaseSearchProvider(ABC):
         try:
             # Circuit 상태 확인
             circuit = self.circuit_breaker.get_breaker(provider_name)
-            if circuit and not circuit.allow_request():
+            if circuit and not circuit.is_available():
                 raise CircuitOpenError(f"Circuit open for {provider_name}")
 
             start_time = time.time()
