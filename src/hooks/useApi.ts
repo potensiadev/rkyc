@@ -502,6 +502,9 @@ import {
   getLoanInsight,
   checkLoanInsightExists,
   getAllLoanInsightSummaries,
+  ApiReportResponse,
+  ApiLoanInsightResponse,
+  ApiLoanInsightExistsResponse,
   ApiLoanInsightSummary,
   ApiLoanInsightSummariesResponse,
 } from '@/lib/api';

@@ -5,10 +5,10 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { FileDown, Loader2, X } from "lucide-react";
+import { FileDown, Loader2, X, AlertTriangle } from "lucide-react";
 import ExportSettingsPanel from "./ExportSettingsPanel";
 import PDFExportModal from "./PDFExportModal";
-import { useCorporation } from "@/hooks/useApi";
+import { useCorporation, useCorporationReport } from "@/hooks/useApi";
 
 // Lazy load ReportDocument for better initial load
 const ReportDocument = lazy(() => import("./ReportDocument"));
@@ -33,8 +33,13 @@ const ReportPreviewModal = ({
   corporationId,
 }: ReportPreviewModalProps) => {
   const { data: corporation } = useCorporation(corporationId);
+  // Fetch report data to check if it's ready for PDF export
+  const { data: report, isLoading: isReportLoading, error: reportError } = useCorporationReport(corporationId);
   const companyName = corporation?.name ?? "기업";
   const reportRef = useRef<HTMLDivElement>(null);
+
+  // Report is ready when data exists and no loading/error
+  const isReportReady = !!report && !isReportLoading && !reportError;
 
   const defaultFileName = `RKYC_기업시그널보고서_${companyName}_${new Date().toISOString().split('T')[0]}`;
 
@@ -69,12 +74,31 @@ const ReportPreviewModal = ({
               </p>
             </div>
             <div className="flex items-center gap-2">
+              {/* Report status indicator */}
+              {isReportLoading && (
+                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  데이터 로딩 중...
+                </span>
+              )}
+              {reportError && (
+                <span className="flex items-center gap-1 text-xs text-red-500">
+                  <AlertTriangle className="h-3 w-3" />
+                  데이터 오류
+                </span>
+              )}
               <Button
                 size="sm"
                 onClick={() => setShowPDFModal(true)}
                 className="gap-2"
+                disabled={!isReportReady}
+                title={!isReportReady ? "리포트 데이터가 준비되지 않았습니다" : "PDF로 내보내기"}
               >
-                <FileDown className="h-4 w-4" />
+                {isReportLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <FileDown className="h-4 w-4" />
+                )}
                 PDF로 내보내기
               </Button>
               <Button

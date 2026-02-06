@@ -36,8 +36,8 @@ const ReportDocument = ({
     disclaimer: true,
   }
 }: ReportDocumentProps) => {
-  // Use new Report API hook
-  const { data: report, isLoading } = useCorporationReport(corporationId);
+  // Use new Report API hook - includes error handling
+  const { data: report, isLoading, error, refetch } = useCorporationReport(corporationId);
   // Profile API for shareholders (only show when profiling is complete)
   const { data: profile } = useCorpProfile(corporationId);
 
@@ -120,10 +120,40 @@ const ReportDocument = ({
     );
   }
 
+  // Error state handling
+  if (error) {
+    return (
+      <div className="text-center py-8 space-y-4">
+        <div className="text-red-500 flex items-center justify-center gap-2">
+          <AlertTriangle className="w-5 h-5" />
+          리포트 데이터를 불러오는 중 오류가 발생했습니다.
+        </div>
+        <p className="text-sm text-muted-foreground">
+          {(error as Error)?.message || '네트워크 오류가 발생했습니다.'}
+        </p>
+        <button
+          onClick={() => refetch()}
+          className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+        >
+          다시 시도
+        </button>
+      </div>
+    );
+  }
+
+  // No data after successful API call
   if (!report) {
     return (
-      <div className="text-center py-8 text-muted-foreground">
-        분석 리포트 생성에 실패했습니다. (No Data)
+      <div className="text-center py-8 space-y-4">
+        <div className="text-muted-foreground">
+          리포트 데이터가 없습니다.
+        </div>
+        <p className="text-sm text-muted-foreground">
+          해당 기업의 분석이 아직 실행되지 않았을 수 있습니다.
+        </p>
+        <p className="text-xs text-muted-foreground">
+          기업 상세 페이지에서 "분석 실행" 버튼을 클릭하여 분석을 시작해주세요.
+        </p>
       </div>
     );
   }
