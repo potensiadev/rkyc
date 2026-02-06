@@ -326,6 +326,13 @@ class GeminiGroundingProvider(BaseSearchProvider):
         return bool(key)
 
     async def search(self, query: str) -> SearchResult:
+        """
+        Gemini를 사용한 검색 (litellm 사용)
+
+        Google Search grounding 대신 Gemini의 지식 기반 응답을 활용합니다.
+        """
+        import litellm
+
         # KeyRotator에서 키 가져오기
         api_key = self.key_rotator.get_key("google")
         if not api_key:
@@ -333,46 +340,41 @@ class GeminiGroundingProvider(BaseSearchProvider):
 
         self._current_key = api_key
 
-        import google.generativeai as genai
+        # litellm용 환경변수 설정
+        os.environ["GEMINI_API_KEY"] = api_key
 
-        genai.configure(api_key=api_key)
-
-        # Gemini 1.5 Flash with Google Search grounding (stable model)
-        model = genai.GenerativeModel(
-            model_name="gemini-1.5-flash",
-            tools="google_search_retrieval",  # Enable Google Search grounding
-        )
+        start_time = time.time()
 
         try:
             # P0 Fix: Thread-safe event loop 사용
             loop = _get_or_create_event_loop()
+
+            # litellm completion 호출 (동기 함수를 executor에서 실행)
             response = await loop.run_in_executor(
                 None,
-                lambda: model.generate_content(query)
+                lambda: litellm.completion(
+                    model="gemini/gemini-1.5-flash",
+                    messages=[{"role": "user", "content": query}],
+                    timeout=30,
+                )
             )
 
             # 성공 시 키 마킹
             self.key_rotator.mark_success("google", api_key)
 
-            content = response.text if response.text else ""
+            content = ""
+            if response and response.choices:
+                content = response.choices[0].message.content or ""
 
-            # Grounding metadata에서 citations 추출
-            citations = []
-            if hasattr(response, 'candidates') and response.candidates:
-                candidate = response.candidates[0]
-                if hasattr(candidate, 'grounding_metadata'):
-                    grounding = candidate.grounding_metadata
-                    if hasattr(grounding, 'grounding_chunks'):
-                        for chunk in grounding.grounding_chunks:
-                            if hasattr(chunk, 'web') and hasattr(chunk.web, 'uri'):
-                                citations.append(chunk.web.uri)
+            latency_ms = int((time.time() - start_time) * 1000)
 
             return SearchResult(
                 provider=self.provider_type,
                 content=content,
-                citations=citations,
+                citations=[],  # litellm은 citations 미제공
                 raw_response={"text": content},
-                confidence=0.8 if citations else 0.6,
+                confidence=0.7,  # Grounding 없이는 약간 낮은 신뢰도
+                latency_ms=latency_ms,
             )
         except Exception as e:
             # 실패 시 키 마킹
