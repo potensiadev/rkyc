@@ -47,6 +47,7 @@ from app.worker.llm.search_providers import (
     MultiSearchManager,
     SearchResult,
     SearchProviderType,
+    GeminiGroundingProvider,
     get_multi_search_manager,
 )
 
@@ -224,8 +225,8 @@ class MultiAgentOrchestrator:
         self._multi_search_manager: Optional[MultiSearchManager] = None
         self._use_multi_search: bool = False  # 활성화 시 Perplexity 실패 시 대안 Provider 시도
 
-        # Parallel mode flag (default: False for v2.0 - 순차 Fallback)
-        self.parallel_mode = False
+        # Parallel mode flag (default: True - Perplexity + Gemini 병렬 검색)
+        self.parallel_mode = True
 
         # v2.0: OpenAI Validation function
         self._openai_validation_fn: Optional[Callable] = None
@@ -669,10 +670,10 @@ class MultiAgentOrchestrator:
             else:
                 logger.warning("[Orchestrator] Perplexity search function not configured")
 
-        # Gemini도 병렬로 독립 검색 (검증이 아닌 보완 역할)
+        # Gemini도 병렬로 독립 검색 (검증이 아닌 독립 검색 역할)
         if self.circuit_breaker.is_available("gemini"):
             futures["gemini"] = self._executor.submit(
-                self._safe_gemini_enrich, corp_name, industry_name
+                self._safe_gemini_search, corp_name, industry_name
             )
         else:
             error_messages.append("Gemini circuit breaker is OPEN")
@@ -806,28 +807,69 @@ class MultiAgentOrchestrator:
 
         return {"error": perplexity_error, "error_type": "exception"}
 
-    def _safe_gemini_enrich(self, corp_name: str, industry_name: str) -> Optional[dict]:
-        """Thread-safe Gemini enrichment 래퍼 (병렬 모드용)"""
+    def _safe_gemini_search(self, corp_name: str, industry_name: str) -> Optional[dict]:
+        """
+        Thread-safe Gemini Grounding 검색 래퍼 (병렬 모드용)
+
+        Gemini를 검증 역할이 아닌 독립 검색 역할로 사용합니다.
+        GeminiGroundingProvider를 사용하여 Google Search 기반 검색을 수행합니다.
+        """
         try:
-            # 병렬 모드에서는 빈 프로필로 시작하여 enrichment 수행
-            empty_profile = {
-                "corp_name": corp_name,
-                "industry_name": industry_name,
-                "business_summary": None,
-                "revenue_krw": None,
-                "export_ratio_pct": None,
-                "country_exposure": None,
-                "key_materials": None,
-                "key_customers": None,
-            }
-            enriched = self.gemini.enrich_missing_fields(
-                profile=empty_profile,
-                corp_name=corp_name,
-                industry_name=industry_name,
+            # GeminiGroundingProvider로 실제 검색 수행
+            gemini_provider = GeminiGroundingProvider(self.circuit_breaker)
+
+            if not gemini_provider.is_available():
+                logger.warning("[Orchestrator] Gemini API key not available")
+                return {"error": "Gemini API key not configured", "error_type": "no_api_key"}
+
+            # 검색 쿼리 생성 (Perplexity와 유사한 포맷)
+            query = f"""다음 한국 기업의 최신 정보를 검색해주세요:
+기업명: {corp_name}
+업종: {industry_name}
+
+다음 정보를 찾아주세요:
+- 사업 개요 및 주요 제품/서비스
+- 최근 매출액 (원화)
+- 수출 비중 (%)
+- 주요 고객사
+- 국가별 매출 비중
+- 주요 원자재
+- 공급망 정보 (주요 공급사, 단일 조달처 위험)
+- 해외 사업 현황 (해외 법인, 공장)
+- 주요 주주 정보
+- CEO/대표이사 이름
+- 임직원 수
+- 설립 연도
+- 본사 위치
+
+정확한 수치와 출처를 포함해주세요."""
+
+            # Thread-safe event loop 사용
+            loop = _get_or_create_event_loop()
+            search_result: SearchResult = loop.run_until_complete(
+                gemini_provider.search(query)
             )
-            return {"enriched_fields": enriched}
+
+            if search_result and search_result.content:
+                logger.info(
+                    f"[Orchestrator] Gemini Grounding search success for {corp_name}",
+                    extra={
+                        "latency_ms": search_result.latency_ms,
+                        "citations_count": len(search_result.citations),
+                    }
+                )
+                return {
+                    "content": search_result.content,
+                    "citations": search_result.citations,
+                    "enriched_fields": {"raw_content": search_result.content},
+                    "_search_source": "GEMINI_GROUNDING",
+                    "confidence": search_result.confidence,
+                }
+            else:
+                return {"error": "Empty search result", "error_type": "empty_result"}
+
         except Exception as e:
-            logger.warning(f"[Orchestrator] Gemini enrichment exception: {e}")
+            logger.warning(f"[Orchestrator] Gemini Grounding search exception: {e}")
             return {"error": str(e), "error_type": "exception"}
 
     def _try_perplexity_gemini_sequential(
