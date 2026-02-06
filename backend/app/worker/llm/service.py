@@ -90,6 +90,7 @@ class LLMService:
     INITIAL_DELAY = 1.0  # seconds
     MAX_DELAY = 60.0  # seconds
     BACKOFF_MULTIPLIER = 2.0
+    REQUEST_TIMEOUT = 60.0  # v2.1: API 요청 타임아웃 (초) - hang 방지
 
     # Non-retryable error patterns
     NON_RETRYABLE_ERRORS = [
@@ -242,6 +243,7 @@ class LLMService:
                         "messages": messages,
                         "temperature": temperature,
                         "max_tokens": max_tokens,
+                        "timeout": self.REQUEST_TIMEOUT,  # v2.1: API 타임아웃 추가
                     }
 
                     # Add response format if specified (for JSON mode)
@@ -466,6 +468,7 @@ class LLMService:
                         "messages": messages,
                         "temperature": temperature,
                         "max_tokens": min(max_tokens, model_max_tokens),
+                        "timeout": self.REQUEST_TIMEOUT,  # v2.1: API 타임아웃 추가
                     }
 
                     if response_format and provider != "anthropic":
@@ -839,6 +842,7 @@ class LLMService:
                         "messages": messages,
                         "temperature": temperature,
                         "max_tokens": max_tokens,
+                        "timeout": self.REQUEST_TIMEOUT,  # v2.1: API 타임아웃 추가
                     }
 
                     # Make the call
