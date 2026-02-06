@@ -205,7 +205,7 @@ class BaseSearchProvider(ABC):
 
         try:
             # Circuit 상태 확인
-            circuit = self.circuit_breaker.get_circuit(provider_name)
+            circuit = self.circuit_breaker.get_breaker(provider_name)
             if circuit and not circuit.allow_request():
                 raise CircuitOpenError(f"Circuit open for {provider_name}")
 
@@ -232,7 +232,7 @@ class BaseSearchProvider(ABC):
             raise
         except Exception as e:
             # 실패 기록
-            circuit = self.circuit_breaker.get_circuit(provider_name)
+            circuit = self.circuit_breaker.get_breaker(provider_name)
             if circuit:
                 circuit.record_failure()
             logger.error(f"[SearchProvider] {provider_name} failed: {e}")
@@ -725,7 +725,7 @@ def get_search_providers_status() -> dict:
     status = {}
     for provider in manager.providers:
         provider_name = provider.provider_type.value
-        circuit = cb_manager.get_circuit(provider_name)
+        circuit = cb_manager.get_breaker(provider_name)
 
         status[provider_name] = {
             "available": provider.is_available(),
