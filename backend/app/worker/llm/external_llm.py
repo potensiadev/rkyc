@@ -31,6 +31,7 @@ from app.worker.llm.exceptions import (
     AllProvidersFailedError,
     InvalidResponseError,
 )
+from app.worker.llm.key_rotator import get_key_rotator
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +64,10 @@ class ExternalLLMService:
 
     def __init__(self):
         self._configure_api_keys()
-        self.perplexity_enabled = bool(settings.PERPLEXITY_API_KEY)
+        # Use Key Rotator for Perplexity API key (supports _1, _2, _3 rotation)
+        self.key_rotator = get_key_rotator()
+        self.perplexity_api_key = self.key_rotator.get_key("perplexity")
+        self.perplexity_enabled = bool(self.perplexity_api_key)
 
     def _configure_api_keys(self):
         """API 키 설정"""
@@ -106,7 +110,7 @@ class ExternalLLMService:
             prompt = self._build_search_prompt(query, industry_name, days)
 
             headers = {
-                "Authorization": f"Bearer {settings.PERPLEXITY_API_KEY}",
+                "Authorization": f"Bearer {self.perplexity_api_key}",
                 "Content-Type": "application/json",
             }
 

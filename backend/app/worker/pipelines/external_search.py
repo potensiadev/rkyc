@@ -23,6 +23,7 @@ from typing import Optional
 import httpx
 
 from app.core.config import settings
+from app.worker.llm.key_rotator import get_key_rotator
 
 logger = logging.getLogger(__name__)
 
@@ -148,12 +149,16 @@ class ExternalSearchPipeline:
     TIMEOUT = 45.0  # Increased for comprehensive search
 
     def __init__(self, parallel_mode: bool = True):
-        self.api_key = settings.PERPLEXITY_API_KEY
+        # Use Key Rotator to get Perplexity API key (supports _1, _2, _3 rotation)
+        self.key_rotator = get_key_rotator()
+        self.api_key = self.key_rotator.get_key("perplexity")
         self.enabled = bool(self.api_key)
         self.parallel_mode = parallel_mode
 
         if not self.enabled:
             logger.warning("Perplexity API key not configured - external search disabled")
+        else:
+            logger.info("Perplexity API key loaded via Key Rotator")
 
     def execute(
         self,

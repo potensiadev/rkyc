@@ -2310,7 +2310,10 @@ class CorpProfilingPipeline:
         import httpx
         import concurrent.futures
 
-        api_key = api_key or getattr(settings, "PERPLEXITY_API_KEY", None)
+        # Use Key Rotator for Perplexity API key (supports _1, _2, _3 rotation)
+        if not api_key:
+            key_rotator = get_key_rotator()
+            api_key = key_rotator.get_key("perplexity")
         if not api_key:
             logger.warning("Perplexity API key not configured")
             return {}
@@ -2551,7 +2554,10 @@ class CorpProfilingPipeline:
         """
         import httpx
 
-        api_key = api_key or getattr(settings, "PERPLEXITY_API_KEY", None)
+        # Use Key Rotator for Perplexity API key (supports _1, _2, _3 rotation)
+        if not api_key:
+            key_rotator = get_key_rotator()
+            api_key = key_rotator.get_key("perplexity")
         if not api_key:
             logger.warning("Perplexity API key not configured")
             return {}
@@ -2917,7 +2923,10 @@ class CorpProfilingPipeline:
         """Execute Perplexity search with unified query."""
         import httpx
 
-        api_key = api_key or getattr(settings, "PERPLEXITY_API_KEY", None)
+        # Use Key Rotator for Perplexity API key (supports _1, _2, _3 rotation)
+        if not api_key:
+            key_rotator = get_key_rotator()
+            api_key = key_rotator.get_key("perplexity")
         if not api_key:
             logger.warning("Perplexity API key not configured")
             return {"content": "", "citations": [], "source_quality": "LOW", "raw_response": {}}
