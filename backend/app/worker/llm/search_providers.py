@@ -337,9 +337,9 @@ class GeminiGroundingProvider(BaseSearchProvider):
 
         genai.configure(api_key=api_key)
 
-        # Gemini 2.0 Flash with Google Search grounding
+        # Gemini 1.5 Flash with Google Search grounding (stable model)
         model = genai.GenerativeModel(
-            model_name="gemini-2.0-flash-exp",
+            model_name="gemini-1.5-flash",
             tools="google_search_retrieval",  # Enable Google Search grounding
         )
 
