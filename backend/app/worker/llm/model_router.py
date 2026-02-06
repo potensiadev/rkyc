@@ -206,7 +206,7 @@ class ModelRouter:
                 primary=ModelConfig(model="claude-sonnet-4-20250514", provider="anthropic", max_tokens=8192),
                 fallbacks=[
                     ModelConfig(model="gpt-4o", provider="openai", max_tokens=8192),
-                    ModelConfig(model="gemini/gemini-2.0-flash", provider="google", max_tokens=8192),
+                    ModelConfig(model="gemini/gemini-3-pro-preview", provider="google", max_tokens=8192),
                 ],
             ),
             "complex": ModelTier(

@@ -80,7 +80,7 @@ class LLMService:
             "max_tokens": 8192,
         },
         {
-            "model": "gemini/gemini-1.5-pro",  # Gemini 1.5 Pro (stable)
+            "model": "gemini/gemini-3-pro-preview",  # Gemini 3 Pro Preview
             "provider": "google",
             "max_tokens": 8192,
         },

@@ -354,7 +354,7 @@ class GeminiGroundingProvider(BaseSearchProvider):
             response = await loop.run_in_executor(
                 None,
                 lambda: litellm.completion(
-                    model="gemini/gemini-pro",
+                    model="gemini/gemini-3-pro-preview",
                     messages=[{"role": "user", "content": query}],
                     timeout=30,
                 )

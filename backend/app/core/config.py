@@ -79,7 +79,7 @@ class Settings(BaseSettings):
     # Moderate tier models (balanced)
     MODEL_MODERATE_PRIMARY: str = Field(default="claude-sonnet-4-20250514", description="Primary moderate model")
     MODEL_MODERATE_FALLBACK1: str = Field(default="gpt-4o", description="First fallback moderate model")
-    MODEL_MODERATE_FALLBACK2: str = Field(default="gemini/gemini-2.0-flash", description="Second fallback moderate model")
+    MODEL_MODERATE_FALLBACK2: str = Field(default="gemini/gemini-3-pro-preview", description="Second fallback moderate model")
     # Complex tier models (high quality)
     MODEL_COMPLEX_PRIMARY: str = Field(default="claude-opus-4-5-20251101", description="Primary complex model")
     MODEL_COMPLEX_FALLBACK1: str = Field(default="gpt-4o", description="First fallback complex model")
