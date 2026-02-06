@@ -30,6 +30,7 @@ from litellm.exceptions import (
 from app.core.config import settings
 from app.worker.llm.exceptions import AllProvidersFailedError
 from app.worker.llm.utils import sanitize_input_for_prompt
+from app.worker.llm.key_rotator import get_key_rotator
 
 logger = logging.getLogger(__name__)
 
@@ -68,9 +69,13 @@ class GeminiAdapter:
         self._configure_api_key()
 
     def _configure_api_key(self):
-        """Gemini API 키 설정"""
+        """Gemini API 키 설정 (key rotator 사용)"""
         import os
-        api_key = os.getenv("GOOGLE_API_KEY", settings.GOOGLE_API_KEY)
+        # Use key rotator for GOOGLE_API_KEY_1/2/3
+        api_key = get_key_rotator().get_key("google")
+        if not api_key:
+            # Fallback to single key
+            api_key = os.getenv("GOOGLE_API_KEY", settings.GOOGLE_API_KEY)
         if api_key:
             os.environ["GEMINI_API_KEY"] = api_key
 

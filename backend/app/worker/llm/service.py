@@ -38,6 +38,7 @@ from app.worker.llm.model_router import (
     TaskType,
     get_model_router,
 )
+from app.worker.llm.key_rotator import get_key_rotator
 from app.worker.tracing import get_logger, LogEvents
 
 logger = get_logger("LLMService")
@@ -144,23 +145,29 @@ class LLMService:
 
     def _configure_api_keys(self):
         """Set API keys for litellm"""
+        import os
         if settings.ANTHROPIC_API_KEY:
             litellm.anthropic_key = settings.ANTHROPIC_API_KEY
         if settings.OPENAI_API_KEY:
             litellm.openai_key = settings.OPENAI_API_KEY
-        if settings.GOOGLE_API_KEY:
-            # For Gemini via litellm
-            import os
+        # Google API key: use key rotator (supports GOOGLE_API_KEY_1/2/3)
+        google_key = get_key_rotator().get_key("google")
+        if google_key:
+            os.environ["GEMINI_API_KEY"] = google_key
+        elif settings.GOOGLE_API_KEY:
+            # Fallback to single key
             os.environ["GEMINI_API_KEY"] = settings.GOOGLE_API_KEY
 
     def _get_api_key(self, provider: str) -> str:
-        """Get API key for specific provider"""
+        """Get API key for specific provider (uses key rotator for google)"""
         if provider == "anthropic":
             return settings.ANTHROPIC_API_KEY
         elif provider == "openai":
             return settings.OPENAI_API_KEY
         elif provider == "google":
-            return settings.GOOGLE_API_KEY
+            # Use key rotator for Google (supports GOOGLE_API_KEY_1/2/3)
+            rotated_key = get_key_rotator().get_key("google")
+            return rotated_key or settings.GOOGLE_API_KEY
         return ""
 
     def _is_retryable_error(self, error: Exception) -> bool:
