@@ -350,10 +350,11 @@ class GeminiGroundingProvider(BaseSearchProvider):
             loop = _get_or_create_event_loop()
 
             # litellm completion 호출 (동기 함수를 executor에서 실행)
+            # gemini-pro는 GA 모델로 더 안정적
             response = await loop.run_in_executor(
                 None,
                 lambda: litellm.completion(
-                    model="gemini/gemini-1.5-flash",
+                    model="gemini/gemini-pro",
                     messages=[{"role": "user", "content": query}],
                     timeout=30,
                 )
