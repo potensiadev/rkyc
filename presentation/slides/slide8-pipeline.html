@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #FFFFFF; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #FFFFFF; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #40695B; padding: 12pt 40pt;
+}
+.header-num { color: #A7F3D0; font-size: 10pt; margin: 0 0 2pt 0; }
+.header-title { color: #FFFFFF; font-size: 20pt; font-weight: bold; margin: 0; }
+.content {
+  padding: 14pt 40pt; display: flex; flex-direction: column; gap: 6pt;
+}
+.stage-row {
+  display: flex; align-items: center; gap: 5pt;
+}
+.stage-box {
+  background: #F3F4F6; padding: 6pt 8pt; border-radius: 4pt;
+  flex: 1; display: flex; align-items: center; gap: 6pt;
+}
+.stage-box-active { background: #181B24; }
+.stage-num {
+  background: #B165FB; color: #FFFFFF; font-size: 8pt; font-weight: bold;
+  width: 16pt; height: 16pt; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+}
+.stage-name { color: #181B24; font-size: 9pt; font-weight: bold; margin: 0; }
+.stage-name-white { color: #FFFFFF; }
+.stage-desc { color: #6B7280; font-size: 7pt; margin: 0; }
+.stage-desc-gray { color: #9CA3AF; }
+.stage-pct { color: #B165FB; font-size: 8pt; font-weight: bold; margin: 0; }
+.arrow { color: #D1D5DB; font-size: 9pt; margin: 0; }
+.bottom-bar {
+  background: #181B24; padding: 10pt 40pt;
+  display: flex; justify-content: space-between; align-items: center;
+  margin: auto 40pt 50pt 40pt; border-radius: 6pt;
+}
+.time-label { color: #9CA3AF; font-size: 9pt; margin: 0; }
+.time-value { color: #10B981; font-size: 14pt; font-weight: bold; margin: 0; }
+</style>
+</head>
+<body>
+<div class="header">
+  <p class="header-num">07</p>
+  <h1 class="header-title">9-Stage Analysis Pipeline</h1>
+</div>
+<div class="content">
+  <div class="stage-row">
+    <div class="stage-box">
+      <div class="stage-num"><p style="margin:0;font-size:7pt;">1</p></div>
+      <div>
+        <p class="stage-name">SNAPSHOT</p>
+        <p class="stage-desc">재무 데이터</p>
+      </div>
+      <p class="stage-pct">5%</p>
+    </div>
+    <p class="arrow">→</p>
+    <div class="stage-box">
+      <div class="stage-num"><p style="margin:0;font-size:7pt;">2</p></div>
+      <div>
+        <p class="stage-name">DOC_INGEST</p>
+        <p class="stage-desc">문서 파싱</p>
+      </div>
+      <p class="stage-pct">20%</p>
+    </div>
+    <p class="arrow">→</p>
+    <div class="stage-box stage-box-active">
+      <div class="stage-num"><p style="margin:0;font-size:7pt;">3</p></div>
+      <div>
+        <p class="stage-name stage-name-white">PROFILING</p>
+        <p class="stage-desc stage-desc-gray">Corp Profile</p>
+      </div>
+      <p class="stage-pct">30%</p>
+    </div>
+  </div>
+  <div class="stage-row">
+    <div class="stage-box stage-box-active">
+      <div class="stage-num"><p style="margin:0;font-size:7pt;">4</p></div>
+      <div>
+        <p class="stage-name stage-name-white">EXTERNAL</p>
+        <p class="stage-desc stage-desc-gray">외부 검색</p>
+      </div>
+      <p class="stage-pct">45%</p>
+    </div>
+    <p class="arrow">→</p>
+    <div class="stage-box">
+      <div class="stage-num"><p style="margin:0;font-size:7pt;">5</p></div>
+      <div>
+        <p class="stage-name">CONTEXT</p>
+        <p class="stage-desc">통합 컨텍스트</p>
+      </div>
+      <p class="stage-pct">50%</p>
+    </div>
+    <p class="arrow">→</p>
+    <div class="stage-box stage-box-active">
+      <div class="stage-num"><p style="margin:0;font-size:7pt;">6</p></div>
+      <div>
+        <p class="stage-name stage-name-white">SIGNAL</p>
+        <p class="stage-desc stage-desc-gray">3-Agent 병렬</p>
+      </div>
+      <p class="stage-pct">70%</p>
+    </div>
+  </div>
+  <div class="stage-row">
+    <div class="stage-box">
+      <div class="stage-num"><p style="margin:0;font-size:7pt;">7</p></div>
+      <div>
+        <p class="stage-name">VALIDATION</p>
+        <p class="stage-desc">Guardrails</p>
+      </div>
+      <p class="stage-pct">75%</p>
+    </div>
+    <p class="arrow">→</p>
+    <div class="stage-box">
+      <div class="stage-num"><p style="margin:0;font-size:7pt;">8</p></div>
+      <div>
+        <p class="stage-name">INDEX</p>
+        <p class="stage-desc">벡터 임베딩</p>
+      </div>
+      <p class="stage-pct">85%</p>
+    </div>
+    <p class="arrow">→</p>
+    <div class="stage-box">
+      <div class="stage-num"><p style="margin:0;font-size:7pt;">9</p></div>
+      <div>
+        <p class="stage-name">INSIGHT</p>
+        <p class="stage-desc">최종 인사이트</p>
+      </div>
+      <p class="stage-pct">100%</p>
+    </div>
+  </div>
+</div>
+<div class="bottom-bar">
+  <p class="time-label">Total Processing Time</p>
+  <p class="time-value">120s to 50s (58% 개선)</p>
+</div>
+</body>
+</html>

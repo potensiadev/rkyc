@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #FFFFFF; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #FFFFFF; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #181B24; padding: 16pt 40pt;
+}
+.header-title { color: #FFFFFF; font-size: 24pt; font-weight: bold; margin: 0; }
+.header-num { color: #B165FB; font-size: 12pt; margin: 0 0 4pt 0; }
+.content {
+  flex: 1; padding: 20pt 40pt 40pt 40pt; display: flex; gap: 24pt;
+}
+.left-col { flex: 1; }
+.right-col { flex: 1; display: flex; flex-direction: column; gap: 12pt; }
+.section-title { color: #181B24; font-size: 16pt; font-weight: bold; margin: 0 0 12pt 0; }
+.problem-box {
+  background: #FEE2E2; border-left: 5pt solid #DC2626; padding: 12pt;
+  border-radius: 0 6pt 6pt 0; margin-bottom: 12pt;
+}
+.problem-text { color: #991B1B; font-size: 12pt; margin: 0; line-height: 1.4; }
+.stat-box {
+  background: #F3F4F6; padding: 14pt; border-radius: 6pt;
+  display: flex; align-items: center; gap: 12pt;
+}
+.stat-num { color: #DC2626; font-size: 28pt; font-weight: bold; margin: 0; }
+.stat-label { color: #374151; font-size: 12pt; margin: 0; }
+.challenge-item {
+  background: #181B24; padding: 10pt 14pt; border-radius: 5pt;
+}
+.challenge-text { color: #FFFFFF; font-size: 11pt; margin: 0; }
+</style>
+</head>
+<body>
+<div class="header">
+  <p class="header-num">01</p>
+  <h1 class="header-title">Problem: 기존 KYC 시스템의 한계</h1>
+</div>
+<div class="content">
+  <div class="left-col">
+    <p class="section-title">핵심 문제</p>
+    <div class="problem-box">
+      <p class="problem-text">단일 LLM 의존으로 API 장애 시 전체 서비스 중단</p>
+    </div>
+    <div class="problem-box">
+      <p class="problem-text">순차 처리로 분석 시간 2분+ 소요</p>
+    </div>
+    <div class="problem-box">
+      <p class="problem-text">외부 정보 검색 신뢰도 검증 부재</p>
+    </div>
+  </div>
+  <div class="right-col">
+    <div class="stat-box">
+      <p class="stat-num">120초</p>
+      <p class="stat-label">기존 분석 소요 시간</p>
+    </div>
+    <div class="challenge-item">
+      <p class="challenge-text">LLM Hallucination 위험</p>
+    </div>
+    <div class="challenge-item">
+      <p class="challenge-text">Rate Limit 초과 시 서비스 불가</p>
+    </div>
+    <div class="challenge-item">
+      <p class="challenge-text">검색 결과 출처 추적 불가</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>

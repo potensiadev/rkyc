@@ -116,7 +116,7 @@ export function Sidebar() {
   return (
     <aside
       className={`
-        fixed left-0 top-0 h-screen bg-sidebar border-r border-sidebar-border
+        fixed left-0 top-0 h-screen bg-slate-900/95 backdrop-blur-md border-r border-white/10
         transition-all duration-300 ease-in-out z-50
         ${collapsed ? "w-16" : "w-64"}
       `}

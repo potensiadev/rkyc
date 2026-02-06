@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #FFFFFF; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #FFFFFF; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #181B24; padding: 12pt 40pt;
+}
+.header-num { color: #B165FB; font-size: 10pt; margin: 0 0 2pt 0; }
+.header-title { color: #FFFFFF; font-size: 20pt; font-weight: bold; margin: 0; }
+.content {
+  padding: 14pt 40pt; display: flex; gap: 14pt;
+}
+.agent-card {
+  flex: 1; background: #F9FAFB; border-radius: 8pt; padding: 12pt;
+  border-top: 4pt solid #B165FB;
+}
+.agent-card-green { border-top-color: #40695B; }
+.agent-card-orange { border-top-color: #F59E0B; }
+.agent-icon {
+  width: 28pt; height: 28pt; background: #181B24; border-radius: 5pt;
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 6pt;
+}
+.icon-text { color: #FFFFFF; font-size: 12pt; font-weight: bold; margin: 0; }
+.agent-title { color: #181B24; font-size: 11pt; font-weight: bold; margin: 0 0 4pt 0; }
+.agent-type { color: #6B7280; font-size: 9pt; margin: 0 0 6pt 0; }
+.event-list { margin: 0; padding: 0; }
+.event-item { color: #374151; font-size: 8pt; margin: 0 0 3pt 0; }
+.bottom-stats {
+  background: #40695B; padding: 10pt 40pt; display: flex; justify-content: space-around;
+  margin: auto 40pt 50pt 40pt; border-radius: 6pt;
+}
+.stat-item { text-align: center; }
+.stat-value { color: #FFFFFF; font-size: 14pt; font-weight: bold; margin: 0; }
+.stat-label { color: #A7F3D0; font-size: 8pt; margin: 2pt 0 0 0; }
+</style>
+</head>
+<body>
+<div class="header">
+  <p class="header-num">05</p>
+  <h1 class="header-title">3-Agent 병렬 시그널 추출</h1>
+</div>
+<div class="content">
+  <div class="agent-card">
+    <div class="agent-icon"><p class="icon-text">D</p></div>
+    <p class="agent-title">DirectAgent</p>
+    <p class="agent-type">DIRECT 시그널</p>
+    <ul class="event-list">
+      <li class="event-item">KYC_REFRESH</li>
+      <li class="event-item">OVERDUE_FLAG_ON</li>
+      <li class="event-item">LOAN_EXPOSURE_CHANGE</li>
+      <li class="event-item">COLLATERAL_CHANGE</li>
+      <li class="event-item">OWNERSHIP_CHANGE</li>
+    </ul>
+  </div>
+  <div class="agent-card agent-card-green">
+    <div class="agent-icon"><p class="icon-text">I</p></div>
+    <p class="agent-title">IndustryAgent</p>
+    <p class="agent-type">INDUSTRY 시그널</p>
+    <ul class="event-list">
+      <li class="event-item">INDUSTRY_SHOCK</li>
+      <li class="event-item">산업 전체 영향 분석</li>
+      <li class="event-item">공급망 리스크 감지</li>
+      <li class="event-item">경쟁사 동향 파악</li>
+    </ul>
+  </div>
+  <div class="agent-card agent-card-orange">
+    <div class="agent-icon"><p class="icon-text">E</p></div>
+    <p class="agent-title">EnvironmentAgent</p>
+    <p class="agent-type">ENVIRONMENT 시그널</p>
+    <ul class="event-list">
+      <li class="event-item">POLICY_REGULATION</li>
+      <li class="event-item">Corp Profile 기반 필터링</li>
+      <li class="event-item">11개 카테고리 조건부 검색</li>
+      <li class="event-item">지정학적 리스크 감지</li>
+    </ul>
+  </div>
+</div>
+<div class="bottom-stats">
+  <div class="stat-item">
+    <p class="stat-value">30s to 12s</p>
+    <p class="stat-label">시그널 추출 시간</p>
+  </div>
+  <div class="stat-item">
+    <p class="stat-value">60%</p>
+    <p class="stat-label">속도 개선</p>
+  </div>
+  <div class="stat-item">
+    <p class="stat-value">ThreadPool</p>
+    <p class="stat-label">병렬 처리 엔진</p>
+  </div>
+</div>
+</body>
+</html>

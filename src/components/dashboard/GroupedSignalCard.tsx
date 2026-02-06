@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ApiLoanInsightSummary } from "@/hooks/useApi";
+import { StatusBadge, Tag } from "@/components/premium";
 
 interface GroupedSignalCardProps {
   corporationId: string;
@@ -38,14 +39,6 @@ const ImpactIcons = {
   neutral: FileText,
 };
 
-// Stance badge config
-const STANCE_CONFIG: Record<string, { bg: string; text: string; border: string; label: string }> = {
-  CAUTION: { bg: "bg-red-50", text: "text-red-700", border: "border-red-200", label: "주의" },
-  MONITORING: { bg: "bg-orange-50", text: "text-orange-700", border: "border-orange-200", label: "관찰" },
-  STABLE: { bg: "bg-green-50", text: "text-green-700", border: "border-green-200", label: "안정" },
-  POSITIVE: { bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-200", label: "긍정" },
-};
-
 export function GroupedSignalCard({
   corporationId,
   corporationName,
@@ -54,9 +47,21 @@ export function GroupedSignalCard({
   onSignalClick,
   onCorporationClick,
 }: GroupedSignalCardProps) {
-  const [isExpanded, setIsExpanded] = useState(true);
+  const [isExpanded, setIsExpanded] = useState(false);
 
-  const stanceConfig = loanInsight ? STANCE_CONFIG[loanInsight.stance_level] : null;
+  // Map stance to StatusBadge variant
+  const getStanceVariant = (level: string) => {
+    switch (level) {
+      case 'CAUTION': return 'danger';
+      case 'MONITORING': return 'warning';
+      case 'STABLE': return 'success';
+      case 'POSITIVE': return 'brand';
+      default: return 'neutral';
+    }
+  };
+
+  const stanceVariant = loanInsight ? getStanceVariant(loanInsight.stance_level) : null;
+  const stanceLabel = loanInsight?.stance_label || "No Insight";
 
   // 시그널 통계
   const riskCount = signals.filter((s) => s.impact === "risk").length;
@@ -68,8 +73,8 @@ export function GroupedSignalCard({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       className={cn(
-        "bg-card rounded-xl border overflow-hidden",
-        hasHighRisk ? "border-red-200 dark:border-red-800" : "border-border"
+        "relative rounded-3xl bg-white/70 backdrop-blur-xl border border-white/50 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] overflow-hidden transition-all duration-300",
+        hasHighRisk ? "shadow-[0_0_20px_rgba(244,63,94,0.1)] border-rose-100" : "hover:shadow-[0_8px_30px_-8px_rgba(0,0,0,0.08)] hover:bg-white/90"
       )}
     >
       {/* ============================================================ */}
@@ -77,21 +82,21 @@ export function GroupedSignalCard({
       {/* ============================================================ */}
       <div
         className={cn(
-          "p-4 cursor-pointer transition-colors",
-          hasHighRisk ? "bg-red-50/50 dark:bg-red-950/20" : "bg-muted/30 hover:bg-muted/50"
+          "p-4 cursor-pointer transition-colors border-b border-transparent",
+          isExpanded ? "border-slate-100/50" : ""
         )}
         onClick={() => setIsExpanded(!isExpanded)}
       >
         <div className="flex items-center justify-between">
           {/* Left: 기업 정보 */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
             {/* Avatar */}
             <div
               className={cn(
-                "w-10 h-10 rounded-lg flex items-center justify-center font-bold text-lg",
+                "w-10 h-10 rounded-xl flex items-center justify-center font-bold text-lg shadow-sm transition-colors",
                 hasHighRisk
-                  ? "bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300"
-                  : "bg-primary/10 text-primary"
+                  ? "bg-rose-50 text-rose-600 border border-rose-100"
+                  : "bg-indigo-50 text-indigo-600 border border-indigo-100"
               )}
             >
               {corporationName.charAt(0)}
@@ -101,7 +106,7 @@ export function GroupedSignalCard({
             <div>
               <div className="flex items-center gap-2">
                 <h3
-                  className="font-semibold text-foreground hover:text-primary cursor-pointer"
+                  className="text-base font-bold text-slate-800 hover:text-indigo-600 cursor-pointer transition-colors"
                   onClick={(e) => {
                     e.stopPropagation();
                     onCorporationClick(corporationId);
@@ -109,44 +114,35 @@ export function GroupedSignalCard({
                 >
                   {corporationName}
                 </h3>
-                {stanceConfig && (
-                  <span
-                    className={cn(
-                      "text-[10px] px-1.5 py-0.5 rounded border font-medium",
-                      stanceConfig.bg,
-                      stanceConfig.text,
-                      stanceConfig.border
-                    )}
-                  >
-                    {loanInsight?.stance_label || stanceConfig.label}
-                  </span>
+                {loanInsight && (
+                  <StatusBadge variant={stanceVariant as any} className="h-5 px-1.5 text-[10px]">{stanceLabel}</StatusBadge>
                 )}
                 {hasHighRisk && (
-                  <AlertTriangle className="w-4 h-4 text-red-500 animate-pulse" />
+                  <StatusBadge variant="danger" className="animate-pulse h-5 px-1.5 text-[10px]">HIGH RISK</StatusBadge>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground">{corporationId}</p>
+              <p className="text-[10px] text-slate-400 font-mono mt-0.5">{corporationId}</p>
             </div>
           </div>
 
           {/* Right: 시그널 카운트 + 확장 아이콘 */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-6">
             {/* 시그널 통계 */}
-            <div className="flex items-center gap-3 text-xs">
-              <span className="flex items-center gap-1 text-muted-foreground">
-                시그널 <span className="font-semibold text-foreground">{signals.length}</span>건
-              </span>
+            <div className="flex items-center gap-3 text-xs font-medium">
               {riskCount > 0 && (
-                <span className="flex items-center gap-1 text-red-600">
-                  <TrendingDown className="w-3 h-3" />
-                  {riskCount}
-                </span>
+                <div className="flex flex-col items-center">
+                  <span className="text-rose-500 font-bold text-base leading-none">{riskCount}</span>
+                  <span className="text-rose-400/80 text-[9px] uppercase font-semibold">Risk</span>
+                </div>
               )}
               {oppCount > 0 && (
-                <span className="flex items-center gap-1 text-green-600">
-                  <TrendingUp className="w-3 h-3" />
-                  {oppCount}
-                </span>
+                <div className="flex flex-col items-center">
+                  <span className="text-emerald-500 font-bold text-base leading-none">{oppCount}</span>
+                  <span className="text-emerald-400/80 text-[9px] uppercase font-semibold">Opp</span>
+                </div>
+              )}
+              {(riskCount === 0 && oppCount === 0) && (
+                <span className="text-slate-400 text-[10px]">No Signals</span>
               )}
             </div>
 
@@ -154,8 +150,9 @@ export function GroupedSignalCard({
             <motion.div
               animate={{ rotate: isExpanded ? 180 : 0 }}
               transition={{ duration: 0.2 }}
+              className="w-7 h-7 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
             >
-              <ChevronDown className="w-5 h-5 text-muted-foreground" />
+              <ChevronDown className="w-3.5 h-3.5" />
             </motion.div>
           </div>
         </div>
@@ -171,101 +168,80 @@ export function GroupedSignalCard({
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.2 }}
+            className="bg-slate-50/30"
           >
-            <div className="divide-y divide-border">
-              {signals.map((signal) => {
+            <div className="flex flex-col gap-1 p-2">
+              {signals.slice(0, 3).map((signal) => {
                 const TypeIcon = TypeIcons[signal.signalCategory] || Building2;
                 const ImpactIcon = ImpactIcons[signal.impact] || FileText;
                 const typeConfig = SIGNAL_TYPE_CONFIG?.[signal.signalCategory];
-                const impactConfig = SIGNAL_IMPACT_CONFIG?.[signal.impact];
                 const isRisk = signal.impact === "risk";
                 const isOpp = signal.impact === "opportunity";
 
                 return (
                   <div
                     key={signal.id}
-                    className={cn(
-                      "px-4 py-3 cursor-pointer transition-colors hover:bg-muted/50 flex items-start gap-3",
-                      // 좌측 보더로 위험/기회 구분
-                      "border-l-4",
-                      isRisk
-                        ? "border-l-red-400"
-                        : isOpp
-                        ? "border-l-green-400"
-                        : "border-l-gray-200"
-                    )}
+                    className="relative group p-2.5 rounded-lg hover:bg-white hover:shadow-sm border border-transparent hover:border-slate-100 transition-all cursor-pointer flex items-center gap-3"
                     onClick={() => onSignalClick(signal.id)}
                   >
-                    {/* Impact Icon */}
-                    <div
-                      className={cn(
-                        "w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0 mt-0.5",
-                        impactConfig?.bgClass || "bg-gray-100"
-                      )}
-                    >
-                      <ImpactIcon
-                        className={cn("w-4 h-4", impactConfig?.colorClass || "text-gray-500")}
-                      />
+                    {/* Impact Indicator (Dot + Icon) */}
+                    <div className={cn(
+                      "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors",
+                      isRisk ? "bg-rose-50 text-rose-500 group-hover:bg-rose-100" :
+                        isOpp ? "bg-emerald-50 text-emerald-500 group-hover:bg-emerald-100" :
+                          "bg-slate-100 text-slate-500 group-hover:bg-slate-200"
+                    )}>
+                      <ImpactIcon className="w-4 h-4" />
+                      {isRisk && <span className="absolute top-2.5 right-2.5 w-1.5 h-1.5 bg-rose-500 rounded-full border border-white" />}
                     </div>
 
                     {/* Content */}
                     <div className="flex-1 min-w-0">
                       {/* Title + Badges */}
-                      <div className="flex items-start justify-between gap-2 mb-1">
-                        <h4 className="text-sm font-medium text-foreground line-clamp-1">
+                      <div className="flex items-center justify-between gap-2 mb-0.5">
+                        <h4 className="text-sm font-bold text-slate-700 group-hover:text-indigo-900 transition-colors line-clamp-1">
                           {signal.title}
                         </h4>
-                        <div className="flex items-center gap-1.5 flex-shrink-0">
-                          <span
-                            className={cn(
-                              "text-[10px] px-1.5 py-0.5 rounded",
-                              typeConfig?.bgClass,
-                              typeConfig?.colorClass
-                            )}
-                          >
-                            {typeConfig?.label}
-                          </span>
-                          <span
-                            className={cn(
-                              "text-[10px] px-1.5 py-0.5 rounded",
-                              impactConfig?.bgClass,
-                              impactConfig?.colorClass
-                            )}
-                          >
-                            {impactConfig?.label}
-                          </span>
-                        </div>
+                        <Tag className="text-[9px] py-0 px-1.5 h-4 bg-white border-slate-200 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {typeConfig?.label}
+                        </Tag>
                       </div>
 
-                      {/* Summary */}
-                      <p className="text-xs text-muted-foreground line-clamp-1 mb-1.5">
+                      {/* Summary - Only 1 Line */}
+                      <p className="text-xs text-slate-500 line-clamp-1 leading-normal">
                         {signal.summary}
                       </p>
-
-                      {/* Meta */}
-                      <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
-                        <span>근거 {signal.evidenceCount || 0}건</span>
-                        <span>{signal.detectedAt}</span>
-                      </div>
                     </div>
 
-                    {/* Arrow */}
-                    <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-1 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    {/* Meta Info (Hidden on mobile, visible on group hover) */}
+                    <div className="hidden sm:flex items-center gap-2 text-[10px] text-slate-300 group-hover:text-slate-400 transition-colors whitespace-nowrap opacity-0 group-hover:opacity-100">
+                      <span>{new Date(signal.detectedAt).toLocaleDateString()}</span>
+                      <ChevronRight className="w-3 h-3" />
+                    </div>
                   </div>
                 );
               })}
+
+              {/* More Signals Indicator */}
+              {signals.length > 3 && (
+                <div className="px-3 py-1 text-center">
+                  <span className="text-[10px] text-slate-400 font-medium">
+                    + {signals.length - 3} more signals
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* 기업 상세 보기 링크 */}
             <div
-              className="px-4 py-2.5 bg-muted/30 border-t border-border flex items-center justify-center gap-2 cursor-pointer hover:bg-muted/50 transition-colors text-xs text-muted-foreground hover:text-primary"
+              className="py-2.5 bg-slate-50 border-t border-slate-100 flex items-center justify-center gap-1.5 cursor-pointer hover:bg-slate-100 transition-colors text-[11px] font-semibold text-slate-500 hover:text-indigo-600"
               onClick={(e) => {
                 e.stopPropagation();
                 onCorporationClick(corporationId);
               }}
             >
-              <ExternalLink className="w-3.5 h-3.5" />
-              <span>{corporationName} 상세 보고서 보기</span>
+              <span>View Full Analysis</span>
+              <ExternalLink className="w-3 h-3" />
             </div>
           </motion.div>
         )}

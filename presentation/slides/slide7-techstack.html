@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #181B24; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #181B24; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header { padding: 16pt 40pt 12pt 40pt; }
+.header-num { color: #B165FB; font-size: 12pt; margin: 0 0 4pt 0; }
+.header-title { color: #FFFFFF; font-size: 22pt; font-weight: bold; margin: 0; }
+.content {
+  flex: 1; padding: 0 40pt 40pt 40pt;
+  display: flex; gap: 16pt;
+}
+.col { flex: 1; display: flex; flex-direction: column; gap: 10pt; }
+.tech-card {
+  background: #2D3748; border-radius: 6pt; padding: 12pt;
+  border-left: 3pt solid #B165FB;
+}
+.tech-card-green { border-left-color: #40695B; }
+.tech-card-orange { border-left-color: #F59E0B; }
+.tech-title { color: #FFFFFF; font-size: 12pt; font-weight: bold; margin: 0 0 4pt 0; }
+.tech-desc { color: #9CA3AF; font-size: 10pt; margin: 0; line-height: 1.3; }
+</style>
+</head>
+<body>
+<div class="header">
+  <p class="header-num">06</p>
+  <h1 class="header-title">Tech Stack: 핵심 기술 설명</h1>
+</div>
+<div class="content">
+  <div class="col">
+    <div class="tech-card">
+      <p class="tech-title">Gemini Grounding</p>
+      <p class="tech-desc">LLM에 실시간 Google 검색 능력 부여. 학습 데이터 이후 정보도 검색 가능.</p>
+    </div>
+    <div class="tech-card tech-card-green">
+      <p class="tech-title">TanStack Query</p>
+      <p class="tech-desc">React 서버 데이터 관리. 캐싱, 자동 재시도, 백그라운드 갱신 자동화.</p>
+    </div>
+    <div class="tech-card tech-card-orange">
+      <p class="tech-title">Celery + Redis</p>
+      <p class="tech-desc">무거운 작업을 백그라운드 Worker에서 처리. 웹서버 블로킹 없음.</p>
+    </div>
+  </div>
+  <div class="col">
+    <div class="tech-card">
+      <p class="tech-title">ThreadPoolExecutor</p>
+      <p class="tech-desc">Python 병렬 처리. 3개 Agent와 2개 검색을 동시 실행.</p>
+    </div>
+    <div class="tech-card tech-card-green">
+      <p class="tech-title">Circuit Breaker</p>
+      <p class="tech-desc">Provider별 장애 자동 격리. 3회 실패 시 5분간 차단 후 Fallback.</p>
+    </div>
+    <div class="tech-card tech-card-orange">
+      <p class="tech-title">pgvector</p>
+      <p class="tech-desc">PostgreSQL 벡터 검색. 유사 케이스 검색으로 인사이트 품질 향상.</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>

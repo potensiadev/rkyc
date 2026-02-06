@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #181B24; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #181B24; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header { padding: 16pt 40pt 12pt 40pt; }
+.header-num { color: #B165FB; font-size: 12pt; margin: 0 0 4pt 0; }
+.header-title { color: #FFFFFF; font-size: 22pt; font-weight: bold; margin: 0; }
+.content {
+  flex: 1; padding: 0 40pt 40pt 40pt;
+  display: flex; gap: 24pt;
+}
+.left-col { flex: 1; }
+.right-col { flex: 1.2; }
+.step-item {
+  display: flex; gap: 12pt; margin-bottom: 16pt;
+}
+.step-num {
+  background: #B165FB; color: #FFFFFF; font-size: 14pt; font-weight: bold;
+  width: 30pt; height: 30pt; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.step-content { flex: 1; }
+.step-title { color: #FFFFFF; font-size: 12pt; font-weight: bold; margin: 0 0 2pt 0; }
+.step-desc { color: #9CA3AF; font-size: 10pt; margin: 0; }
+.code-box {
+  background: #2D3748; border-radius: 6pt; padding: 12pt;
+  margin-bottom: 10pt;
+}
+.code-text { color: #10B981; font-size: 9pt; font-family: Courier New, monospace; margin: 0 0 4pt 0; }
+.result-box {
+  background: #40695B; border-radius: 6pt; padding: 12pt;
+}
+.result-title { color: #FFFFFF; font-size: 11pt; font-weight: bold; margin: 0 0 8pt 0; }
+.result-item { color: #A7F3D0; font-size: 9pt; margin: 0 0 4pt 0; }
+</style>
+</head>
+<body>
+<div class="header">
+  <p class="header-num">08</p>
+  <h1 class="header-title">Live Demo: 3분 시연</h1>
+</div>
+<div class="content">
+  <div class="left-col">
+    <div class="step-item">
+      <div class="step-num"><p style="margin:0;">1</p></div>
+      <div class="step-content">
+        <p class="step-title">분석 트리거 (30초)</p>
+        <p class="step-desc">기업 ID 입력 - 9단계 자동 시작</p>
+      </div>
+    </div>
+    <div class="step-item">
+      <div class="step-num"><p style="margin:0;">2</p></div>
+      <div class="step-content">
+        <p class="step-title">실시간 진행 (1분)</p>
+        <p class="step-desc">SNAPSHOT - SIGNAL - DONE 프로그레스</p>
+      </div>
+    </div>
+    <div class="step-item">
+      <div class="step-num"><p style="margin:0;">3</p></div>
+      <div class="step-content">
+        <p class="step-title">결과 확인 (1분 30초)</p>
+        <p class="step-desc">Signal Inbox + Corp Profile</p>
+      </div>
+    </div>
+  </div>
+  <div class="right-col">
+    <div class="code-box">
+      <p class="code-text">POST /api/v1/jobs/analyze/run</p>
+      <p class="code-text">Body: { "corp_id": "8001-3719240" }</p>
+    </div>
+    <div class="result-box">
+      <p class="result-title">예상 결과</p>
+      <p class="result-item">signal_type: ENVIRONMENT</p>
+      <p class="result-item">event_type: POLICY_REGULATION_CHANGE</p>
+      <p class="result-item">headline: 미국 IRA법 배터리 공급망 영향</p>
+      <p class="result-item">impact_direction: RISK</p>
+      <p class="result-item">confidence: HIGH</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #181B24; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #181B24; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header { padding: 16pt 40pt 10pt 40pt; }
+.header-num { color: #B165FB; font-size: 11pt; margin: 0 0 4pt 0; }
+.header-title { color: #FFFFFF; font-size: 20pt; font-weight: bold; margin: 0; }
+.content { padding: 10pt 40pt 50pt 40pt; }
+.layer {
+  background: #2D3748; border-radius: 6pt; padding: 10pt 14pt;
+  margin-bottom: 8pt; display: flex; align-items: center; gap: 14pt;
+}
+.layer-badge { color: #FFFFFF; font-size: 9pt; font-weight: bold; margin: 0; }
+.layer-content { flex: 1; display: flex; gap: 8pt; align-items: center; }
+.component {
+  background: #374151; padding: 5pt 10pt; border-radius: 4pt;
+  border: 1pt solid #4B5563;
+}
+.component-text { color: #E5E7EB; font-size: 9pt; margin: 0; }
+.arrow { color: #6B7280; font-size: 11pt; margin: 0; }
+.layer-desc { color: #9CA3AF; font-size: 8pt; margin: 0; }
+.bottom-note {
+  background: #40695B; padding: 10pt 20pt; border-radius: 6pt;
+  display: flex; align-items: center; gap: 10pt;
+  margin-top: 10pt;
+}
+.note-text { color: #FFFFFF; font-size: 10pt; margin: 0; }
+</style>
+</head>
+<body>
+<div class="header">
+  <p class="header-num">03</p>
+  <h1 class="header-title">Architecture: 3-Layer Multi-Agent System</h1>
+</div>
+<div class="content">
+  <div class="layer">
+    <div style="background:#B165FB;padding:4pt 8pt;border-radius:3pt;">
+      <p class="layer-badge">Layer 1</p>
+    </div>
+    <div class="layer-content">
+      <div class="component"><p class="component-text">Corp Profiling Orchestrator</p></div>
+      <p class="arrow">→</p>
+      <div class="component"><p class="component-text">4-Layer Fallback</p></div>
+    </div>
+    <p class="layer-desc">ENVIRONMENT 시그널 정확도 향상</p>
+  </div>
+  <div class="layer">
+    <div style="background:#40695B;padding:4pt 8pt;border-radius:3pt;">
+      <p class="layer-badge">Layer 2</p>
+    </div>
+    <div class="layer-content">
+      <div class="component"><p class="component-text">DirectAgent</p></div>
+      <div class="component"><p class="component-text">IndustryAgent</p></div>
+      <div class="component"><p class="component-text">EnvironmentAgent</p></div>
+    </div>
+    <p class="layer-desc">3-Agent 병렬 시그널 추출</p>
+  </div>
+  <div class="layer">
+    <div style="background:#F59E0B;padding:4pt 8pt;border-radius:3pt;">
+      <p class="layer-badge">Layer 3</p>
+    </div>
+    <div class="layer-content">
+      <div class="component"><p class="component-text">Perplexity</p></div>
+      <p class="arrow">→</p>
+      <div class="component"><p class="component-text">Gemini Grounding</p></div>
+    </div>
+    <p class="layer-desc">2-Track 검색 Fallback</p>
+  </div>
+  <div class="bottom-note">
+    <p class="note-text">모든 Layer에 Circuit Breaker 적용 - 장애 자동 격리</p>
+  </div>
+</div>
+</body>
+</html>

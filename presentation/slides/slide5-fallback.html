@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #FFFFFF; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #FFFFFF; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #B165FB; padding: 12pt 40pt;
+}
+.header-num { color: rgba(255,255,255,0.7); font-size: 10pt; margin: 0 0 2pt 0; }
+.header-title { color: #FFFFFF; font-size: 20pt; font-weight: bold; margin: 0; }
+.content {
+  padding: 14pt 40pt 50pt 40pt; display: flex; flex-wrap: wrap; gap: 8pt;
+}
+.layer-row {
+  display: flex; align-items: center; gap: 8pt; width: 100%;
+}
+.layer-num {
+  background: #181B24; color: #FFFFFF; font-size: 10pt; font-weight: bold;
+  width: 22pt; height: 22pt; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+}
+.layer-box {
+  flex: 1; background: #F3F4F6; padding: 8pt 12pt; border-radius: 5pt;
+}
+.layer-title { color: #181B24; font-size: 11pt; font-weight: bold; margin: 0; }
+.layer-desc { color: #6B7280; font-size: 9pt; margin: 2pt 0 0 0; }
+.bottom-highlight {
+  background: #181B24; padding: 10pt 40pt; text-align: center;
+  margin: auto 40pt 50pt 40pt; border-radius: 6pt;
+}
+.highlight-text { color: #B165FB; font-size: 11pt; font-weight: bold; margin: 0; }
+</style>
+</head>
+<body>
+<div class="header">
+  <p class="header-num">04</p>
+  <h1 class="header-title">4-Layer Fallback: 절대 실패하지 않는 구조</h1>
+</div>
+<div class="content">
+  <div class="layer-row">
+    <div class="layer-num"><p style="margin:0;font-size:9pt;">0</p></div>
+    <div class="layer-box">
+      <p class="layer-title">Cache Lookup - 기존 프로필 즉시 반환</p>
+    </div>
+  </div>
+  <div class="layer-row">
+    <div class="layer-num"><p style="margin:0;font-size:9pt;">1</p></div>
+    <div class="layer-box">
+      <p class="layer-title">Perplexity + Gemini 병렬 검색</p>
+      <p class="layer-desc">실시간 외부 정보 수집 (Cross-Coverage)</p>
+    </div>
+  </div>
+  <div class="layer-row">
+    <div class="layer-num"><p style="margin:0;font-size:9pt;">2</p></div>
+    <div class="layer-box">
+      <p class="layer-title">Claude Synthesis + Consensus Engine</p>
+      <p class="layer-desc">다중 소스 합성 및 충돌 해결</p>
+    </div>
+  </div>
+  <div class="layer-row">
+    <div class="layer-num"><p style="margin:0;font-size:9pt;">3</p></div>
+    <div class="layer-box">
+      <p class="layer-title">Rule-Based Merge - LLM 없이 결정론적 병합</p>
+    </div>
+  </div>
+  <div class="layer-row">
+    <div class="layer-num"><p style="margin:0;font-size:9pt;">4</p></div>
+    <div class="layer-box">
+      <p class="layer-title">Graceful Degradation - 최소 프로필 반드시 반환</p>
+    </div>
+  </div>
+</div>
+<div class="bottom-highlight">
+  <p class="highlight-text">"Perplexity가 죽어도, Gemini가 죽어도, Claude가 죽어도 서비스는 계속"</p>
+</div>
+</body>
+</html>

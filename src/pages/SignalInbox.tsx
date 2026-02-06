@@ -1,13 +1,21 @@
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useSignals, useSignalStats, useLoanInsightSummaries, ApiLoanInsightSummary } from "@/hooks/useApi";
 import {
   AlertCircle,
   TrendingUp,
   TrendingDown,
-  Lightbulb
+  Lightbulb,
+  Beaker,
+  Settings
 } from "lucide-react";
+import {
+  DynamicBackground,
+  GlassCard,
+  Sparkline,
+  StatusBadge
+} from "@/components/premium";
 
 import { GroupedSignalCard } from "@/components/dashboard/GroupedSignalCard";
 
@@ -17,23 +25,33 @@ interface KPICardProps {
   value: string | number;
   trend?: string;
   colorClass?: string;
-  bgClass?: string;
+  trendData?: number[]; // Add trend data for sparkline
+  sparklineColor?: string;
 }
 
-function KPICard({ icon: Icon, label, value, trend, colorClass = "text-primary", bgClass = "bg-accent" }: KPICardProps) {
+function KPICard({ icon: Icon, label, value, trend, colorClass = "text-primary", trendData, sparklineColor }: KPICardProps) {
   return (
-    <div className="bg-card rounded-lg border border-border p-5">
-      <div className="flex items-center justify-between mb-3">
-        <div className={`w-10 h-10 rounded-lg ${bgClass} flex items-center justify-center`}>
-          <Icon className={`w-5 h-5 ${colorClass}`} />
+    <GlassCard className="p-5 flex flex-col justify-between h-32">
+      <div className="flex justify-between items-start">
+        <div>
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">{label}</p>
+          <div className="flex items-center gap-2">
+            <span className="text-3xl font-mono font-bold text-slate-900">{value}</span>
+          </div>
         </div>
-        {trend && (
-          <span className="text-xs text-muted-foreground">{trend}</span>
-        )}
+        <div className={`p-2 rounded-xl bg-slate-50 border border-slate-100 ${colorClass}`}>
+          <Icon className="w-5 h-5" />
+        </div>
       </div>
-      <p className="text-2xl font-semibold text-foreground">{value}</p>
-      <p className="text-sm text-muted-foreground mt-1">{label}</p>
-    </div>
+
+      {trendData ? (
+        <div className="h-8 w-full mt-2">
+          <Sparkline data={trendData} color={sparklineColor || "#6366f1"} height={30} />
+        </div>
+      ) : (
+        trend && <span className="text-xs font-medium text-slate-400 mt-2">{trend}</span>
+      )}
+    </GlassCard>
   );
 }
 
@@ -111,6 +129,7 @@ export default function SignalInbox() {
   if (isLoading) {
     return (
       <MainLayout>
+        <DynamicBackground />
         <div className="max-w-7xl">
           <div className="flex items-center justify-center py-20">
             <div className="text-center">
@@ -127,6 +146,7 @@ export default function SignalInbox() {
   if (error) {
     return (
       <MainLayout>
+        <DynamicBackground />
         <div className="max-w-7xl">
           <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-6 text-center">
             <AlertCircle className="w-8 h-8 text-destructive mx-auto mb-2" />
@@ -142,15 +162,36 @@ export default function SignalInbox() {
     <MainLayout>
       <div className="max-w-[1600px] mx-auto p-6">
 
-
-        {/* Demo Panel (Settings 페이지로 이동됨) */}
+        {/* Demo Mode Banner */}
+        {import.meta.env.VITE_DEMO_MODE === 'true' && (
+          <div className="mb-6 bg-gradient-to-r from-purple-500/10 to-blue-500/10 border border-purple-500/30 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center">
+                  <Beaker className="w-5 h-5 text-purple-500" />
+                </div>
+                <div>
+                  <p className="font-medium text-foreground">Demo Mode 활성화</p>
+                  <p className="text-sm text-muted-foreground">AI 분석을 실행하려면 설정 페이지로 이동하세요</p>
+                </div>
+              </div>
+              <Link
+                to="/settings"
+                className="flex items-center gap-2 px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg transition-colors"
+              >
+                <Settings className="w-4 h-4" />
+                분석 실행하기
+              </Link>
+            </div>
+          </div>
+        )}
 
         {/* KPI Cards - Kept as "Satellites" */}
         <div className="grid grid-cols-4 gap-4 mb-10">
-          <KPICard icon={AlertCircle} label="금일 신규 시그널" value={counts.todayNew} trend="오늘" colorClass="text-signal-new" bgClass="bg-signal-new/10" />
-          <KPICard icon={TrendingDown} label="위험 시그널 (7일)" value={counts.riskHigh7d} trend="최근 7일" colorClass="text-risk" bgClass="bg-risk/10" />
-          <KPICard icon={TrendingUp} label="기회 시그널 (7일)" value={counts.opportunity7d} trend="최근 7일" colorClass="text-opportunity" bgClass="bg-opportunity/10" />
-          <KPICard icon={Lightbulb} label="여신 거래 법인" value={counts.loanEligible} trend="참고용" colorClass="text-insight" bgClass="bg-insight/10" />
+          <KPICard icon={AlertCircle} label="금일 신규 시그널" value={counts.todayNew} trend="오늘" colorClass="text-indigo-500" trendData={[2, 4, 3, 5, 4, 6, counts.todayNew]} sparklineColor="#6366f1" />
+          <KPICard icon={TrendingDown} label="위험 시그널 (7일)" value={counts.riskHigh7d} trend="최근 7일" colorClass="text-rose-500" trendData={[5, 6, 8, 7, 9, 8, counts.riskHigh7d]} sparklineColor="#f43f5e" />
+          <KPICard icon={TrendingUp} label="기회 시그널 (7일)" value={counts.opportunity7d} trend="최근 7일" colorClass="text-emerald-500" trendData={[2, 3, 2, 4, 3, 5, counts.opportunity7d]} sparklineColor="#10b981" />
+          <KPICard icon={Lightbulb} label="여신 거래 법인" value={counts.loanEligible} trend="참고용" colorClass="text-amber-500" />
         </div>
 
         {/* Filters and Title */}

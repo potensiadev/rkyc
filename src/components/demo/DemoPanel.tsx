@@ -3,7 +3,7 @@
  * 시연용 수동 분석 실행 기능 (PRD 5.4.2)
  */
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useAnalyzeJob, useJobStatus, useCorporations } from '@/hooks/useApi';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
@@ -15,17 +15,28 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Progress } from '@/components/ui/progress';
-import { AlertCircle, CheckCircle, Loader2, Play, RefreshCw } from 'lucide-react';
+import { AlertCircle, CheckCircle, Loader2, Play, RefreshCw, Clock } from 'lucide-react';
+import { toast } from 'sonner';
 
 export function DemoPanel() {
   const [selectedCorpId, setSelectedCorpId] = useState<string>('');
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
+  const [isTimedOut, setIsTimedOut] = useState(false);
 
   const queryClient = useQueryClient();
   const { data: corporations = [] } = useCorporations();
   const analyzeJob = useAnalyzeJob();
+
+  const handleTimeout = useCallback(() => {
+    setIsTimedOut(true);
+    toast.error('작업 시간 초과', {
+      description: '분석 작업이 2분을 초과했습니다. Worker 상태를 확인하세요.',
+    });
+  }, []);
+
   const { data: jobStatus } = useJobStatus(currentJobId || '', {
-    enabled: !!currentJobId,
+    enabled: !!currentJobId && !isTimedOut,
+    onTimeout: handleTimeout,
   });
 
   const isDemoMode = import.meta.env.VITE_DEMO_MODE?.toLowerCase() === 'true';
@@ -48,9 +59,13 @@ export function DemoPanel() {
     queryClient.invalidateQueries({ queryKey: ['signals'] });
     queryClient.invalidateQueries({ queryKey: ['signalStats'] });
     setCurrentJobId(null);
+    setIsTimedOut(false);
   };
 
   const getStatusIcon = () => {
+    if (isTimedOut) {
+      return <Clock className="w-4 h-4 text-orange-600" />;
+    }
     if (!jobStatus) return null;
 
     switch (jobStatus.status) {
@@ -65,6 +80,9 @@ export function DemoPanel() {
   };
 
   const getStatusText = () => {
+    if (isTimedOut) {
+      return '시간 초과 (2분)';
+    }
     if (!jobStatus) return '';
 
     switch (jobStatus.status) {
@@ -113,7 +131,7 @@ export function DemoPanel() {
 
         <Button
           onClick={handleRunAnalysis}
-          disabled={!selectedCorpId || analyzeJob.isPending || jobStatus?.status === 'RUNNING'}
+          disabled={!selectedCorpId || analyzeJob.isPending || jobStatus?.status === 'RUNNING' || jobStatus?.status === 'QUEUED'}
           className="bg-amber-600 hover:bg-amber-700"
         >
           <Play className="w-4 h-4 mr-2" />
@@ -127,26 +145,32 @@ export function DemoPanel() {
       </div>
 
       {/* 작업 상태 표시 */}
-      {currentJobId && jobStatus && (
+      {currentJobId && (jobStatus || isTimedOut) && (
         <div className="mt-4 p-3 bg-white rounded-md border border-amber-100">
           <div className="flex items-center gap-2 mb-2">
             {getStatusIcon()}
             <span className="text-sm font-medium text-amber-800">{getStatusText()}</span>
           </div>
 
-          {(jobStatus.status === 'QUEUED' || jobStatus.status === 'RUNNING') && (
+          {jobStatus && (jobStatus.status === 'QUEUED' || jobStatus.status === 'RUNNING') && (
             <Progress value={getProgressPercent()} className="h-2" />
           )}
 
-          {jobStatus.status === 'DONE' && (
+          {jobStatus?.status === 'DONE' && (
             <p className="text-xs text-green-600">
               분석이 완료되었습니다. "결과 새로고침" 버튼을 눌러 시그널을 확인하세요.
             </p>
           )}
 
-          {jobStatus.status === 'FAILED' && (
+          {jobStatus?.status === 'FAILED' && (
             <p className="text-xs text-red-600">
               Worker가 아직 구현되지 않았습니다. LLM API 키 설정 후 사용 가능합니다.
+            </p>
+          )}
+
+          {isTimedOut && (
+            <p className="text-xs text-orange-600">
+              분석 작업이 2분을 초과했습니다. Worker 연결 상태를 확인하거나 다시 시도하세요.
             </p>
           )}
         </div>
