@@ -1,4 +1,5 @@
 import { useParams, useNavigate } from "react-router-dom";
+import { DynamicBackground, GlassCard } from "@/components/premium";
 import { MainLayout } from "@/components/layout/MainLayout";
 // Mock data imports removed
 import {
@@ -34,15 +35,38 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { useState, useEffect } from "react";
+import { Progress } from "@/components/ui/progress";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import ReportPreviewModal from "@/components/reports/ReportPreviewModal";
 import { useCorporation, useSignals, useCorporationSnapshot, useCorpProfile, useCorpProfileDetail, useRefreshCorpProfile, useJobStatus, useLoanInsight } from "@/hooks/useApi";
+import { toast } from "sonner";
 import type { ProfileConfidence, CorpProfile } from "@/types/profile";
 import { useQueryClient } from "@tanstack/react-query";
 import { getCorporationReport } from "@/lib/api";
 import { EvidenceBackedField } from "@/components/profile/EvidenceBackedField";
 import { EvidenceMap } from "@/components/profile/EvidenceMap";
 import { RiskIndicators } from "@/components/profile/RiskIndicators";
+
+// Job 진행 단계 정의 (파이프라인 순서)
+const JOB_STEPS = [
+  { step: 'QUEUED', label: '대기 중', progress: 0 },
+  { step: 'SNAPSHOT', label: '데이터 수집', progress: 10 },
+  { step: 'DOC_INGEST', label: '문서 분석', progress: 20 },
+  { step: 'PROFILING', label: '기업 프로파일링', progress: 35 },
+  { step: 'EXTERNAL', label: '외부 정보 검색', progress: 50 },
+  { step: 'CONTEXT', label: '컨텍스트 구성', progress: 60 },
+  { step: 'SIGNAL', label: '시그널 추출', progress: 75 },
+  { step: 'VALIDATION', label: '검증 중', progress: 85 },
+  { step: 'INDEX', label: '인덱싱', progress: 90 },
+  { step: 'INSIGHT', label: '인사이트 생성', progress: 95 },
+  { step: 'DONE', label: '완료', progress: 100 },
+];
+
+function getJobProgress(currentStep: string | undefined): { progress: number; label: string } {
+  if (!currentStep) return { progress: 5, label: '시작 중...' };
+  const found = JOB_STEPS.find(s => s.step === currentStep);
+  return found ? { progress: found.progress, label: found.label } : { progress: 5, label: currentStep };
+}
 
 // Confidence 배지 색상 헬퍼
 function getConfidenceBadge(confidence: ProfileConfidence | undefined): { bg: string; text: string; label: string } {
@@ -67,40 +91,50 @@ function formatKRW(value: number | null | undefined): string {
 }
 
 export default function CorporateDetailPage() {
-  const { corporateId } = useParams();
+  const { corpId } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [refreshJobId, setRefreshJobId] = useState<string | null>(null);
-  const [refreshStatus, setRefreshStatus] = useState<'idle' | 'running' | 'done' | 'failed'>('idle');
+  const [refreshStatus, setRefreshStatus] = useState<'idle' | 'running' | 'done' | 'failed' | 'timeout'>('idle');
 
   // API 훅 사용
-  const { data: corporation, isLoading: isLoadingCorp } = useCorporation(corporateId || "");
-  const { data: apiSignals, isLoading: isLoadingSignals } = useSignals({ corp_id: corporateId });
-  const { data: snapshot, isLoading: isLoadingSnapshot } = useCorporationSnapshot(corporateId || "");
-  const { data: profile, isLoading: isLoadingProfile, error: profileError, refetch: refetchProfile } = useCorpProfile(corporateId || "");
+  const { data: corporation, isLoading: isLoadingCorp } = useCorporation(corpId || "");
+  const { data: apiSignals, isLoading: isLoadingSignals } = useSignals({ corp_id: corpId });
+  const { data: snapshot, isLoading: isLoadingSnapshot } = useCorporationSnapshot(corpId || "");
+  const { data: profile, isLoading: isLoadingProfile, error: profileError, refetch: refetchProfile } = useCorpProfile(corpId || "");
   // 상세 프로필 (field_provenance 포함) - 기본 뷰 / 상세 뷰 토글용
   // P1-3 Fix: Add error handling for profileDetail
-  const { data: profileDetail, error: profileDetailError, refetch: refetchProfileDetail } = useCorpProfileDetail(corporateId || "");
+  const { data: profileDetail, error: profileDetailError, refetch: refetchProfileDetail } = useCorpProfileDetail(corpId || "");
   // Loan Insight (사전 생성된 AI 분석)
-  const { data: loanInsight, isLoading: isLoadingLoanInsight, error: loanInsightError } = useLoanInsight(corporateId || "");
+  const { data: loanInsight, isLoading: isLoadingLoanInsight, error: loanInsightError } = useLoanInsight(corpId || "");
   const refreshProfile = useRefreshCorpProfile();
   const [showDetailedView, setShowDetailedView] = useState(false);
 
   // 보고서 데이터 프리페칭 (hover 시 미리 로드)
   const prefetchReport = () => {
-    if (corporateId) {
+    if (corpId) {
       queryClient.prefetchQuery({
-        queryKey: ['report', corporateId],
-        queryFn: () => getCorporationReport(corporateId),
+        queryKey: ['report', corpId],
+        queryFn: () => getCorporationReport(corpId),
         staleTime: 10 * 60 * 1000, // 10분
       });
     }
   };
 
+  // Job 타임아웃 핸들러
+  const handleJobTimeout = useCallback(() => {
+    setRefreshStatus('timeout');
+    setRefreshJobId(null);
+    toast.error("작업 시간 초과", {
+      description: "분석 작업이 2분을 초과했습니다. 잠시 후 다시 시도해주세요.",
+    });
+  }, []);
+
   // Job 상태 폴링
   const { data: jobStatus } = useJobStatus(refreshJobId || '', {
     enabled: !!refreshJobId && refreshStatus === 'running',
+    onTimeout: handleJobTimeout,
   });
 
   // Job 완료 시 프로필 + Loan Insight 다시 로드
@@ -109,41 +143,120 @@ export default function CorporateDetailPage() {
       setRefreshStatus('done');
       setRefreshJobId(null);
       // 프로필 쿼리 무효화하여 다시 로드 (기본 + 상세)
-      queryClient.invalidateQueries({ queryKey: ['corporation', corporateId, 'profile'] });
-      queryClient.invalidateQueries({ queryKey: ['corporation', corporateId, 'profile', 'detail'] });
+      queryClient.invalidateQueries({ queryKey: ['corporation', corpId, 'profile'] });
+      queryClient.invalidateQueries({ queryKey: ['corporation', corpId, 'profile', 'detail'] });
       // Loan Insight도 갱신
-      queryClient.invalidateQueries({ queryKey: ['loan-insight', corporateId] });
+      queryClient.invalidateQueries({ queryKey: ['loan-insight', corpId] });
+      toast.success("분석 완료", {
+        description: "기업 정보가 성공적으로 갱신되었습니다.",
+      });
     } else if (jobStatus?.status === 'FAILED') {
       setRefreshStatus('failed');
       setRefreshJobId(null);
+      toast.error("분석 실패", {
+        description: "기업 정보 갱신 중 오류가 발생했습니다.",
+      });
     }
-  }, [jobStatus?.status, queryClient, corporateId]);
+  }, [jobStatus?.status, queryClient, corpId]);
 
   // 정보 갱신 버튼 핸들러
   const handleRefreshProfile = async () => {
-    if (!corporateId) return;
+    if (!corpId) return;
     setRefreshStatus('running');
+    toast.info("분석 시작", {
+      description: "기업 정보 갱신을 시작합니다...",
+    });
 
     try {
-      const result = await refreshProfile.mutateAsync(corporateId);
+      const result = await refreshProfile.mutateAsync(corpId);
       if (result.status === 'QUEUED' && result.job_id) {
         setRefreshJobId(result.job_id);
       } else if (result.status === 'FAILED') {
         setRefreshStatus('failed');
+        toast.error("분석 실패", {
+          description: "기업 정보 갱신에 실패했습니다. 잠시 후 다시 시도해주세요.",
+        });
       }
     } catch (error) {
       console.error('Profile refresh failed:', error);
       setRefreshStatus('failed');
+      toast.error("분석 실패", {
+        description: error instanceof Error ? error.message : "네트워크 오류가 발생했습니다.",
+      });
     }
   };
 
-  // 로딩 상태
-  if (isLoadingCorp) {
+  // 통합 로딩 상태 계산
+  const loadingState = useMemo(() => {
+    const states = [
+      { name: '기업 정보', loading: isLoadingCorp, done: !!corporation },
+      { name: '시그널', loading: isLoadingSignals, done: !!apiSignals },
+      { name: '스냅샷', loading: isLoadingSnapshot, done: !!snapshot },
+      { name: 'AI 분석', loading: isLoadingLoanInsight, done: !!loanInsight },
+    ];
+    const loadingItems = states.filter(s => s.loading);
+    const doneCount = states.filter(s => s.done).length;
+    const progress = Math.round((doneCount / states.length) * 100);
+    return {
+      isInitialLoading: isLoadingCorp,
+      loadingItems,
+      progress,
+      currentItem: loadingItems[0]?.name || '완료',
+    };
+  }, [isLoadingCorp, isLoadingSignals, isLoadingSnapshot, isLoadingLoanInsight, corporation, apiSignals, snapshot, loanInsight]);
+
+  // 초기 로딩 상태 (기업 정보)
+  if (loadingState.isInitialLoading) {
     return (
       <MainLayout>
-        <div className="flex items-center justify-center py-16">
-          <Loader2 className="w-6 h-6 animate-spin text-primary mr-2" />
-          <span className="text-muted-foreground">기업 정보를 불러오는 중...</span>
+        <DynamicBackground />
+        <div className="h-[calc(100vh-100px)] flex items-center justify-center relative z-10 px-4">
+          <GlassCard className="p-12 w-full max-w-[520px] flex flex-col items-center gap-10 border-t-4 border-t-indigo-500 shadow-2xl backdrop-blur-2xl">
+
+            {/* Icon & Title */}
+            <div className="flex flex-col items-center gap-6 text-center">
+              <div className="relative">
+                <div className="absolute inset-0 bg-indigo-500/30 blur-2xl rounded-full scale-150" />
+                <div className="relative bg-white/80 backdrop-blur-sm p-5 rounded-2xl shadow-xl border border-white/50 ring-1 ring-indigo-50">
+                  <Loader2 className="w-10 h-10 text-indigo-600 animate-spin" />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <h2 className="text-3xl font-bold text-slate-900 tracking-tight">AI 분석 진행 중</h2>
+                <p className="text-slate-500 text-lg font-medium">
+                  <span className="font-semibold text-indigo-600">{corpId}</span>의 데이터를 종합 분석하고 있습니다.
+                </p>
+              </div>
+            </div>
+
+            {/* Progress Section */}
+            <div className="w-full space-y-4">
+              <div className="flex justify-between items-end px-1">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+                  <span className="text-sm font-semibold text-slate-700">
+                    {loadingState.currentItem}
+                  </span>
+                </div>
+                <span className="text-sm font-bold text-indigo-600 font-mono tracking-wider">
+                  {loadingState.progress}%
+                </span>
+              </div>
+
+              <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden shadow-inner ring-1 ring-slate-200/50">
+                <div
+                  className="h-full bg-gradient-to-r from-indigo-500 to-indigo-400 rounded-full transition-all duration-700 ease-out relative overflow-hidden"
+                  style={{ width: `${loadingState.progress}%` }}
+                >
+                  <div className="absolute inset-0 w-full h-full bg-[linear-gradient(90deg,transparent_0%,rgba(255,255,255,0.5)_50%,transparent_100%)] animate-[shimmer_1.5s_infinite]" />
+                </div>
+              </div>
+
+              <p className="text-xs text-center text-slate-400 mt-4 leading-relaxed">
+                글로벌 뉴스, 재무 데이터, 공급망 리스크 등<br />수천 개의 데이터 포인트를 실시간으로 교차 검증 중입니다.
+              </p>
+            </div>
+          </GlassCard>
         </div>
       </MainLayout>
     );
@@ -153,6 +266,7 @@ export default function CorporateDetailPage() {
     return (
       <MainLayout>
         <div className="text-center py-16">
+          <AlertCircle className="w-8 h-8 text-muted-foreground mx-auto mb-4" />
           <p className="text-muted-foreground">기업 정보를 찾을 수 없습니다.</p>
           <Button variant="outline" onClick={() => navigate(-1)} className="mt-4">
             돌아가기
@@ -230,13 +344,12 @@ export default function CorporateDetailPage() {
             <h2 className="text-base font-semibold text-foreground mb-3 pb-2 border-b border-border flex items-center justify-between">
               <span>요약 (Executive Summary)</span>
               {loanInsight?.insight && (
-                <span className={`text-xs px-2 py-1 rounded ${
-                  loanInsight.insight.stance.level === 'CAUTION' ? 'bg-red-50 text-red-600 border border-red-200' :
-                  loanInsight.insight.stance.level === 'MONITORING' ? 'bg-orange-50 text-orange-600 border border-orange-200' :
-                  loanInsight.insight.stance.level === 'STABLE' ? 'bg-green-50 text-green-600 border border-green-200' :
-                  loanInsight.insight.stance.level === 'POSITIVE' ? 'bg-blue-50 text-blue-600 border border-blue-200' :
-                  'bg-gray-50 text-gray-600 border border-gray-200'
-                }`}>
+                <span className={`text-xs px-2 py-1 rounded ${loanInsight.insight.stance.level === 'CAUTION' ? 'bg-red-50 text-red-600 border border-red-200' :
+                    loanInsight.insight.stance.level === 'MONITORING' ? 'bg-orange-50 text-orange-600 border border-orange-200' :
+                      loanInsight.insight.stance.level === 'STABLE' ? 'bg-green-50 text-green-600 border border-green-200' :
+                        loanInsight.insight.stance.level === 'POSITIVE' ? 'bg-blue-50 text-blue-600 border border-blue-200' :
+                          'bg-gray-50 text-gray-600 border border-gray-200'
+                  }`}>
                   {loanInsight.insight.stance.label}
                 </span>
               )}
@@ -362,19 +475,19 @@ export default function CorporateDetailPage() {
                     {snapshot?.snapshot_json?.corp?.kyc_status && (
                       <>
                         <span className={`px-2 py-0.5 rounded text-xs ${snapshot.snapshot_json.corp.kyc_status.is_kyc_completed
-                            ? 'bg-green-100 text-green-700'
-                            : 'bg-yellow-100 text-yellow-700'
+                          ? 'bg-green-100 text-green-700'
+                          : 'bg-yellow-100 text-yellow-700'
                           }`}>
                           {snapshot.snapshot_json.corp.kyc_status.is_kyc_completed ? 'KYC완료' : 'KYC미완료'}
                         </span>
                         <span className={`px-2 py-0.5 rounded text-xs ${snapshot.snapshot_json.corp.kyc_status.internal_risk_grade === 'HIGH'
-                            ? 'bg-red-100 text-red-700'
-                            : snapshot.snapshot_json.corp.kyc_status.internal_risk_grade === 'MED'
-                              ? 'bg-yellow-100 text-yellow-700'
-                              : 'bg-green-100 text-green-700'
+                          ? 'bg-red-100 text-red-700'
+                          : snapshot.snapshot_json.corp.kyc_status.internal_risk_grade === 'MED'
+                            ? 'bg-yellow-100 text-yellow-700'
+                            : 'bg-green-100 text-green-700'
                           }`}>
                           {snapshot.snapshot_json.corp.kyc_status.internal_risk_grade === 'HIGH' ? '고위험' :
-                           snapshot.snapshot_json.corp.kyc_status.internal_risk_grade === 'MED' ? '중위험' : '저위험'}
+                            snapshot.snapshot_json.corp.kyc_status.internal_risk_grade === 'MED' ? '중위험' : '저위험'}
                         </span>
                       </>
                     )}
@@ -418,13 +531,12 @@ export default function CorporateDetailPage() {
                 여신 참고 관점 요약 (AI Risk Opinion)
               </span>
               {loanInsight?.insight && (
-                <span className={`text-xs px-2 py-1 rounded ${
-                  loanInsight.insight.stance.level === 'CAUTION' ? 'bg-red-50 text-red-600 border border-red-200' :
-                  loanInsight.insight.stance.level === 'MONITORING' ? 'bg-orange-50 text-orange-600 border border-orange-200' :
-                  loanInsight.insight.stance.level === 'STABLE' ? 'bg-green-50 text-green-600 border border-green-200' :
-                  loanInsight.insight.stance.level === 'POSITIVE' ? 'bg-blue-50 text-blue-600 border border-blue-200' :
-                  'bg-gray-50 text-gray-600 border border-gray-200'
-                }`}>
+                <span className={`text-xs px-2 py-1 rounded ${loanInsight.insight.stance.level === 'CAUTION' ? 'bg-red-50 text-red-600 border border-red-200' :
+                    loanInsight.insight.stance.level === 'MONITORING' ? 'bg-orange-50 text-orange-600 border border-orange-200' :
+                      loanInsight.insight.stance.level === 'STABLE' ? 'bg-green-50 text-green-600 border border-green-200' :
+                        loanInsight.insight.stance.level === 'POSITIVE' ? 'bg-blue-50 text-blue-600 border border-blue-200' :
+                          'bg-gray-50 text-gray-600 border border-gray-200'
+                  }`}>
                   {loanInsight.insight.stance.label}
                 </span>
               )}
@@ -623,22 +735,46 @@ export default function CorporateDetailPage() {
             </div>
 
             {(isLoadingProfile || refreshStatus === 'running') ? (
-              <div className="flex flex-col items-center justify-center py-8">
-                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground mb-2" />
-                <span className="text-sm text-muted-foreground">
-                  {refreshStatus === 'running' ? '프로필 생성 중...' : '외부 정보를 불러오는 중...'}
-                </span>
-                {refreshStatus === 'running' && jobStatus && (
-                  <span className="text-xs text-muted-foreground mt-1">
-                    {jobStatus.progress?.step || '대기 중'}
-                  </span>
+              <div className="flex flex-col items-center justify-center py-8 px-4">
+                {refreshStatus === 'running' ? (
+                  <>
+                    {/* Progress Bar with Step Info */}
+                    <div className="w-full max-w-md mb-4">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm font-medium text-foreground">
+                          {getJobProgress(jobStatus?.progress?.step).label}
+                        </span>
+                        <span className="text-sm text-muted-foreground">
+                          {getJobProgress(jobStatus?.progress?.step).progress}%
+                        </span>
+                      </div>
+                      <Progress
+                        value={getJobProgress(jobStatus?.progress?.step).progress}
+                        className="h-2"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>AI가 기업 정보를 분석하고 있습니다...</span>
+                    </div>
+                    <span className="text-xs text-muted-foreground mt-2">
+                      약 30초~1분 정도 소요될 수 있습니다.
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin text-muted-foreground mb-2" />
+                    <span className="text-sm text-muted-foreground">
+                      외부 정보를 불러오는 중...
+                    </span>
+                  </>
                 )}
               </div>
             ) : profileError ? (
               <div className="flex flex-col items-center justify-center py-8 text-sm text-muted-foreground">
                 {/* @ts-ignore - error structure may vary */}
                 {(profileError as any)?.response?.data?.detail?.error_code === 'PROFILE_NOT_FOUND' ||
-                 (profileError as any)?.message?.includes('404') ? (
+                  (profileError as any)?.message?.includes('404') ? (
                   <>
                     <AlertCircle className="w-5 h-5 mb-2 text-orange-500" />
                     <span>외부 정보가 아직 생성되지 않았습니다.</span>
@@ -811,11 +947,10 @@ export default function CorporateDetailPage() {
                           profile.macro_factors.map((f, i) => (
                             <span
                               key={i}
-                              className={`text-xs px-2 py-0.5 rounded flex items-center gap-1 ${
-                                f.impact === 'POSITIVE' ? 'bg-green-50 text-green-700 border border-green-200' :
-                                f.impact === 'NEGATIVE' ? 'bg-red-50 text-red-700 border border-red-200' :
-                                'bg-slate-100 text-slate-700 border border-slate-200'
-                              }`}
+                              className={`text-xs px-2 py-0.5 rounded flex items-center gap-1 ${f.impact === 'POSITIVE' ? 'bg-green-50 text-green-700 border border-green-200' :
+                                  f.impact === 'NEGATIVE' ? 'bg-red-50 text-red-700 border border-red-200' :
+                                    'bg-slate-100 text-slate-700 border border-slate-200'
+                                }`}
                             >
                               {f.impact === 'POSITIVE' && <TrendingUp className="w-3 h-3" />}
                               {f.impact === 'NEGATIVE' && <AlertTriangle className="w-3 h-3" />}
