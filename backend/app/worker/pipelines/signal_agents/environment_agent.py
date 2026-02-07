@@ -114,10 +114,12 @@ class EnvironmentSignalAgent(BaseSignalAgent):
 # 중요 규칙
 1. signal_type은 반드시 "ENVIRONMENT"
 2. event_type은 반드시 "POLICY_REGULATION_CHANGE"
-3. **summary에 "{corp_name}/{industry_name}에 미치는 영향 가능성" 1문장 필수**
-4. 기업/산업 특성과 무관한 일반 정책은 제외
+3. **summary에 "{corp_name}/{industry_name}에 미칠 수 있는 영향" 언급 권고** (관련성 불명확 시 "모니터링 권고"로 대체)
+4. 기업/산업 특성과 무관한 일반 정책은 **시그널 생성 금지**
 5. 불확실성 높으면 confidence LOW로 설정
 6. 금지 표현 사용 금지
+7. **Corp Profile과의 관련성 확인 필수** - 수출비중, 국가노출, 원자재 정보로 판단
+8. **Evidence에 없는 영향도, 수치 생성 금지**
 
 # 출력 형식 (JSON)
 ```json
@@ -206,9 +208,12 @@ class EnvironmentSignalAgent(BaseSignalAgent):
 □ 기업 프로필 기반으로 관련성이 있는가? (수출비중, 국가노출, 원자재 등)
 □ 일반적인 뉴스인가, 구체적인 정책/규제 변화인가?
 
-**필수 확인**:
-□ summary에 "{corp_name}/{industry_name}에 미치는 영향 가능성" 문장 포함
+**권고 사항**:
+□ summary에 "{corp_name}/{industry_name}에 미칠 수 있는 영향" 문장 포함 권고
+□ 관련성이 불명확하면 "해당 정책/규제 동향 모니터링 권고"로 대체 가능
 □ 관련 카테고리 명시
+□ **구체적 영향도(%, 금액)는 Evidence에서 확인된 경우에만 포함**
+□ **Corp Profile과 무관한 정책은 시그널 생성 금지**
 
 JSON 형식으로 출력하세요.
 """

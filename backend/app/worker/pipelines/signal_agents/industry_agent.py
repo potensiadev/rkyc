@@ -80,10 +80,11 @@ class IndustrySignalAgent(BaseSignalAgent):
 # 중요 규칙
 1. signal_type은 반드시 "INDUSTRY"
 2. event_type은 반드시 "INDUSTRY_SHOCK"
-3. **summary 마지막에 "{corp_name}에 미치는 영향" 1문장 필수**
+3. **summary 마지막에 "{corp_name}에 미칠 수 있는 영향" 언급 권고** (영향이 불명확하면 "모니터링 권고"로 대체)
 4. 특정 기업만 해당되는 이벤트는 DIRECT로 분류 (이 Agent에서 제외)
 5. 산업 전체 영향 여부가 불분명하면 시그널 생성 금지
 6. 금지 표현 사용 금지
+7. **Evidence에 없는 영향도, 수치 생성 금지** - 관련성만 언급, 구체적 영향은 확인 불가 시 생략
 
 # 출력 형식 (JSON)
 ```json
@@ -158,8 +159,10 @@ class IndustrySignalAgent(BaseSignalAgent):
 □ 산업 내 다수 기업에 영향을 주는가?
 □ 구조적/지속적 변화인가?
 
-**필수 확인**:
-□ summary 마지막에 "{corp_name}에 미치는 영향" 문장 포함
+**권고 사항**:
+□ summary 마지막에 "{corp_name}에 미칠 수 있는 영향" 문장 포함 권고
+□ 영향이 불명확하면 "해당 업황 변화 모니터링 권고"로 대체 가능
+□ **구체적 영향도(%, 금액)는 Evidence에서 확인된 경우에만 포함**
 
 JSON 형식으로 출력하세요.
 """

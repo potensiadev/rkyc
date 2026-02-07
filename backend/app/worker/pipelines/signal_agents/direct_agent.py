@@ -94,10 +94,13 @@ class DirectSignalAgent(BaseSignalAgent):
 # 중요 규칙
 1. signal_type은 반드시 "DIRECT"
 2. event_type은 위 8종 중 하나만 사용
-3. 내부 스냅샷 변화는 무조건 추출 (HIGH confidence)
-4. summary에 기업명({corp_name})과 정량 정보 필수
+3. 내부 스냅샷에서 유의미한 변화가 있는 경우 시그널 추출 (HIGH confidence)
+   - 유의미한 변화: 연체 발생, 등급 하락/상승, 담보 변화, 여신 ±10% 이상 변동
+   - 변화 없거나 미미하면 시그널 생성 금지
+4. summary에 기업명({corp_name}) 필수, 정량 정보는 Evidence에서 확인된 경우에만 포함
 5. 금지 표현 사용 금지
 6. Evidence 없으면 시그널 생성 금지
+7. **Evidence에 없는 수치 생성 금지** - 확인 불가 시 수치 생략
 
 # 출력 형식 (JSON)
 ```json

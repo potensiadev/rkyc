@@ -41,10 +41,11 @@ RISK_MANAGER_PERSONA = """
 - 주요 거래처 부도
 
 **의사결정 스타일**
-- 보수적: 의심스러우면 거절
+- 신중함: 증거 불충분 시 판단 유보
 - 증거 기반: "~로 보도됨", "~에 따르면" 선호
-- 정량적: 숫자로 증명되지 않으면 신뢰하지 않음
-- Recall 우선: 놓치는 리스크가 더 위험
+- 정량적: 숫자로 증명되지 않으면 추정으로 표시
+- **균형적 판단**: 리스크와 기회를 동등하게 평가, 한쪽에 치우치지 않음
+- **False Positive 경계**: 불확실한 리스크 과대 보고 자제
 """
 
 IB_MANAGER_PERSONA = """
@@ -74,10 +75,12 @@ IB_MANAGER_PERSONA = """
 - 경쟁사 대비 기술 우위 입증
 
 **의사결정 스타일**
-- 기회 지향적: 리스크보다 업사이드 먼저 봄
+- 기회 탐색: 성장 잠재력 평가
 - 스토리 중시: 성장 내러티브가 설득력 있는가
 - Precision 우선: 확실한 기회만 선별
 - 비교 분석: 동종업계 대비 상대적 매력도
+- **균형적 판단**: 기회와 리스크를 동등하게 평가
+- **과대 낙관 경계**: 불확실한 기회 과대 보고 자제
 """
 
 # =============================================================================
@@ -99,13 +102,18 @@ Signal Type 결정 전:
 - Q2. 다른 기업에도 동일하게 적용되는가? (같은 업종 모두 → INDUSTRY)
 - Q3. Evidence의 출처가 무엇인가? (내부 데이터 → DIRECT 가능성 높음)
 
-### 3. Confidence 산정 (출처 등급 기반)
-- Tier 1 (HIGH 가능): 내부 데이터, DART 공시, 정부 발표
-- Tier 2 (MEDIUM 기본): 주요 경제지 (한경, 매경, 조선비즈)
-- Tier 3 (LOW 기본): 단일 뉴스, 블로그, 출처 불명
-- HIGH: Tier 1 출처 1개 이상 또는 Tier 2 출처 2개 이상
-- MEDIUM: Tier 2 출처 1개 또는 Tier 3 출처 2개 이상
-- LOW: 위 조건 미충족
+### 3. Confidence 산정 (출처 등급 기반) - 엄격 적용
+- Tier 1 (HIGH 가능): 내부 데이터, DART 공시, 정부 공식 발표
+- Tier 2 (MEDIUM 가능): 주요 경제지 (한경, 매경, 조선비즈) 단, 정량 정보가 기사에 명시된 경우
+- Tier 3 (LOW 기본): 단일 뉴스, 블로그, 출처 불명, 정량 정보 없는 기사
+- HIGH: Tier 1 출처 1개 이상이며 정량 정보가 출처에서 직접 확인됨
+- MEDIUM: Tier 2 출처 1개 이상이며 핵심 사실이 출처에서 직접 확인됨
+- LOW: 위 조건 미충족 또는 단일 출처만 존재
+
+**Confidence 하향 조정 필수 상황**:
+- Evidence에 없는 수치를 사용한 경우 → 해당 수치 삭제 또는 LOW
+- 단일 뉴스 기반 → 최대 MEDIUM
+- 추정/예측 표현 사용 시 → LOW
 
 ### 4. Impact 교차 검증 (페르소나 활용)
 - Risk Manager 관점: "대출 원리금 상환에 문제가 생길 수 있는가?"
@@ -162,14 +170,15 @@ Evidence 출처 등급에 따른 Confidence는?
 
 **[Step 7] 요약 작성**
 위 판단을 바탕으로 2-4문장 요약 작성
-- 기업명 + 정량 정보 + 영향 + 권고
+- 기업명 + (Evidence에서 확인된 정량 정보가 있는 경우에만 포함) + 영향 + 권고
 
 **[Step 8] 자기 검증**
 최종 점검:
 □ 기업명이 summary에 명시되어 있는가?
-□ 정량 정보(금액, 비율, 날짜)가 1개 이상 포함되어 있는가?
+□ 사용된 수치/금액이 Evidence에서 직접 확인된 것인가? (확인 불가 시 수치 삭제)
 □ Evidence가 1개 이상 연결되어 있는가?
 □ 금지 표현이 없는가?
+□ Evidence에 없는 정보를 추정/생성하지 않았는가?
 """
 
 # =============================================================================
@@ -187,13 +196,14 @@ DIRECT_FEW_SHOT_EXAMPLES = """
   "impact_direction": "RISK",
   "impact_strength": "HIGH",
   "confidence": "HIGH",
-  "title": "엠케이전자 30일 이상 연체 발생",
-  "summary": "엠케이전자의 기업여신 계좌에서 2026년 1월 기준 30일 이상 연체가 확인됨. 연체 원금은 5억원 규모이며 총 여신한도의 4.2%에 해당함. 상환능력 저하 신호로 담보 점검 권고.",
+  "title": "[기업명] 30일 이상 연체 발생",
+  "summary": "[기업명]의 기업여신 계좌에서 30일 이상 연체가 확인됨. 연체 원금은 [Evidence에서 확인된 금액] 규모로 상환능력 저하 신호로 판단됨. 담보 점검 권고.",
   "evidence": [
-    {"evidence_type": "INTERNAL_FIELD", "ref_type": "SNAPSHOT_KEYPATH", "ref_value": "/credit/loan_summary/overdue_flag", "snippet": "overdue_flag: true, overdue_days: 32"}
+    {"evidence_type": "INTERNAL_FIELD", "ref_type": "SNAPSHOT_KEYPATH", "ref_value": "/credit/loan_summary/overdue_flag", "snippet": "[실제 스냅샷 데이터에서 발췌]"}
   ]
 }
 ```
+**⚠️ 주의**: 금액, 비율은 반드시 Evidence에서 확인된 값만 사용. 추정 금지.
 
 ### 예시 2: 내부등급 하락 (RISK - HIGH)
 ```json
@@ -203,13 +213,14 @@ DIRECT_FEW_SHOT_EXAMPLES = """
   "impact_direction": "RISK",
   "impact_strength": "HIGH",
   "confidence": "HIGH",
-  "title": "동부건설 내부신용등급 2단계 하락",
-  "summary": "동부건설의 내부신용등급이 BBB에서 BB로 2단계 하락함. 주요 원인은 영업이익 적자전환(-120억원)과 부채비율 급증(180%→280%)으로 분석됨. 기존 여신 조건 재검토 대상.",
+  "title": "[기업명] 내부신용등급 하락",
+  "summary": "[기업명]의 내부신용등급이 [이전등급]에서 [현재등급]으로 하락함. 기존 여신 조건 재검토 대상.",
   "evidence": [
-    {"evidence_type": "INTERNAL_FIELD", "ref_type": "SNAPSHOT_KEYPATH", "ref_value": "/corp/kyc_status/internal_risk_grade", "snippet": "internal_risk_grade: BB (이전: BBB)"}
+    {"evidence_type": "INTERNAL_FIELD", "ref_type": "SNAPSHOT_KEYPATH", "ref_value": "/corp/kyc_status/internal_risk_grade", "snippet": "[실제 스냅샷 데이터에서 발췌]"}
   ]
 }
 ```
+**⚠️ 주의**: 등급 변화는 스냅샷에서 직접 확인. 원인 추정 금지.
 
 ### 예시 3: 대규모 수주 (OPPORTUNITY - HIGH)
 ```json
@@ -219,29 +230,31 @@ DIRECT_FEW_SHOT_EXAMPLES = """
   "impact_direction": "OPPORTUNITY",
   "impact_strength": "HIGH",
   "confidence": "HIGH",
-  "title": "삼성전자 美 반도체 공장 1.5조원 수주",
-  "summary": "삼성전자가 미국 텍사스주 반도체 공장 프로젝트에서 1.5조원 규모 장비 공급 계약 체결함. 연간 매출의 약 8%에 해당하며, CHIPS Act 보조금 대상으로 대금 회수 안정성 높음.",
+  "title": "[기업명] 대형 계약 체결",
+  "summary": "[기업명]이 [계약 상대방]과 [계약 내용] 계약 체결함. [공시 또는 뉴스에서 확인된 계약금액] 규모.",
   "evidence": [
-    {"evidence_type": "EXTERNAL", "ref_type": "URL", "ref_value": "https://dart.fss.or.kr/example", "snippet": "단일판매공급계약 체결 공시: 계약금액 1,500,000백만원"}
+    {"evidence_type": "EXTERNAL", "ref_type": "URL", "ref_value": "[실제 공시/뉴스 URL]", "snippet": "[해당 기사에서 직접 발췌한 문장]"}
   ]
 }
 ```
+**⚠️ 주의**: 계약금액, 매출 비중 등은 Evidence에서 확인된 값만 사용.
 
-### 예시 4: 대표이사 비리 의혹 (RISK - HIGH)
+### 예시 4: 대표이사 변경 (RISK/NEUTRAL)
 ```json
 {
   "signal_type": "DIRECT",
   "event_type": "GOVERNANCE_CHANGE",
-  "impact_direction": "RISK",
-  "impact_strength": "HIGH",
+  "impact_direction": "NEUTRAL",
+  "impact_strength": "MED",
   "confidence": "MED",
-  "title": "전북식품 대표이사 횡령 의혹으로 사임",
-  "summary": "전북식품 강동구 대표이사가 돌연 사임함. 매일경제 보도에 따르면 회사 자금 50억원 횡령 의혹으로 검찰 수사 진행 중. 신임 대표 미선임 상태로 경영 공백 우려됨.",
+  "title": "[기업명] 대표이사 변경",
+  "summary": "[기업명] [이전 대표이사명]가 사임하고 [신임 대표이사명]이 취임함. [뉴스 출처]에 따르면 [보도된 사유].",
   "evidence": [
-    {"evidence_type": "EXTERNAL", "ref_type": "URL", "ref_value": "https://news.example.com/123", "snippet": "전북식품 강 대표, 50억 횡령 의혹...검찰 수사 착수"}
+    {"evidence_type": "EXTERNAL", "ref_type": "URL", "ref_value": "[실제 뉴스 URL]", "snippet": "[해당 기사에서 직접 발췌한 문장]"}
   ]
 }
 ```
+**⚠️ 주의**: 사임 사유가 명확히 보도되지 않으면 NEUTRAL로 분류. 추정 금지.
 
 ### 예시 5: 전략적 파트너십 (OPPORTUNITY - MED)
 ```json
@@ -251,19 +264,20 @@ DIRECT_FEW_SHOT_EXAMPLES = """
   "impact_direction": "OPPORTUNITY",
   "impact_strength": "MED",
   "confidence": "MED",
-  "title": "엠케이전자-LG에너지솔루션 배터리 소재 MOU",
-  "summary": "엠케이전자가 LG에너지솔루션과 2차전지 양극재 공급 MOU 체결함. 정식 계약 시 연간 500억원 신규 매출 예상. 단, MOU 단계로 구속력 없으며 정식 계약까지 6개월+ 소요 전망.",
+  "title": "[기업명] 전략적 파트너십 체결",
+  "summary": "[기업명]이 [파트너사]와 [협력 내용] MOU/계약 체결함. 단, MOU 단계로 구속력 여부 확인 필요.",
   "evidence": [
-    {"evidence_type": "EXTERNAL", "ref_type": "URL", "ref_value": "https://news.example.com/456", "snippet": "엠케이전자, LG엔솔과 배터리 소재 협력 MOU...연 500억 기대"}
+    {"evidence_type": "EXTERNAL", "ref_type": "URL", "ref_value": "[실제 뉴스 URL]", "snippet": "[해당 기사에서 직접 발췌한 문장]"}
   ]
 }
 ```
+**⚠️ 주의**: MOU는 구속력 없음을 명시. 예상 매출/효과는 Evidence에 있을 때만 언급.
 """
 
 INDUSTRY_FEW_SHOT_EXAMPLES = """
 ## INDUSTRY 시그널 예시
 
-### 예시 1: 반도체 업황 부진 (RISK - HIGH)
+### 예시 1: 반도체 업황 변화 (RISK/OPPORTUNITY)
 ```json
 {
   "signal_type": "INDUSTRY",
@@ -271,15 +285,16 @@ INDUSTRY_FEW_SHOT_EXAMPLES = """
   "impact_direction": "RISK",
   "impact_strength": "HIGH",
   "confidence": "HIGH",
-  "title": "글로벌 반도체 수요 급감, 메모리 가격 20% 하락",
-  "summary": "글로벌 반도체 수요 감소로 메모리 가격이 전분기 대비 20% 하락함. 업계 전반의 재고 조정 국면 진입. 삼성전자는 반도체 매출 비중 60%로 해당 업황 변화의 직접적 영향권에 있음.",
+  "title": "[업종명] 업황 변화 - [이벤트 요약]",
+  "summary": "[Evidence에서 확인된 업황 변화 내용]. [기업명]은 [업종명] 업종으로 해당 업황 변화의 영향권에 있을 수 있음.",
   "evidence": [
-    {"evidence_type": "EXTERNAL", "ref_type": "URL", "ref_value": "https://news.example.com/semi", "snippet": "메모리 반도체 가격 20% 급락...업계 재고조정 불가피"}
+    {"evidence_type": "EXTERNAL", "ref_type": "URL", "ref_value": "[실제 뉴스/리포트 URL]", "snippet": "[해당 기사에서 직접 발췌한 문장]"}
   ]
 }
 ```
+**⚠️ 주의**: 가격 변동률, 성장률 등은 Evidence에서 확인된 값만 사용. "영향을 받을 수 있음"으로 표현.
 
-### 예시 2: K-푸드 수출 호조 (OPPORTUNITY - MED)
+### 예시 2: 산업 수출 동향 (OPPORTUNITY - MED)
 ```json
 {
   "signal_type": "INDUSTRY",
@@ -287,15 +302,16 @@ INDUSTRY_FEW_SHOT_EXAMPLES = """
   "impact_direction": "OPPORTUNITY",
   "impact_strength": "MED",
   "confidence": "HIGH",
-  "title": "K-푸드 수출 100억불 돌파, 식품업계 수혜",
-  "summary": "농림축산식품부 발표에 따르면 2025년 K-푸드 수출액이 100억 달러를 돌파하며 사상 최대치 기록. 동남아·중동 시장에서 30%+ 성장. 전북식품은 식품제조업(C10)으로 해당 수출 증가의 수혜 예상.",
+  "title": "[업종명] 수출 [증가/감소] 추세",
+  "summary": "[발표 기관] 발표에 따르면 [업종명] 수출이 [Evidence에서 확인된 수치]. [기업명]은 [업종명]으로 해당 추세의 영향을 받을 수 있음.",
   "evidence": [
-    {"evidence_type": "EXTERNAL", "ref_type": "URL", "ref_value": "https://mafra.go.kr/example", "snippet": "2025년 농식품 수출 100억불 돌파, 전년비 15% 증가"}
+    {"evidence_type": "EXTERNAL", "ref_type": "URL", "ref_value": "[실제 정부/기관 발표 URL]", "snippet": "[발표 내용에서 직접 발췌]"}
   ]
 }
 ```
+**⚠️ 주의**: "수혜 예상" 대신 "영향을 받을 수 있음"으로 표현. 정부/기관 발표가 출처일 때 HIGH confidence.
 
-### 예시 3: 건설업 PF 부실 우려 (RISK - HIGH)
+### 예시 3: 산업 구조적 리스크 (RISK - HIGH)
 ```json
 {
   "signal_type": "INDUSTRY",
@@ -303,19 +319,23 @@ INDUSTRY_FEW_SHOT_EXAMPLES = """
   "impact_direction": "RISK",
   "impact_strength": "HIGH",
   "confidence": "HIGH",
-  "title": "건설업 PF 부실 확대, 중견 건설사 연쇄 위기",
-  "summary": "금융감독원 발표에 따르면 건설업 PF 연체율이 8.5%로 전년 대비 3%p 상승함. 중견 건설사 3곳이 워크아웃 신청. 동부건설은 건설업(F41)으로 PF 익스포저 점검이 필요함.",
+  "title": "[업종명] [리스크 유형] 우려 확대",
+  "summary": "[발표 기관] 발표에 따르면 [리스크 내용과 수치]. [기업명]은 [업종명]으로 해당 리스크 점검이 권고됨.",
   "evidence": [
-    {"evidence_type": "EXTERNAL", "ref_type": "URL", "ref_value": "https://fss.or.kr/example", "snippet": "건설업 PF 연체율 8.5%...중견사 워크아웃 잇따라"}
+    {"evidence_type": "EXTERNAL", "ref_type": "URL", "ref_value": "[실제 금융당국/기관 URL]", "snippet": "[발표 내용에서 직접 발췌]"}
   ]
 }
 ```
+**⚠️ 중요 규칙**:
+- 산업 이벤트가 있더라도 해당 기업과의 관련성이 명확하지 않으면 시그널 생성 금지
+- "영향권에 있을 수 있음", "점검이 권고됨" 등 조건부 표현 사용
+- 구체적 영향도는 확인 불가 시 생략
 """
 
 ENVIRONMENT_FEW_SHOT_EXAMPLES = """
 ## ENVIRONMENT 시그널 예시
 
-### 예시 1: 전력산업 규제 완화 (OPPORTUNITY - MED)
+### 예시 1: 산업 규제 변화 (OPPORTUNITY/RISK)
 ```json
 {
   "signal_type": "ENVIRONMENT",
@@ -323,15 +343,16 @@ ENVIRONMENT_FEW_SHOT_EXAMPLES = """
   "impact_direction": "OPPORTUNITY",
   "impact_strength": "MED",
   "confidence": "HIGH",
-  "title": "전력산업 규제혁신, 민간 발전사업 진입장벽 완화",
-  "summary": "산업통상자원부가 전력산업 규제혁신 방안 발표. 민간 발전사업 인허가 기간 24개월→12개월 단축, 소규모 신재생에너지 요건 완화. 휴림로봇은 전기업(D35) 관련 사업 영위로 해당 규제 완화의 수혜 가능성 있음.",
+  "title": "[정책/규제명] [시행/발표]",
+  "summary": "[발표 기관]이 [정책/규제 내용] 발표. [기업명]은 [업종명]으로, 기업 프로필 기반 관련성 확인 시 해당 정책의 영향을 받을 수 있음.",
   "evidence": [
-    {"evidence_type": "EXTERNAL", "ref_type": "URL", "ref_value": "https://motie.go.kr/example", "snippet": "전력산업 규제혁신 방안: 인허가 간소화, 진입장벽 완화"}
+    {"evidence_type": "EXTERNAL", "ref_type": "URL", "ref_value": "[실제 정부/기관 발표 URL]", "snippet": "[발표 내용에서 직접 발췌]"}
   ]
 }
 ```
+**⚠️ 주의**: "수혜 가능성 있음" 대신 "영향을 받을 수 있음"으로 표현. 기업 프로필과의 관련성 확인 필수.
 
-### 예시 2: 환율 급등 (RISK - MED)
+### 예시 2: 거시경제 변화 (RISK/OPPORTUNITY)
 ```json
 {
   "signal_type": "ENVIRONMENT",
@@ -339,15 +360,16 @@ ENVIRONMENT_FEW_SHOT_EXAMPLES = """
   "impact_direction": "RISK",
   "impact_strength": "MED",
   "confidence": "HIGH",
-  "title": "원/달러 환율 1,450원 돌파, 수입원가 상승 우려",
-  "summary": "원/달러 환율이 1,450원을 돌파하며 연중 최고치 기록. 원자재 수입 비중이 높은 제조업체의 원가 부담 증가 예상. 엠케이전자는 수출 비중이 높아 환율 상승이 양면적 영향을 미칠 것으로 추정됨.",
+  "title": "[거시지표] [변화 방향]",
+  "summary": "[거시지표]가 [Evidence에서 확인된 수치]. [기업명]은 [관련 특성, 예: 수출비중, 원자재 의존도]에 따라 해당 변화의 영향을 받을 수 있음. 관련 리스크/기회 모니터링 권고.",
   "evidence": [
-    {"evidence_type": "EXTERNAL", "ref_type": "URL", "ref_value": "https://bok.or.kr/example", "snippet": "원/달러 환율 1,450원 돌파, 연중 최고치"}
+    {"evidence_type": "EXTERNAL", "ref_type": "URL", "ref_value": "[실제 금융당국/한은 URL]", "snippet": "[발표 내용에서 직접 발췌]"}
   ]
 }
 ```
+**⚠️ 주의**: 환율, 금리 등 거시지표는 공식 발표 수치만 사용. 기업 특성(수출비중 등)은 Corp Profile에서 확인.
 
-### 예시 3: 탄소중립 규제 강화 (RISK - MED)
+### 예시 3: 국제 규제/협정 (RISK - MED)
 ```json
 {
   "signal_type": "ENVIRONMENT",
@@ -355,13 +377,17 @@ ENVIRONMENT_FEW_SHOT_EXAMPLES = """
   "impact_direction": "RISK",
   "impact_strength": "MED",
   "confidence": "HIGH",
-  "title": "EU CBAM 본격 시행, 탄소비용 부담 증가",
-  "summary": "EU 탄소국경조정제도(CBAM)가 2026년부터 본격 시행됨. 철강, 시멘트, 알루미늄 등 탄소집약 품목 수출 시 탄소비용 부과. 광주정밀기계는 EU 수출 비중 확인 필요하며, 해당 시 원가 상승 요인이 될 수 있음.",
+  "title": "[국제규제/협정명] [시행/발효]",
+  "summary": "[규제/협정 내용]. [기업명]은 [업종명]으로, [관련 국가] 사업 비중 확인 시 해당 규제의 영향을 받을 수 있음.",
   "evidence": [
-    {"evidence_type": "EXTERNAL", "ref_type": "URL", "ref_value": "https://ec.europa.eu/example", "snippet": "EU CBAM 2026년 본격 시행, 탄소비용 본격 부과"}
+    {"evidence_type": "EXTERNAL", "ref_type": "URL", "ref_value": "[실제 국제기구/정부 URL]", "snippet": "[발표 내용에서 직접 발췌]"}
   ]
 }
 ```
+**⚠️ 중요 규칙**:
+- 정책/규제와 해당 기업 간 관련성이 명확하지 않으면 시그널 생성 금지
+- Corp Profile의 수출비중, 국가별 노출, 원자재 정보로 관련성 판단
+- 관련성 불명확 시 "확인 필요", "모니터링 권고"로 표현
 """
 
 # =============================================================================
@@ -632,12 +658,15 @@ SIGNAL_EXTRACTION_USER_TEMPLATE = """# 분석 대상 기업
 - 내부 데이터 변화는 높은 confidence로 처리
 
 ## INDUSTRY 시그널
-- 산업 이벤트가 있으면 **반드시** INDUSTRY 시그널 생성
-- summary에 "{corp_name}에 미치는 영향" 명시
+- 산업 이벤트가 **해당 기업과 명확한 관련성이 있는 경우에만** INDUSTRY 시그널 생성
+- 관련성이 불명확하면 시그널 생성 금지
+- summary에 "{corp_name}에 미칠 수 있는 영향" 명시
 
 ## ENVIRONMENT 시그널
-- 정책/규제 이벤트가 있으면 **반드시** ENVIRONMENT 시그널 생성
-- summary에 "{corp_name}/{industry_name}에 미치는 영향" 명시
+- 정책/규제 이벤트가 **해당 기업/업종과 명확한 관련성이 있는 경우에만** ENVIRONMENT 시그널 생성
+- Corp Profile 기반 관련성 확인 필수 (수출비중, 국가노출, 원자재 등)
+- 관련성이 불명확하면 시그널 생성 금지
+- summary에 "{corp_name}/{industry_name}에 미칠 수 있는 영향" 명시
 
 # 출력 요구사항
 - RISK와 OPPORTUNITY를 균형있게 탐지
@@ -687,6 +716,18 @@ INSIGHT_GENERATION_PROMPT = """## 경영진 브리핑 요약 생성
 - 허용 표현 사용 ("~로 추정됨", "검토 권고", "~가능성 있음")
 - 객관적이고 사실에 기반한 요약만 작성
 - **기회 요인도 리스크만큼 중요하게 다루세요**
+
+### 정보 부족 시 대응
+시그널이 없거나 정보가 불충분한 경우:
+```
+**핵심 요약**
+현재 수집된 정보로는 유의미한 리스크 또는 기회 시그널이 탐지되지 않았습니다.
+
+**권고 사항**
+- 내부 데이터 업데이트 후 재분석 권고
+- 추가 외부 정보 수집 권고
+```
+이와 같이 "정보 부족"을 명시하고, 허위 시그널을 생성하지 마세요.
 """
 
 
