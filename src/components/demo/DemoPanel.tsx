@@ -1,9 +1,10 @@
 /**
  * Demo Mode Panel
  * 시연용 수동 분석 실행 기능 (PRD 5.4.2)
+ * 8단계 파이프라인 시각화 포함
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useAnalyzeJob, useJobStatus, useCorporations } from '@/hooks/useApi';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
@@ -14,9 +15,118 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Progress } from '@/components/ui/progress';
-import { AlertCircle, CheckCircle, Loader2, Play, RefreshCw, Clock } from 'lucide-react';
+import {
+  AlertCircle,
+  CheckCircle,
+  Loader2,
+  Play,
+  RefreshCw,
+  Clock,
+  Database,
+  FileText,
+  Building2,
+  Globe,
+  Layers,
+  Zap,
+  Shield,
+  Brain,
+  ChevronRight
+} from 'lucide-react';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
+
+// 8단계 파이프라인 정의
+const PIPELINE_STEPS = [
+  { id: 'SNAPSHOT', label: '데이터 수집', icon: Database, description: '내부 스냅샷 로드' },
+  { id: 'DOC_INGEST', label: '문서 분석', icon: FileText, description: 'KYC 문서 파싱' },
+  { id: 'PROFILING', label: '기업 프로파일링', icon: Building2, description: 'Perplexity + Gemini' },
+  { id: 'EXTERNAL', label: '외부 검색', icon: Globe, description: '뉴스/공시 수집' },
+  { id: 'CONTEXT', label: '컨텍스트 구성', icon: Layers, description: '통합 컨텍스트 생성' },
+  { id: 'SIGNAL', label: '시그널 추출', icon: Zap, description: '3-Agent 병렬 분석' },
+  { id: 'VALIDATION', label: '검증', icon: Shield, description: 'Cross-Validation' },
+  { id: 'INSIGHT', label: '인사이트 생성', icon: Brain, description: 'AI 분석 리포트' },
+];
+
+type StepStatus = 'pending' | 'running' | 'completed' | 'failed';
+
+interface PipelineStepProps {
+  step: typeof PIPELINE_STEPS[number];
+  status: StepStatus;
+  isLast: boolean;
+}
+
+function PipelineStep({ step, status, isLast }: PipelineStepProps) {
+  const Icon = step.icon;
+
+  return (
+    <div className="flex items-center">
+      <div className="flex flex-col items-center">
+        {/* Step Circle */}
+        <div
+          className={cn(
+            "w-10 h-10 rounded-full flex items-center justify-center transition-all duration-500 relative",
+            status === 'completed' && "bg-green-500 text-white shadow-lg shadow-green-200",
+            status === 'running' && "bg-amber-500 text-white shadow-lg shadow-amber-200 animate-pulse",
+            status === 'pending' && "bg-slate-100 text-slate-400 border-2 border-slate-200",
+            status === 'failed' && "bg-red-500 text-white shadow-lg shadow-red-200"
+          )}
+        >
+          {status === 'running' ? (
+            <Loader2 className="w-5 h-5 animate-spin" />
+          ) : status === 'completed' ? (
+            <CheckCircle className="w-5 h-5" />
+          ) : status === 'failed' ? (
+            <AlertCircle className="w-5 h-5" />
+          ) : (
+            <Icon className="w-5 h-5" />
+          )}
+
+          {/* Pulse ring for running state */}
+          {status === 'running' && (
+            <span className="absolute inset-0 rounded-full bg-amber-400 animate-ping opacity-30" />
+          )}
+        </div>
+
+        {/* Step Label */}
+        <div className="mt-2 text-center w-20">
+          <p className={cn(
+            "text-xs font-semibold truncate",
+            status === 'completed' && "text-green-700",
+            status === 'running' && "text-amber-700",
+            status === 'pending' && "text-slate-400",
+            status === 'failed' && "text-red-700"
+          )}>
+            {step.label}
+          </p>
+          <p className={cn(
+            "text-[10px] truncate mt-0.5",
+            status === 'running' ? "text-amber-600" : "text-slate-400"
+          )}>
+            {step.description}
+          </p>
+        </div>
+      </div>
+
+      {/* Connector Line */}
+      {!isLast && (
+        <div className="flex items-center mx-1 -mt-6">
+          <div
+            className={cn(
+              "w-6 h-0.5 transition-all duration-500",
+              status === 'completed' ? "bg-green-400" : "bg-slate-200"
+            )}
+          />
+          <ChevronRight
+            className={cn(
+              "w-3 h-3 -ml-1",
+              status === 'completed' ? "text-green-400" : "text-slate-300"
+            )}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function DemoPanel() {
   const [selectedCorpId, setSelectedCorpId] = useState<string>('');
@@ -41,6 +151,41 @@ export function DemoPanel() {
 
   const isDemoMode = import.meta.env.VITE_DEMO_MODE?.toLowerCase() === 'true';
 
+  // 각 단계의 상태 계산
+  const stepStatuses = useMemo(() => {
+    const currentStep = jobStatus?.progress?.step;
+    const jobState = jobStatus?.status;
+
+    if (!currentJobId || !jobStatus) {
+      return PIPELINE_STEPS.map(() => 'pending' as StepStatus);
+    }
+
+    if (jobState === 'DONE') {
+      return PIPELINE_STEPS.map(() => 'completed' as StepStatus);
+    }
+
+    if (jobState === 'FAILED') {
+      const currentIndex = PIPELINE_STEPS.findIndex(s => s.id === currentStep);
+      return PIPELINE_STEPS.map((_, i) => {
+        if (i < currentIndex) return 'completed' as StepStatus;
+        if (i === currentIndex) return 'failed' as StepStatus;
+        return 'pending' as StepStatus;
+      });
+    }
+
+    if (jobState === 'QUEUED') {
+      return PIPELINE_STEPS.map(() => 'pending' as StepStatus);
+    }
+
+    // RUNNING state
+    const currentIndex = PIPELINE_STEPS.findIndex(s => s.id === currentStep);
+    return PIPELINE_STEPS.map((_, i) => {
+      if (i < currentIndex) return 'completed' as StepStatus;
+      if (i === currentIndex) return 'running' as StepStatus;
+      return 'pending' as StepStatus;
+    });
+  }, [jobStatus, currentJobId]);
+
   // Demo 모드가 아니면 렌더링하지 않음
   if (!isDemoMode) return null;
 
@@ -50,6 +195,7 @@ export function DemoPanel() {
     try {
       const result = await analyzeJob.mutateAsync(selectedCorpId);
       setCurrentJobId(result.job_id);
+      setIsTimedOut(false);
     } catch (error) {
       console.error('Job trigger failed:', error);
     }
@@ -62,62 +208,68 @@ export function DemoPanel() {
     setIsTimedOut(false);
   };
 
-  const getStatusIcon = () => {
+  const getStatusBadge = () => {
     if (isTimedOut) {
-      return <Clock className="w-4 h-4 text-orange-600" />;
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-700">
+          <Clock className="w-3 h-3" />
+          시간 초과
+        </span>
+      );
     }
     if (!jobStatus) return null;
 
     switch (jobStatus.status) {
       case 'QUEUED':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600">
+            <Clock className="w-3 h-3" />
+            대기 중
+          </span>
+        );
       case 'RUNNING':
-        return <Loader2 className="w-4 h-4 animate-spin text-amber-600" />;
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+            <Loader2 className="w-3 h-3 animate-spin" />
+            분석 중
+          </span>
+        );
       case 'DONE':
-        return <CheckCircle className="w-4 h-4 text-green-600" />;
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+            <CheckCircle className="w-3 h-3" />
+            완료
+          </span>
+        );
       case 'FAILED':
-        return <AlertCircle className="w-4 h-4 text-red-600" />;
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">
+            <AlertCircle className="w-3 h-3" />
+            실패
+          </span>
+        );
     }
   };
 
-  const getStatusText = () => {
-    if (isTimedOut) {
-      return '시간 초과 (2분)';
-    }
-    if (!jobStatus) return '';
-
-    switch (jobStatus.status) {
-      case 'QUEUED':
-        return '대기 중...';
-      case 'RUNNING':
-        return `분석 중... (${jobStatus.progress.step || '준비'})`;
-      case 'DONE':
-        return '분석 완료!';
-      case 'FAILED':
-        return `실패: ${jobStatus.error?.message || '알 수 없는 오류'}`;
-    }
-  };
-
-  const getProgressPercent = () => {
-    if (!jobStatus) return 0;
-    return jobStatus.progress.percent || 0;
-  };
+  const selectedCorpName = corporations.find(c => c.id === selectedCorpId)?.name;
 
   return (
-    <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
-      <div className="flex items-center gap-2 mb-3">
-        <span className="bg-amber-500 text-white text-xs px-2 py-0.5 rounded font-medium">
-          DEMO MODE
-        </span>
-        <span className="text-sm text-amber-700">시연용 수동 실행 기능</span>
+    <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-xl p-5 mb-6 shadow-sm">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <span className="bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs px-3 py-1 rounded-full font-semibold shadow-sm">
+            DEMO MODE
+          </span>
+          <span className="text-sm font-medium text-amber-800">AI 리스크 분석 파이프라인</span>
+        </div>
+        {getStatusBadge()}
       </div>
 
-      <p className="text-xs text-amber-600 mb-4">
-        접속/조회는 분석을 실행하지 않습니다. 아래 기능은 시연을 위한 수동 실행입니다.
-      </p>
-
-      <div className="flex items-center gap-3">
+      {/* Controls */}
+      <div className="flex items-center gap-3 mb-5">
         <Select value={selectedCorpId} onValueChange={setSelectedCorpId}>
-          <SelectTrigger className="w-[200px] bg-white">
+          <SelectTrigger className="w-[200px] bg-white border-amber-200 focus:ring-amber-500">
             <SelectValue placeholder="기업 선택" />
           </SelectTrigger>
           <SelectContent>
@@ -132,56 +284,103 @@ export function DemoPanel() {
         <Button
           onClick={handleRunAnalysis}
           disabled={!selectedCorpId || analyzeJob.isPending || jobStatus?.status === 'RUNNING' || jobStatus?.status === 'QUEUED'}
-          className="bg-amber-600 hover:bg-amber-700"
+          className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 shadow-md"
         >
           <Play className="w-4 h-4 mr-2" />
-          분석 실행 (시연용)
+          분석 실행
         </Button>
 
-        <Button variant="outline" onClick={handleRefresh}>
+        <Button
+          variant="outline"
+          onClick={handleRefresh}
+          className="border-amber-300 text-amber-700 hover:bg-amber-100"
+        >
           <RefreshCw className="w-4 h-4 mr-2" />
-          결과 새로고침
+          새로고침
         </Button>
       </div>
 
-      {/* 작업 상태 표시 */}
-      {currentJobId && (jobStatus || isTimedOut) && (
-        <div className="mt-4 p-3 bg-white rounded-md border border-amber-100">
-          <div className="flex items-center gap-2 mb-2">
-            {getStatusIcon()}
-            <span className="text-sm font-medium text-amber-800">{getStatusText()}</span>
+      {/* Pipeline Visualization */}
+      {currentJobId && (
+        <div className="bg-white rounded-lg border border-amber-100 p-5 shadow-inner">
+          {/* Target Corporation */}
+          {selectedCorpName && (
+            <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-100">
+              <Building2 className="w-4 h-4 text-slate-400" />
+              <span className="text-sm text-slate-600">분석 대상:</span>
+              <span className="text-sm font-semibold text-slate-800">{selectedCorpName}</span>
+            </div>
+          )}
+
+          {/* 8-Stage Pipeline */}
+          <div className="flex items-start justify-between overflow-x-auto pb-2">
+            {PIPELINE_STEPS.map((step, index) => (
+              <PipelineStep
+                key={step.id}
+                step={step}
+                status={stepStatuses[index]}
+                isLast={index === PIPELINE_STEPS.length - 1}
+              />
+            ))}
           </div>
 
-          {jobStatus && (jobStatus.status === 'QUEUED' || jobStatus.status === 'RUNNING') && (
-            <Progress value={getProgressPercent()} className="h-2" />
-          )}
+          {/* Status Messages */}
+          <div className="mt-4 pt-3 border-t border-slate-100">
+            {jobStatus?.status === 'DONE' && (
+              <div className="flex items-center gap-2 text-green-700 bg-green-50 px-3 py-2 rounded-lg">
+                <CheckCircle className="w-4 h-4" />
+                <span className="text-sm font-medium">
+                  분석 완료! "새로고침" 버튼을 눌러 시그널을 확인하세요.
+                </span>
+              </div>
+            )}
 
-          {jobStatus?.status === 'DONE' && (
-            <p className="text-xs text-green-600">
-              분석이 완료되었습니다. "결과 새로고침" 버튼을 눌러 시그널을 확인하세요.
-            </p>
-          )}
+            {jobStatus?.status === 'FAILED' && (
+              <div className="flex items-center gap-2 text-red-700 bg-red-50 px-3 py-2 rounded-lg">
+                <AlertCircle className="w-4 h-4" />
+                <span className="text-sm font-medium">
+                  분석 실패: {jobStatus.error?.message || '알 수 없는 오류가 발생했습니다.'}
+                </span>
+              </div>
+            )}
 
-          {jobStatus?.status === 'FAILED' && (
-            <p className="text-xs text-red-600">
-              Worker가 아직 구현되지 않았습니다. LLM API 키 설정 후 사용 가능합니다.
-            </p>
-          )}
+            {isTimedOut && (
+              <div className="flex items-center gap-2 text-orange-700 bg-orange-50 px-3 py-2 rounded-lg">
+                <Clock className="w-4 h-4" />
+                <span className="text-sm font-medium">
+                  작업 시간 초과 (2분). Worker 상태를 확인하거나 다시 시도하세요.
+                </span>
+              </div>
+            )}
 
-          {isTimedOut && (
-            <p className="text-xs text-orange-600">
-              분석 작업이 2분을 초과했습니다. Worker 연결 상태를 확인하거나 다시 시도하세요.
-            </p>
-          )}
+            {jobStatus?.status === 'RUNNING' && (
+              <div className="flex items-center gap-2 text-amber-700 bg-amber-50 px-3 py-2 rounded-lg">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span className="text-sm font-medium">
+                  {PIPELINE_STEPS.find(s => s.id === jobStatus.progress?.step)?.label || '처리 중'}...
+                </span>
+                <span className="text-xs text-amber-600 ml-auto">
+                  {jobStatus.progress?.percent || 0}%
+                </span>
+              </div>
+            )}
+
+            {jobStatus?.status === 'QUEUED' && (
+              <div className="flex items-center gap-2 text-slate-600 bg-slate-50 px-3 py-2 rounded-lg">
+                <Clock className="w-4 h-4" />
+                <span className="text-sm font-medium">
+                  Worker 대기 중... 잠시 후 분석이 시작됩니다.
+                </span>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
-      {/* Worker 미구현 안내 (job이 QUEUED 상태로 유지될 때) */}
-      {currentJobId && jobStatus?.status === 'QUEUED' && (
-        <div className="mt-2 text-xs text-amber-600">
-          * 현재 Worker가 구현되지 않아 작업이 대기 상태로 유지됩니다.
-        </div>
-      )}
+      {/* Info Text */}
+      <p className="text-[11px] text-amber-600/80 mt-3 text-center">
+        * 접속/조회는 분석을 실행하지 않습니다. 위 기능은 시연을 위한 수동 실행입니다.
+      </p>
     </div>
   );
 }
