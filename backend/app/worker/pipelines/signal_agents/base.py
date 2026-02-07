@@ -8,6 +8,7 @@ Features:
 - Common signature computation
 - Agent-specific LLM tracking
 - Forbidden word detection
+- [2026-02-08] Buffett-style anti-hallucination guardrails
 """
 
 import hashlib
@@ -25,6 +26,81 @@ logger = logging.getLogger(__name__)
 
 
 # =============================================================================
+# Buffett-Style Anti-Hallucination Constants (2026-02-08)
+# =============================================================================
+
+# Warren Buffett Principle: "You are a librarian, not an analyst"
+BUFFETT_LIBRARIAN_PERSONA = """
+# 핵심 원칙: 도서관 사서 (Librarian)
+당신은 분석가(Analyst)가 아닌 **도서관 사서(Librarian)**입니다.
+
+## 사서의 역할
+- 사실(Fact)을 **찾아서 복사**하는 것 = ✅ 허용
+- 사실을 **해석하거나 분석**하는 것 = ❌ 금지
+- 데이터에 **없는 숫자를 생성**하는 것 = ❌ 절대 금지
+
+## 인용 신뢰도 (retrieval_confidence)
+모든 사실에는 다음 중 하나를 명시:
+- `VERBATIM`: 원문 그대로 복사 (권장)
+- `PARAPHRASED`: 명확성을 위해 약간 다듬음 (허용)
+- `INFERRED`: 문맥에서 추론 (confidence_reason 필수, 최후의 수단)
+
+## "모르겠다"는 정답이다
+확실하지 않으면 시그널을 생성하지 마세요.
+빈 결과 []가 잘못된 시그널보다 낫습니다.
+"""
+
+# Hallucination Indicators - expressions that suggest LLM is guessing
+HALLUCINATION_INDICATORS = [
+    "추정됨", "추정된다", "추정된 바",
+    "전망", "전망됨", "전망된다",
+    "예상", "예상됨", "예상된다",
+    "것으로 보인다", "것으로 보임",
+    "것으로 추측", "추측됨",
+    "일반적으로", "통상적으로",
+    "약 ", "대략 ", "추산",
+    "~할 것이다", "~일 것이다",
+    "예측", "예측됨",
+]
+
+# Falsification Check - Warren Buffett's "Invert, Always Invert"
+FALSIFICATION_KEYWORDS = [
+    # 극단적 수치 (검증 필요)
+    r"\d{2,3}%\s*(급등|폭등|급락|폭락|증가|감소)",
+    r"(사상|역대)\s*(최고|최대|최저)",
+    r"전년\s*대비\s*\d{2,}%",
+    # 불확실한 시간 표현
+    r"(곧|조만간|머지않아)",
+    r"(예정|계획|검토)",
+    # 익명 소스
+    r"(관계자|소식통|업계에 따르면)",
+]
+
+# Source Credibility Scores (for evidence prioritization)
+SOURCE_CREDIBILITY = {
+    # Tier 1: 공식 소스 (100점)
+    "dart.fss.or.kr": 100,  # 금융감독원 DART
+    "kind.krx.co.kr": 100,  # 한국거래소 KIND
+    "data.go.kr": 100,      # 공공데이터포털
+    "law.go.kr": 100,       # 법제처
+    "bok.or.kr": 95,        # 한국은행
+    "kostat.go.kr": 95,     # 통계청
+    # Tier 2: 언론 (70-80점)
+    "reuters.com": 80,
+    "bloomberg.com": 80,
+    "yonhapnews.co.kr": 75,
+    "yna.co.kr": 75,
+    "hankyung.com": 70,
+    "mk.co.kr": 70,
+    "sedaily.com": 70,
+    "edaily.co.kr": 65,
+    "newsis.com": 65,
+    # Tier 3: 기타 (50점 이하)
+    "naver.com": 50,
+    "daum.net": 50,
+}
+
+# =============================================================================
 # Shared Validation Constants
 # =============================================================================
 
@@ -40,7 +116,7 @@ FORBIDDEN_WORDS = [
     "~할 것이다",
     "~일 것이다",
     "것으로 보인다",
-]
+] + HALLUCINATION_INDICATORS  # P0: Add hallucination indicators
 
 FORBIDDEN_PATTERNS = [re.compile(re.escape(word)) for word in FORBIDDEN_WORDS]
 
@@ -180,6 +256,8 @@ class BaseSignalAgent(ABC):
         4. Event type in allowed set
         5. Forbidden words check
         6. Length constraints
+        7. [P0] Hallucination detection - numbers must exist in input data
+        8. [P0] Evidence URL validation - URLs must be from actual search results
 
         Returns None if signal is invalid.
         """
@@ -199,6 +277,31 @@ class BaseSignalAgent(ABC):
         evidence = signal.get("evidence", [])
         if not evidence:
             logger.warning(f"[{self.AGENT_NAME}] Signal has no evidence")
+            return None
+
+        # =====================================================================
+        # P0: Anti-Hallucination Validation (2026-02-08)
+        # =====================================================================
+
+        # 7. Validate numbers in summary exist in input data
+        hallucination_result = self._detect_number_hallucination(signal, context)
+        if hallucination_result["is_hallucinated"]:
+            logger.warning(
+                f"[{self.AGENT_NAME}][HALLUCINATION] Signal rejected: "
+                f"{hallucination_result['reason']} | "
+                f"title='{signal.get('title', '')[:30]}' | "
+                f"hallucinated_number={hallucination_result.get('number', 'N/A')}"
+            )
+            return None
+
+        # 8. Validate evidence URLs are from actual search results
+        evidence_validation = self._validate_evidence_sources(evidence, context)
+        if not evidence_validation["valid"]:
+            logger.warning(
+                f"[{self.AGENT_NAME}][EVIDENCE] Signal rejected: "
+                f"{evidence_validation['reason']} | "
+                f"title='{signal.get('title', '')[:30]}'"
+            )
             return None
 
         # 3. Enum validation
@@ -273,6 +376,193 @@ class BaseSignalAgent(ABC):
         signal["extracted_by"] = self.AGENT_NAME
 
         return signal
+
+    # =========================================================================
+    # P0: Anti-Hallucination Methods (2026-02-08)
+    # =========================================================================
+
+    def _detect_number_hallucination(
+        self, signal: dict, context: dict
+    ) -> dict:
+        """
+        Detect if numbers in signal summary are hallucinated.
+
+        P0 Fix: Numbers (especially percentages) must exist in:
+        - Internal snapshot data
+        - External search results
+        - Document facts
+
+        Returns:
+            dict with keys:
+            - is_hallucinated: bool
+            - reason: str (if hallucinated)
+            - number: str (the hallucinated number)
+        """
+        import json
+
+        summary = signal.get("summary", "")
+        title = signal.get("title", "")
+        text_to_check = f"{title} {summary}"
+
+        # Extract all percentages from signal text
+        percentage_pattern = re.compile(r'[-+]?\d+(?:\.\d+)?%')
+        percentages_in_signal = percentage_pattern.findall(text_to_check)
+
+        if not percentages_in_signal:
+            return {"is_hallucinated": False}
+
+        # Build reference text from all input sources
+        reference_texts = []
+
+        # 1. Snapshot JSON
+        snapshot = context.get("snapshot_json", {})
+        if snapshot:
+            reference_texts.append(json.dumps(snapshot, ensure_ascii=False))
+
+        # 2. External search results
+        for event_key in ["direct_events", "industry_events", "environment_events", "external_events"]:
+            events = context.get(event_key, [])
+            if events:
+                reference_texts.append(json.dumps(events, ensure_ascii=False))
+
+        # 3. Document facts
+        doc_facts = context.get("document_facts", [])
+        if doc_facts:
+            reference_texts.append(json.dumps(doc_facts, ensure_ascii=False))
+
+        # 4. Corp profile
+        corp_profile = context.get("corp_profile", {})
+        if corp_profile:
+            reference_texts.append(json.dumps(corp_profile, ensure_ascii=False))
+
+        combined_reference = " ".join(reference_texts)
+
+        # Check each percentage
+        for pct in percentages_in_signal:
+            normalized = pct.replace("+", "")
+
+            if normalized not in combined_reference:
+                num_only = normalized.replace("%", "")
+                if num_only not in combined_reference:
+                    try:
+                        num_value = float(num_only)
+                        # Extreme values (>50% change) are highly suspicious
+                        if abs(num_value) > 50:
+                            return {
+                                "is_hallucinated": True,
+                                "reason": f"Extreme percentage {pct} not found in any input data",
+                                "number": pct,
+                            }
+                        # Moderate values mark for review
+                        if abs(num_value) > 30:
+                            signal["needs_review"] = True
+                            signal["review_reason"] = f"Percentage {pct} not directly in input"
+                    except ValueError:
+                        pass
+
+        return {"is_hallucinated": False}
+
+    def _validate_evidence_sources(
+        self, evidence: list[dict], context: dict
+    ) -> dict:
+        """
+        Validate that evidence URLs are from actual search results.
+
+        P0 Fix: Prevent LLM from generating fake URLs.
+
+        Returns:
+            dict with keys:
+            - valid: bool
+            - reason: str (if invalid)
+        """
+        import json
+
+        # Collect all valid URLs from external search results
+        valid_urls = set()
+
+        for event_key in ["direct_events", "industry_events", "environment_events", "external_events"]:
+            events = context.get(event_key, [])
+            for event in events:
+                if isinstance(event, dict):
+                    for url_field in ["url", "source_url", "ref_value", "link"]:
+                        url = event.get(url_field, "")
+                        if url and url.startswith("http"):
+                            valid_urls.add(url)
+                    citations = event.get("citations", [])
+                    for citation in citations:
+                        if isinstance(citation, str) and citation.startswith("http"):
+                            valid_urls.add(citation)
+                        elif isinstance(citation, dict):
+                            valid_urls.add(citation.get("url", ""))
+
+        # Check each evidence item
+        for ev in evidence:
+            ref_type = ev.get("ref_type", "")
+            ref_value = ev.get("ref_value", "")
+
+            if ref_type == "URL" and ref_value:
+                if ref_value.startswith("http"):
+                    if ref_value not in valid_urls:
+                        domain_match = False
+                        for valid_url in valid_urls:
+                            if self._extract_domain(ref_value) == self._extract_domain(valid_url):
+                                domain_match = True
+                                break
+
+                        if not domain_match and valid_urls:
+                            return {
+                                "valid": False,
+                                "reason": f"Evidence URL not from search results: {ref_value[:50]}",
+                            }
+
+            elif ref_type == "SNAPSHOT_KEYPATH" and ref_value:
+                snapshot = context.get("snapshot_json", {})
+                if not self._validate_keypath(ref_value, snapshot):
+                    return {
+                        "valid": False,
+                        "reason": f"Snapshot keypath does not exist: {ref_value}",
+                    }
+
+        return {"valid": True}
+
+    def _extract_domain(self, url: str) -> str:
+        """Extract domain from URL."""
+        try:
+            if "://" in url:
+                url = url.split("://")[1]
+            if "/" in url:
+                url = url.split("/")[0]
+            return url.lower()
+        except Exception:
+            return ""
+
+    def _validate_keypath(self, keypath: str, data: dict) -> bool:
+        """Validate that a JSON Pointer keypath exists in data."""
+        if not keypath or not data:
+            return False
+
+        parts = keypath.strip("/").split("/")
+
+        current = data
+        for part in parts:
+            if isinstance(current, dict):
+                if part in current:
+                    current = current[part]
+                else:
+                    return False
+            elif isinstance(current, list):
+                try:
+                    idx = int(part)
+                    if 0 <= idx < len(current):
+                        current = current[idx]
+                    else:
+                        return False
+                except ValueError:
+                    return False
+            else:
+                return False
+
+        return True
 
     def _compute_signature(self, signal: dict) -> str:
         """

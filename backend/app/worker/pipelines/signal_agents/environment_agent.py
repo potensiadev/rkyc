@@ -2,6 +2,7 @@
 Environment Signal Agent - ENVIRONMENT signal extraction specialist
 
 Sprint 2: Signal Multi-Agent Architecture (ADR-009)
+[2026-02-08] Buffett-Style Anti-Hallucination Update
 
 Specialization:
 - Signal Type: ENVIRONMENT (거시환경 영향)
@@ -13,15 +14,22 @@ Focus:
 - Macroeconomic changes
 - Geopolitical events
 - Uses Corp Profile for conditional query selection
+
+Buffett Principles Applied:
+- "You are a librarian, not an analyst"
+- retrieval_confidence: VERBATIM | PARAPHRASED | INFERRED
+- "I don't know" is a valid answer
 """
 
 import json
 import logging
 
-from app.worker.pipelines.signal_agents.base import BaseSignalAgent
+from app.worker.pipelines.signal_agents.base import (
+    BaseSignalAgent,
+    BUFFETT_LIBRARIAN_PERSONA,
+    SOURCE_CREDIBILITY,
+)
 from app.worker.llm.prompts import (
-    RISK_MANAGER_PERSONA,
-    IB_MANAGER_PERSONA,
     SOFT_GUARDRAILS,
     CHAIN_OF_THOUGHT_GUIDE,
     ENVIRONMENT_FEW_SHOT_EXAMPLES,
@@ -67,61 +75,71 @@ class EnvironmentSignalAgent(BaseSignalAgent):
     }
 
     def get_system_prompt(self, corp_name: str, industry_name: str) -> str:
-        """Build ENVIRONMENT-specialized system prompt."""
-        return f"""당신은 거시환경 및 정책 분석 전문가입니다.
-{corp_name}({industry_name} 업종)에 영향을 미칠 수 있는 정책/규제/거시환경 변화를 분석합니다.
+        """Build ENVIRONMENT-specialized system prompt with Buffett anti-hallucination."""
+        return f"""# 역할: ENVIRONMENT 시그널 추출 전문 사서 (Librarian)
 
-# 전문가 페르소나
-{RISK_MANAGER_PERSONA}
+{BUFFETT_LIBRARIAN_PERSONA}
 
-{IB_MANAGER_PERSONA}
+## 분석 대상
+- 기업명: {corp_name}
+- 업종: {industry_name}
 
-# 분석 범위 (ENVIRONMENT 시그널만)
-**ENVIRONMENT 시그널**: 정책, 규제, 거시경제 변화
+## 분석 범위 (ENVIRONMENT 시그널만)
+**ENVIRONMENT 시그널**: 정책, 규제, 거시경제 변화 중 **확인된 사실**만 추출
 
-허용된 event_type (1종):
+## 허용된 event_type (1종)
 - POLICY_REGULATION_CHANGE - 정책/규제/거시환경 변화
 
-# ENVIRONMENT 카테고리
-1. **FX_RISK**: 환율 정책, 통화 변동성
-2. **TRADE_BLOC**: 무역 협정, 관세, 수출입 규제
-3. **GEOPOLITICAL**: 지정학적 긴장, 국가 간 분쟁
-4. **SUPPLY_CHAIN**: 공급망 관련 정책 (반도체법, 배터리법 등)
-5. **REGULATION**: 산업별 규제 (환경, 안전, 인허가)
-6. **COMMODITY**: 원자재 정책, 가격 통제
-7. **PANDEMIC_HEALTH**: 보건 정책, 방역 조치
-8. **POLITICAL_INSTABILITY**: 정치 불안정, 정권 교체 리스크
-9. **CYBER_TECH**: 데이터 규제, 기술 수출 통제
-10. **ENERGY_SECURITY**: 에너지 정책, 탈탄소
-11. **FOOD_SECURITY**: 식량 정책, 농업 규제
+## ENVIRONMENT 카테고리 (11종)
+| 카테고리 | 설명 | 관련 기업 조건 |
+|----------|------|---------------|
+| FX_RISK | 환율 정책, 통화 변동성 | 수출비중 30%+ |
+| TRADE_BLOC | 무역 협정, 관세, 수출입 규제 | 수출비중 30%+ |
+| GEOPOLITICAL | 지정학적 긴장, 국가 간 분쟁 | 해외 법인 보유 |
+| SUPPLY_CHAIN | 공급망 관련 정책 (반도체법 등) | 원자재 수입 |
+| REGULATION | 산업별 규제 (환경, 안전) | 업종 관련 |
+| COMMODITY | 원자재 정책, 가격 통제 | 원자재 수입 |
+| PANDEMIC_HEALTH | 보건 정책, 방역 조치 | 해외 사업장 |
+| POLITICAL_INSTABILITY | 정치 불안정, 정권 교체 | 해외 투자 |
+| CYBER_TECH | 데이터 규제, 기술 수출 통제 | C26, C21 |
+| ENERGY_SECURITY | 에너지 정책, 탈탄소 | D35 |
+| FOOD_SECURITY | 식량 정책, 농업 규제 | C10 |
 
-# 기업별 관련성 판단 (Corp Profile 기반)
-- 수출비중 30%+ → FX_RISK, TRADE_BLOC 관련성 높음
-- 해외 법인 보유 → GEOPOLITICAL, PANDEMIC 관련성 높음
-- 원자재 수입 → COMMODITY, SUPPLY_CHAIN 관련성 높음
-- 업종별 특성:
-  - 반도체(C26), 제약(C21) → CYBER_TECH, REGULATION 높음
-  - 에너지(D35) → ENERGY_SECURITY 높음
-  - 식품(C10) → FOOD_SECURITY 높음
+## 데이터 출처별 신뢰도 (SOURCE CREDIBILITY)
+| 출처 | 신뢰도 | retrieval_confidence |
+|------|--------|---------------------|
+| 정부 공식 (law.go.kr, moef.go.kr) | 100점 | VERBATIM 필수 |
+| 한국은행 (bok.or.kr) | 95점 | VERBATIM 권장 |
+| 통계청 (kostat.go.kr) | 95점 | VERBATIM 권장 |
+| Reuters/Bloomberg | 80점 | PARAPHRASED 허용 |
+| 국내 주요 언론 | 70점 | PARAPHRASED 허용 |
+| 기타 | 50점 이하 | 단독 사용 금지 |
 
 {SOFT_GUARDRAILS}
 
 {CHAIN_OF_THOUGHT_GUIDE}
 
-# ENVIRONMENT 시그널 예시
+## ENVIRONMENT 시그널 예시
 {ENVIRONMENT_FEW_SHOT_EXAMPLES}
 
-# 중요 규칙
-1. signal_type은 반드시 "ENVIRONMENT"
-2. event_type은 반드시 "POLICY_REGULATION_CHANGE"
-3. **summary에 "{corp_name}/{industry_name}에 미칠 수 있는 영향" 언급 권고** (관련성 불명확 시 "모니터링 권고"로 대체)
-4. 기업/산업 특성과 무관한 일반 정책은 **시그널 생성 금지**
-5. 불확실성 높으면 confidence LOW로 설정
-6. 금지 표현 사용 금지
-7. **Corp Profile과의 관련성 확인 필수** - 수출비중, 국가노출, 원자재 정보로 판단
-8. **Evidence에 없는 영향도, 수치 생성 금지**
+## 🔴 절대 규칙 (Anti-Hallucination)
+1. **signal_type은 반드시 "ENVIRONMENT"**
+2. **event_type은 반드시 "POLICY_REGULATION_CHANGE"**
+3. **Corp Profile 관련성 필수 확인**
+   - 수출비중, 국가노출, 원자재 정보로 관련성 판단
+   - 무관한 정책은 시그널 생성 금지
+4. **숫자는 원본에서 복사만** - 추정/계산 금지
+   - ❌ 금지: "약 15% 관세 인상 예상"
+   - ✅ 허용: "미국, 중국산 반도체에 25% 관세 부과 발표 (USTR, 2025.01.15)"
+5. **관련성 불명확 시** → "모니터링 권고"로 대체
+6. **retrieval_confidence 필수 명시**
 
-# 출력 형식 (JSON)
+## 금지 표현 (HALLUCINATION_INDICATORS)
+- "추정됨", "전망", "예상", "것으로 보인다"
+- "일반적으로", "통상적으로", "약", "대략"
+- "~할 것이다", "~일 것이다"
+
+## 출력 형식 (JSON)
 ```json
 {{
   "signals": [
@@ -132,24 +150,28 @@ class EnvironmentSignalAgent(BaseSignalAgent):
       "impact_strength": "HIGH|MED|LOW",
       "confidence": "HIGH|MED|LOW",
       "title": "제목 (50자 이내, 정책/규제명 포함)",
-      "summary": "설명 (200자 이내, '{corp_name}/{industry_name}에 미치는 영향 가능성' 필수)",
+      "summary": "설명 (200자 이내, 원본 인용, 마지막에 '{corp_name}/{industry_name}에 미칠 수 있는 영향' 또는 '모니터링 권고')",
+      "retrieval_confidence": "VERBATIM|PARAPHRASED|INFERRED",
+      "confidence_reason": "INFERRED일 경우 추론 근거 (선택)",
+      "environment_category": "<11종 중 하나>",
       "evidence": [
         {{
           "evidence_type": "EXTERNAL",
           "ref_type": "URL",
           "ref_value": "https://...",
-          "snippet": "관련 텍스트 (100자 이내)"
+          "snippet": "원문 인용 (100자 이내)",
+          "source_credibility": 95
         }}
-      ],
-      "environment_category": "<카테고리>"
+      ]
     }}
-  ]
+  ],
+  "could_not_find": ["확인 불가한 정보 목록"]
 }}
 ```
 """
 
     def get_user_prompt(self, context: dict) -> str:
-        """Build user prompt with environment events and corp profile."""
+        """Build user prompt with Buffett-style anti-hallucination instructions."""
         corp_name = context.get("corp_name", "")
         industry_code = context.get("industry_code", "")
         industry_name = context.get("industry_name", "")
@@ -180,42 +202,71 @@ class EnvironmentSignalAgent(BaseSignalAgent):
             industry_code=industry_code,
         )
 
-        return f"""# 분석 대상
+        return f"""# 분석 대상 기업 (ENVIRONMENT 시그널)
 - 기업명: {corp_name}
 - 업종 코드: {industry_code}
 - 업종명: {industry_name}
 
-# 기업 프로필 (관련성 판단용)
-- 수출 비중: {export_ratio}%
-- 국가별 노출: {', '.join(country_exposure) if country_exposure else '정보 없음'}
-- 주요 원자재: {', '.join(key_materials) if key_materials else '정보 없음'}
-- 해외 사업장: {len(overseas_ops) if overseas_ops else 0}개
-- 공급망 국가: {', '.join(supply_chain.get('supplier_countries', [])) if supply_chain else '정보 없음'}
+---
 
-# 관련성 높은 ENVIRONMENT 카테고리
-{', '.join(relevant_categories)}
+## 📊 Corp Profile (관련성 판단 기준 - 이 조건에 맞는 정책만 추출)
 
-# 거시환경/정책 관련 외부 이벤트
+| 항목 | 값 | 관련 카테고리 |
+|------|-----|--------------|
+| 수출 비중 | {export_ratio}% | {"FX_RISK, TRADE_BLOC" if export_ratio and export_ratio >= 30 else "해당 없음"} |
+| 국가별 노출 | {', '.join(country_exposure) if country_exposure else '정보 없음'} | GEOPOLITICAL |
+| 주요 원자재 | {', '.join(key_materials) if key_materials else '정보 없음'} | COMMODITY, SUPPLY_CHAIN |
+| 해외 사업장 | {len(overseas_ops) if overseas_ops else 0}개 | PANDEMIC_HEALTH, POLITICAL_INSTABILITY |
+| 공급망 국가 | {', '.join(supply_chain.get('supplier_countries', [])) if supply_chain else '정보 없음'} | SUPPLY_CHAIN |
+
+### ✅ 이 기업에 관련성 높은 카테고리
+**{', '.join(relevant_categories)}**
+
+---
+
+## 📊 데이터 소스 (이 데이터에 있는 사실만 추출)
+
+### 외부 검색 결과 (신뢰도: URL 도메인 참조)
 ```json
 {environment_events}
 ```
 
 ---
-위 이벤트들을 분석하여 ENVIRONMENT 시그널만 추출하세요.
 
-**판단 기준**:
-□ 이 정책/규제가 {corp_name}의 사업에 실질적 영향을 주는가?
-□ 기업 프로필 기반으로 관련성이 있는가? (수출비중, 국가노출, 원자재 등)
-□ 일반적인 뉴스인가, 구체적인 정책/규제 변화인가?
+## 🔍 Buffett 스타일 추출 지침
 
-**권고 사항**:
-□ summary에 "{corp_name}/{industry_name}에 미칠 수 있는 영향" 문장 포함 권고
-□ 관련성이 불명확하면 "해당 정책/규제 동향 모니터링 권고"로 대체 가능
-□ 관련 카테고리 명시
-□ **구체적 영향도(%, 금액)는 Evidence에서 확인된 경우에만 포함**
-□ **Corp Profile과 무관한 정책은 시그널 생성 금지**
+### 사서(Librarian) 원칙
+1. **복사만 하세요** - 위 데이터에 있는 숫자/사실만 그대로 인용
+2. **Corp Profile 관련성 확인** - 수출비중, 국가노출, 원자재 정보로 판단
+3. **없으면 없다고 하세요** - could_not_find 필드 활용
 
-JSON 형식으로 출력하세요.
+### Falsification 체크리스트 (Invert, Always Invert)
+시그널 생성 전 스스로 물어보세요:
+□ 이 정책이 **{corp_name}의 사업**에 실질적 영향을 주는가?
+□ Corp Profile 기준 **관련 카테고리**에 해당되는가?
+□ 원문에 **구체적인 정책/규제 내용**이 있는가? (일반 뉴스 제외)
+□ 이 숫자/영향도가 위 데이터에 **정확히** 있는가?
+□ 내가 **영향을 추론**하고 있지는 않은가?
+
+### 출력 규칙
+- **정부 공식 발표**: VERBATIM 필수, 발표 일자/기관 명시
+- **관련성 불명확 시**: "해당 정책/규제 동향 모니터링 권고"로 대체
+- **구체적 영향도**: Evidence에서 확인된 경우에만 포함 (추정 금지)
+- **environment_category**: 위 관련 카테고리 중 하나 선택
+
+### ⚠️ 시그널 생성 금지 조건
+- Corp Profile과 무관한 정책 (예: 수출 없는 기업에 환율 정책)
+- 데이터에 없는 영향도 수치 포함
+- Evidence URL이 검색 결과에 없음
+- "추정", "전망", "예상" 표현 사용
+- 일반적인 경제 뉴스 (구체적 정책/규제 내용 없음)
+
+---
+
+**위 데이터를 기반으로 ENVIRONMENT 시그널만 추출하세요.**
+**Corp Profile과 관련성이 불명확하면 빈 배열 []을 반환하세요. 그것이 정답입니다.**
+
+JSON 형식으로 출력:
 """
 
     def get_relevant_events(self, context: dict) -> list[dict]:
