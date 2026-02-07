@@ -1,0 +1,647 @@
+"""
+DART OpenAPI Client for Shareholder Verification
+
+DART (Data Analysis, Retrieval and Transfer System) is the official
+electronic disclosure system of South Korea's Financial Supervisory Service (FSS).
+
+This module provides:
+1. Corp Code lookup (DART 고유번호 조회)
+2. Major shareholder ownership query (주요주주 소유보고)
+3. 2-Source Verification with Perplexity (교차 검증)
+
+API Endpoints:
+- Corp Code List: https://opendart.fss.or.kr/api/corpCode.xml (ZIP)
+- Major Shareholder: https://opendart.fss.or.kr/api/elestock.json
+
+References:
+- https://opendart.fss.or.kr/guide/detail.do?apiGrpCd=DS004&apiId=2019022
+"""
+
+import asyncio
+import logging
+import re
+import io
+import zipfile
+import xml.etree.ElementTree as ET
+from dataclasses import dataclass, field
+from datetime import datetime, UTC
+from enum import Enum
+from typing import Any, Optional
+from functools import lru_cache
+
+import httpx
+
+from app.core.config import settings
+
+logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# Configuration
+# ============================================================================
+
+# DART API Key는 settings에서 가져오거나 기본값 사용
+DART_API_KEY = getattr(settings, 'DART_API_KEY', "a5cf6e4eedca9a82191e4ab1bcdeda7f6d6e4861")
+DART_BASE_URL = "https://opendart.fss.or.kr/api"
+DART_TIMEOUT = 30  # seconds
+
+# Response status codes
+DART_STATUS_SUCCESS = "000"
+DART_STATUS_NO_DATA = "013"  # 조회된 데이터가 없습니다
+
+
+class DartError(Exception):
+    """DART API Error"""
+    def __init__(self, code: str, message: str):
+        self.code = code
+        self.message = message
+        super().__init__(f"DART API Error [{code}]: {message}")
+
+
+class ShareholderType(str, Enum):
+    """주주 유형"""
+    MAJOR_SHAREHOLDER = "10%이상주주"
+    LARGEST_SHAREHOLDER = "최대주주"
+    EXECUTIVE = "임원"
+    RELATED_PARTY = "특수관계인"
+    INSTITUTION = "기관"
+    FOREIGN = "외국인"
+    UNKNOWN = "기타"
+
+
+@dataclass
+class Shareholder:
+    """주주 정보"""
+    name: str
+    ratio_pct: float
+    share_count: int = 0
+    shareholder_type: ShareholderType = ShareholderType.UNKNOWN
+    report_date: Optional[str] = None
+    source: str = "DART"
+    source_url: Optional[str] = None
+    confidence: str = "HIGH"  # DART 공시는 HIGH 신뢰도
+
+    def to_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "ratio_pct": self.ratio_pct,
+            "share_count": self.share_count,
+            "type": self.shareholder_type.value,
+            "report_date": self.report_date,
+            "source": self.source,
+            "source_url": self.source_url,
+            "confidence": self.confidence,
+        }
+
+
+@dataclass
+class VerificationResult:
+    """2-Source Verification 결과"""
+    is_verified: bool
+    dart_shareholders: list[Shareholder]
+    perplexity_shareholders: list[dict]
+    matched_shareholders: list[Shareholder]
+    dart_only: list[Shareholder]
+    perplexity_only: list[dict]
+    verification_details: dict = field(default_factory=dict)
+
+    def to_dict(self) -> dict:
+        return {
+            "is_verified": self.is_verified,
+            "dart_shareholders": [s.to_dict() for s in self.dart_shareholders],
+            "perplexity_shareholders": self.perplexity_shareholders,
+            "matched_shareholders": [s.to_dict() for s in self.matched_shareholders],
+            "dart_only": [s.to_dict() for s in self.dart_only],
+            "perplexity_only": self.perplexity_only,
+            "verification_details": self.verification_details,
+        }
+
+
+# ============================================================================
+# Corp Code Lookup
+# ============================================================================
+
+# In-memory cache for corp codes (loaded from DART ZIP file)
+_corp_code_cache: dict[str, str] = {}
+_corp_code_by_name: dict[str, str] = {}
+_corp_code_loaded: bool = False
+
+
+async def load_corp_codes() -> bool:
+    """
+    DART 기업 고유번호 목록 다운로드 및 캐시
+
+    DART는 기업별 고유번호(corp_code)를 ZIP 파일로 제공합니다.
+    이 함수는 ZIP 파일을 다운로드하고 파싱하여 메모리에 캐시합니다.
+
+    Returns:
+        True if successful, False otherwise
+    """
+    global _corp_code_cache, _corp_code_by_name, _corp_code_loaded
+
+    if _corp_code_loaded and _corp_code_cache:
+        logger.debug("[DartAPI] Corp codes already loaded")
+        return True
+
+    url = f"{DART_BASE_URL}/corpCode.xml?crtfc_key={DART_API_KEY}"
+
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            logger.info("[DartAPI] Downloading corp code list from DART...")
+            response = await client.get(url)
+            response.raise_for_status()
+
+            # Response is a ZIP file containing XML
+            zip_buffer = io.BytesIO(response.content)
+            with zipfile.ZipFile(zip_buffer, 'r') as zf:
+                # The ZIP contains a single XML file
+                xml_filename = zf.namelist()[0]
+                with zf.open(xml_filename) as xml_file:
+                    tree = ET.parse(xml_file)
+                    root = tree.getroot()
+
+                    for corp in root.findall('.//list'):
+                        corp_code = corp.findtext('corp_code', '')
+                        corp_name = corp.findtext('corp_name', '')
+                        stock_code = corp.findtext('stock_code', '')  # 상장사만 있음
+
+                        if corp_code and corp_name:
+                            _corp_code_cache[corp_code] = corp_name
+
+                            # 이름으로도 검색 가능하게 (정규화된 이름)
+                            normalized_name = _normalize_corp_name(corp_name)
+                            _corp_code_by_name[normalized_name] = corp_code
+
+                            # 주식코드도 매핑 (상장사)
+                            if stock_code and stock_code.strip():
+                                _corp_code_cache[f"stock:{stock_code.strip()}"] = corp_code
+
+            _corp_code_loaded = True
+            logger.info(f"[DartAPI] Loaded {len(_corp_code_cache)} corp codes")
+            return True
+
+    except httpx.HTTPError as e:
+        logger.error(f"[DartAPI] Failed to download corp codes: {e}")
+        return False
+    except Exception as e:
+        logger.error(f"[DartAPI] Failed to parse corp codes: {e}")
+        return False
+
+
+def _normalize_corp_name(name: str) -> str:
+    """기업명 정규화 (검색용)"""
+    # 공백 제거, 소문자 변환, 특수문자 제거
+    normalized = re.sub(r'[^\w가-힣]', '', name.lower())
+    return normalized
+
+
+async def get_corp_code(
+    corp_name: Optional[str] = None,
+    stock_code: Optional[str] = None,
+    biz_no: Optional[str] = None,
+) -> Optional[str]:
+    """
+    기업 고유번호(corp_code) 조회
+
+    Args:
+        corp_name: 기업명 (예: "삼성전자")
+        stock_code: 주식 종목코드 (예: "005930")
+        biz_no: 사업자등록번호 (현재 미지원)
+
+    Returns:
+        8자리 DART 고유번호 또는 None
+    """
+    # 캐시 로드 확인
+    if not _corp_code_loaded:
+        await load_corp_codes()
+
+    # 주식코드로 검색
+    if stock_code:
+        stock_key = f"stock:{stock_code.strip()}"
+        if stock_key in _corp_code_cache:
+            return _corp_code_cache[stock_key]
+
+    # 기업명으로 검색
+    if corp_name:
+        normalized = _normalize_corp_name(corp_name)
+
+        # 정확 매칭
+        if normalized in _corp_code_by_name:
+            return _corp_code_by_name[normalized]
+
+        # 부분 매칭 (첫 번째 매칭 반환)
+        for cached_name, code in _corp_code_by_name.items():
+            if normalized in cached_name or cached_name in normalized:
+                return code
+
+    return None
+
+
+# ============================================================================
+# Major Shareholder API
+# ============================================================================
+
+async def get_major_shareholders(
+    corp_code: str,
+    limit: int = 10,
+) -> list[Shareholder]:
+    """
+    DART 주요주주 소유보고 조회
+
+    임원ㆍ주요주주특정증권등 소유상황보고서 API를 호출하여
+    주요 주주 목록을 반환합니다.
+
+    Args:
+        corp_code: DART 고유번호 (8자리)
+        limit: 최대 반환 주주 수
+
+    Returns:
+        Shareholder 객체 리스트
+    """
+    url = f"{DART_BASE_URL}/elestock.json"
+    params = {
+        "crtfc_key": DART_API_KEY,
+        "corp_code": corp_code,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=DART_TIMEOUT) as client:
+            response = await client.get(url, params=params)
+            response.raise_for_status()
+            data = response.json()
+
+            status = data.get("status", "")
+            message = data.get("message", "")
+
+            if status == DART_STATUS_NO_DATA:
+                logger.info(f"[DartAPI] No shareholder data for corp_code={corp_code}")
+                return []
+
+            if status != DART_STATUS_SUCCESS:
+                raise DartError(status, message)
+
+            shareholders = []
+            items = data.get("list", [])
+
+            for item in items[:limit]:
+                shareholder = _parse_shareholder_item(item)
+                if shareholder:
+                    shareholders.append(shareholder)
+
+            # 지분율 기준 정렬
+            shareholders.sort(key=lambda s: s.ratio_pct, reverse=True)
+
+            logger.info(f"[DartAPI] Found {len(shareholders)} shareholders for corp_code={corp_code}")
+            return shareholders
+
+    except httpx.HTTPError as e:
+        logger.error(f"[DartAPI] HTTP error: {e}")
+        return []
+    except DartError as e:
+        logger.error(f"[DartAPI] {e}")
+        return []
+    except Exception as e:
+        logger.error(f"[DartAPI] Unexpected error: {e}")
+        return []
+
+
+def _parse_shareholder_item(item: dict) -> Optional[Shareholder]:
+    """DART API 응답 항목을 Shareholder 객체로 변환"""
+    try:
+        # 보고자명
+        name = item.get("repror", "").strip()
+        if not name:
+            return None
+
+        # 지분율 파싱 (소수점 이하 2자리)
+        ratio_str = item.get("sp_stock_lmp_rate", "0")
+        try:
+            ratio_pct = float(ratio_str) if ratio_str else 0.0
+        except ValueError:
+            ratio_pct = 0.0
+
+        # 소유 수량
+        count_str = item.get("sp_stock_lmp_cnt", "0")
+        try:
+            share_count = int(count_str.replace(",", "")) if count_str else 0
+        except ValueError:
+            share_count = 0
+
+        # 주주 유형 판별
+        relation = item.get("isu_main_shrholdr", "")
+        shareholder_type = _classify_shareholder_type(relation)
+
+        # 보고일
+        report_date = item.get("rcept_dt", None)
+
+        # 접수번호로 공시 URL 생성
+        rcept_no = item.get("rcept_no", "")
+        source_url = f"https://dart.fss.or.kr/dsaf001/main.do?rcpNo={rcept_no}" if rcept_no else None
+
+        return Shareholder(
+            name=name,
+            ratio_pct=ratio_pct,
+            share_count=share_count,
+            shareholder_type=shareholder_type,
+            report_date=report_date,
+            source="DART",
+            source_url=source_url,
+            confidence="HIGH",
+        )
+
+    except Exception as e:
+        logger.warning(f"[DartAPI] Failed to parse shareholder item: {e}")
+        return None
+
+
+def _classify_shareholder_type(relation: str) -> ShareholderType:
+    """주주 관계 유형 분류"""
+    if not relation:
+        return ShareholderType.UNKNOWN
+
+    if "10%" in relation or "대량" in relation:
+        return ShareholderType.MAJOR_SHAREHOLDER
+    if "최대" in relation:
+        return ShareholderType.LARGEST_SHAREHOLDER
+    if "임원" in relation:
+        return ShareholderType.EXECUTIVE
+    if "특수" in relation:
+        return ShareholderType.RELATED_PARTY
+    if "기관" in relation:
+        return ShareholderType.INSTITUTION
+    if "외국" in relation:
+        return ShareholderType.FOREIGN
+
+    return ShareholderType.UNKNOWN
+
+
+# ============================================================================
+# 2-Source Verification
+# ============================================================================
+
+def _normalize_shareholder_name(name: str) -> str:
+    """주주명 정규화 (비교용)"""
+    if not name:
+        return ""
+    # 공백, 특수문자 제거, 소문자 변환
+    normalized = re.sub(r'[^\w가-힣]', '', name.lower())
+    # 일반적인 접미사 제거
+    suffixes = ["주식회사", "유한회사", "유한책임회사", "inc", "corp", "ltd", "llc"]
+    for suffix in suffixes:
+        if normalized.endswith(suffix):
+            normalized = normalized[:-len(suffix)]
+    return normalized.strip()
+
+
+def _match_shareholders(
+    dart_shareholders: list[Shareholder],
+    perplexity_shareholders: list[dict],
+    ratio_tolerance: float = 5.0,  # 지분율 허용 오차 (%)
+) -> tuple[list[Shareholder], list[Shareholder], list[dict]]:
+    """
+    DART와 Perplexity 주주 정보 매칭
+
+    Args:
+        dart_shareholders: DART API에서 조회한 주주 목록
+        perplexity_shareholders: Perplexity 검색 결과의 주주 목록
+        ratio_tolerance: 지분율 허용 오차 (퍼센트 포인트)
+
+    Returns:
+        (matched, dart_only, perplexity_only)
+    """
+    matched = []
+    dart_only = list(dart_shareholders)  # 복사본
+    perplexity_only = list(perplexity_shareholders)  # 복사본
+
+    for dart_sh in dart_shareholders:
+        dart_name_norm = _normalize_shareholder_name(dart_sh.name)
+
+        for i, perp_sh in enumerate(perplexity_only):
+            perp_name = perp_sh.get("name", "")
+            perp_name_norm = _normalize_shareholder_name(perp_name)
+            perp_ratio = perp_sh.get("ratio_pct", 0)
+
+            # 이름 매칭 (정규화 후 포함 관계)
+            name_match = (
+                dart_name_norm in perp_name_norm or
+                perp_name_norm in dart_name_norm or
+                dart_name_norm == perp_name_norm
+            )
+
+            # 지분율 매칭 (허용 오차 내)
+            ratio_match = abs(dart_sh.ratio_pct - perp_ratio) <= ratio_tolerance
+
+            # 이름이 매칭되면 (지분율은 참고만)
+            if name_match:
+                matched.append(dart_sh)
+                dart_only.remove(dart_sh)
+                perplexity_only.pop(i)
+                break
+
+    return matched, dart_only, perplexity_only
+
+
+async def verify_shareholders(
+    corp_name: str,
+    perplexity_shareholders: list[dict],
+    corp_code: Optional[str] = None,
+) -> VerificationResult:
+    """
+    2-Source Verification: DART + Perplexity 교차 검증
+
+    Perplexity 검색 결과의 주주 정보를 DART 공시와 교차 검증합니다.
+    두 소스에서 일치하는 주주 정보만 신뢰할 수 있는 것으로 표시합니다.
+
+    Args:
+        corp_name: 기업명
+        perplexity_shareholders: Perplexity에서 추출한 주주 정보
+        corp_code: DART 고유번호 (없으면 기업명으로 조회)
+
+    Returns:
+        VerificationResult 객체
+    """
+    # 1. Corp Code 조회
+    if not corp_code:
+        corp_code = await get_corp_code(corp_name=corp_name)
+
+    if not corp_code:
+        logger.warning(f"[DartAPI] Could not find corp_code for '{corp_name}'")
+        return VerificationResult(
+            is_verified=False,
+            dart_shareholders=[],
+            perplexity_shareholders=perplexity_shareholders,
+            matched_shareholders=[],
+            dart_only=[],
+            perplexity_only=perplexity_shareholders,
+            verification_details={
+                "error": "corp_code_not_found",
+                "message": f"DART 고유번호를 찾을 수 없습니다: {corp_name}",
+            },
+        )
+
+    # 2. DART 주요주주 조회
+    dart_shareholders = await get_major_shareholders(corp_code)
+
+    if not dart_shareholders:
+        logger.info(f"[DartAPI] No DART shareholders for '{corp_name}'")
+        return VerificationResult(
+            is_verified=False,
+            dart_shareholders=[],
+            perplexity_shareholders=perplexity_shareholders,
+            matched_shareholders=[],
+            dart_only=[],
+            perplexity_only=perplexity_shareholders,
+            verification_details={
+                "error": "no_dart_data",
+                "message": f"DART에서 주주 정보를 찾을 수 없습니다: {corp_name}",
+                "corp_code": corp_code,
+            },
+        )
+
+    # 3. 매칭
+    matched, dart_only, perplexity_only = _match_shareholders(
+        dart_shareholders, perplexity_shareholders
+    )
+
+    # 4. 검증 결과 판정
+    # 매칭된 주주가 1명 이상이면 검증 성공
+    is_verified = len(matched) >= 1
+
+    verification_details = {
+        "corp_code": corp_code,
+        "dart_count": len(dart_shareholders),
+        "perplexity_count": len(perplexity_shareholders),
+        "matched_count": len(matched),
+        "dart_only_count": len(dart_only),
+        "perplexity_only_count": len(perplexity_only),
+        "verification_timestamp": datetime.now(UTC).isoformat(),
+    }
+
+    logger.info(
+        f"[DartAPI] Verification result for '{corp_name}': "
+        f"verified={is_verified}, matched={len(matched)}, "
+        f"dart_only={len(dart_only)}, perplexity_only={len(perplexity_only)}"
+    )
+
+    return VerificationResult(
+        is_verified=is_verified,
+        dart_shareholders=dart_shareholders,
+        perplexity_shareholders=perplexity_shareholders,
+        matched_shareholders=matched,
+        dart_only=dart_only,
+        perplexity_only=perplexity_only,
+        verification_details=verification_details,
+    )
+
+
+# ============================================================================
+# Integration Helper
+# ============================================================================
+
+async def get_verified_shareholders(
+    corp_name: str,
+    perplexity_shareholders: Optional[list[dict]] = None,
+    use_dart_only: bool = False,
+) -> tuple[list[dict], dict]:
+    """
+    검증된 주주 정보 조회 (Corp Profiling 통합용)
+
+    2-Source Verification을 수행하고, 검증된 주주 정보만 반환합니다.
+    DART 데이터가 없거나 검증 실패 시 Perplexity 데이터를 낮은 신뢰도로 반환합니다.
+
+    Args:
+        corp_name: 기업명
+        perplexity_shareholders: Perplexity에서 추출한 주주 정보
+        use_dart_only: True면 DART 데이터만 사용 (검증 없이)
+
+    Returns:
+        (shareholders_list, metadata)
+        - shareholders_list: 주주 정보 리스트 (검증된 것 우선)
+        - metadata: 검증 메타데이터
+    """
+    metadata = {
+        "source": "UNKNOWN",
+        "verified": False,
+        "dart_available": False,
+        "verification_details": {},
+    }
+
+    # DART만 사용 모드
+    if use_dart_only:
+        corp_code = await get_corp_code(corp_name=corp_name)
+        if corp_code:
+            dart_shareholders = await get_major_shareholders(corp_code)
+            if dart_shareholders:
+                metadata["source"] = "DART"
+                metadata["dart_available"] = True
+                return (
+                    [s.to_dict() for s in dart_shareholders],
+                    metadata,
+                )
+        return [], metadata
+
+    # Perplexity 데이터가 없으면 DART만 사용
+    if not perplexity_shareholders:
+        corp_code = await get_corp_code(corp_name=corp_name)
+        if corp_code:
+            dart_shareholders = await get_major_shareholders(corp_code)
+            if dart_shareholders:
+                metadata["source"] = "DART"
+                metadata["dart_available"] = True
+                return (
+                    [s.to_dict() for s in dart_shareholders],
+                    metadata,
+                )
+        return [], metadata
+
+    # 2-Source Verification
+    result = await verify_shareholders(corp_name, perplexity_shareholders)
+    metadata["verification_details"] = result.verification_details
+    metadata["dart_available"] = len(result.dart_shareholders) > 0
+
+    if result.is_verified:
+        # 검증 성공: 매칭된 주주 + DART only 주주 반환
+        metadata["source"] = "DART_VERIFIED"
+        metadata["verified"] = True
+
+        verified_list = [s.to_dict() for s in result.matched_shareholders]
+
+        # DART에만 있는 주주도 추가 (공시 데이터이므로 신뢰 가능)
+        for s in result.dart_only:
+            sh_dict = s.to_dict()
+            sh_dict["_note"] = "DART에서만 확인됨"
+            verified_list.append(sh_dict)
+
+        return verified_list, metadata
+
+    # 검증 실패: Perplexity 데이터를 낮은 신뢰도로 반환
+    metadata["source"] = "PERPLEXITY_UNVERIFIED"
+    metadata["verified"] = False
+
+    unverified_list = []
+    for sh in perplexity_shareholders:
+        sh_copy = dict(sh)
+        sh_copy["confidence"] = "LOW"  # 검증되지 않음
+        sh_copy["_note"] = "DART 검증 실패 - 신뢰도 낮음"
+        unverified_list.append(sh_copy)
+
+    return unverified_list, metadata
+
+
+# ============================================================================
+# Initialization
+# ============================================================================
+
+async def initialize_dart_client():
+    """
+    DART API 클라이언트 초기화
+
+    서버 시작 시 호출하여 기업 고유번호 목록을 미리 로드합니다.
+    """
+    logger.info("[DartAPI] Initializing DART API client...")
+    success = await load_corp_codes()
+    if success:
+        logger.info(f"[DartAPI] Initialization complete. {len(_corp_code_cache)} corp codes loaded.")
+    else:
+        logger.warning("[DartAPI] Failed to initialize. DART features may not work.")
+    return success

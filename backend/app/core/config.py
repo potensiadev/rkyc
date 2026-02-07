@@ -169,6 +169,18 @@ class Settings(BaseSettings):
     EXTERNAL_LLM_OPENAI_KEY: str = Field(default="", description="OpenAI key for External LLM (optional)")
     EXTERNAL_LLM_PERPLEXITY_KEY: str = Field(default="", description="Perplexity key for External LLM (optional)")
 
+    # =========================================================================
+    # DART OpenAPI Configuration (주주 정보 검증)
+    # =========================================================================
+    DART_API_KEY: str = Field(
+        default="a5cf6e4eedca9a82191e4ab1bcdeda7f6d6e4861",
+        description="DART OpenAPI 인증키 (금융감독원 전자공시시스템)"
+    )
+    DART_VERIFICATION_ENABLED: bool = Field(
+        default=True,
+        description="DART 2-Source Verification 활성화 여부"
+    )
+
     # CORS (comma-separated string, parsed in main.py)
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000,https://rkyc.vercel.app"
 

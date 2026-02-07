@@ -50,7 +50,18 @@ from app.worker.llm.key_rotator import get_key_rotator
 from app.worker.llm.validator import get_validator, ValidationResult
 from app.worker.llm.search_providers import get_multi_search_manager
 
+# DART API for shareholder verification
+from app.services.dart_api import (
+    get_verified_shareholders,
+    verify_shareholders,
+    get_corp_code,
+    initialize_dart_client,
+)
+
 logger = logging.getLogger(__name__)
+
+# DART Verification 설정 (settings에서 가져오거나 기본값 True)
+DART_VERIFICATION_ENABLED = getattr(settings, 'DART_VERIFICATION_ENABLED', True)
 
 
 # ============================================================================
@@ -2109,6 +2120,42 @@ class CorpProfilingPipeline:
             industry_name=industry_name,
         )
 
+        # DART 2-Source Verification for shareholders
+        if DART_VERIFICATION_ENABLED and profile.get("shareholders"):
+            try:
+                perplexity_shareholders = profile.get("shareholders", [])
+                verified_shareholders, dart_metadata = await self._verify_shareholders_with_dart(
+                    corp_name=corp_name,
+                    perplexity_shareholders=perplexity_shareholders,
+                )
+                profile["shareholders"] = verified_shareholders
+                profile["shareholders_verification"] = dart_metadata
+
+                # Update field_provenance for shareholders
+                if dart_metadata.get("verified"):
+                    profile["field_provenance"]["shareholders"] = {
+                        "source": "DART_VERIFIED",
+                        "confidence": "HIGH",
+                        "source_url": "https://dart.fss.or.kr",
+                        "verification_timestamp": datetime.now(UTC).isoformat(),
+                    }
+                    # Update field_confidences
+                    if "field_confidences" not in profile:
+                        profile["field_confidences"] = {}
+                    profile["field_confidences"]["shareholders"] = "HIGH"
+
+                logger.info(
+                    f"[DART] Shareholders verified: source={dart_metadata.get('source')}, "
+                    f"count={len(verified_shareholders)}"
+                )
+            except Exception as e:
+                logger.warning(f"[DART] Shareholder verification failed: {e}")
+                profile["shareholders_verification"] = {
+                    "source": "PERPLEXITY_ONLY",
+                    "verified": False,
+                    "error": str(e),
+                }
+
         # Validate the profile
         validation_result = self.validator.validate(profile)
         if not validation_result.is_valid:
@@ -2309,6 +2356,87 @@ class CorpProfilingPipeline:
             }
 
         return profile
+
+    async def _verify_shareholders_with_dart(
+        self,
+        corp_name: str,
+        perplexity_shareholders: list[dict],
+    ) -> tuple[list[dict], dict]:
+        """
+        DART API를 사용하여 주주 정보 교차 검증
+
+        2-Source Verification:
+        1. Perplexity에서 추출한 주주 정보를 DART 공시와 비교
+        2. 두 소스에서 일치하는 주주만 HIGH 신뢰도로 표시
+        3. DART에만 있는 주주도 포함 (공시 데이터이므로 신뢰)
+        4. Perplexity에만 있는 주주는 LOW 신뢰도로 경고
+
+        Args:
+            corp_name: 기업명
+            perplexity_shareholders: Perplexity에서 추출한 주주 리스트
+
+        Returns:
+            (verified_shareholders, verification_metadata)
+        """
+        if not DART_VERIFICATION_ENABLED:
+            logger.debug("[DART] Verification disabled, using Perplexity data as-is")
+            return perplexity_shareholders, {"source": "PERPLEXITY_ONLY", "verified": False}
+
+        try:
+            verified, metadata = await get_verified_shareholders(
+                corp_name=corp_name,
+                perplexity_shareholders=perplexity_shareholders,
+            )
+
+            logger.info(
+                f"[DART] Shareholder verification for '{corp_name}': "
+                f"source={metadata.get('source')}, verified={metadata.get('verified')}"
+            )
+
+            return verified, metadata
+
+        except Exception as e:
+            logger.warning(f"[DART] Verification failed for '{corp_name}': {e}")
+            # Fallback to Perplexity data with LOW confidence
+            fallback_list = []
+            for sh in perplexity_shareholders:
+                sh_copy = dict(sh)
+                sh_copy["confidence"] = "LOW"
+                sh_copy["_note"] = f"DART 검증 실패: {str(e)}"
+                fallback_list.append(sh_copy)
+
+            return fallback_list, {
+                "source": "PERPLEXITY_FALLBACK",
+                "verified": False,
+                "error": str(e),
+            }
+
+    def _sync_verify_shareholders_with_dart(
+        self,
+        corp_name: str,
+        perplexity_shareholders: list[dict],
+    ) -> tuple[list[dict], dict]:
+        """
+        Sync wrapper for DART verification (for use in _build_final_profile)
+        """
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # If we're in an async context, create a new task
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(
+                        asyncio.run,
+                        self._verify_shareholders_with_dart(corp_name, perplexity_shareholders)
+                    )
+                    return future.result(timeout=30)
+            else:
+                return loop.run_until_complete(
+                    self._verify_shareholders_with_dart(corp_name, perplexity_shareholders)
+                )
+        except Exception as e:
+            logger.warning(f"[DART] Sync verification failed: {e}")
+            return perplexity_shareholders, {"source": "PERPLEXITY_ONLY", "verified": False, "error": str(e)}
 
     def _sync_get_cached_profile(self, corp_id: str, db_session) -> Optional[dict]:
         """Sync wrapper for cache lookup (for orchestrator injection)."""
