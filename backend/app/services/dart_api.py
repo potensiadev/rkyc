@@ -1,20 +1,26 @@
 """
-DART OpenAPI Client for Shareholder Verification
+DART OpenAPI Client for Fact-Based Corp Profiling
 
 DART (Data Analysis, Retrieval and Transfer System) is the official
 electronic disclosure system of South Korea's Financial Supervisory Service (FSS).
 
 This module provides:
 1. Corp Code lookup (DART 고유번호 조회)
-2. Major shareholder ownership query (주요주주 소유보고)
-3. 2-Source Verification with Perplexity (교차 검증)
+2. Company Info query (기업개황 조회) - CEO, 설립일, 업종 등 100% Fact
+3. Largest Shareholder query (최대주주 현황) - 100% Fact
+4. Major shareholder ownership query (주요주주 소유보고)
+5. 2-Source Verification with Perplexity (교차 검증)
 
 API Endpoints:
 - Corp Code List: https://opendart.fss.or.kr/api/corpCode.xml (ZIP)
+- Company Info: https://opendart.fss.or.kr/api/company.json (P0)
+- Largest Shareholder: https://opendart.fss.or.kr/api/hyslrSttus.json (P0)
 - Major Shareholder: https://opendart.fss.or.kr/api/elestock.json
 
 References:
-- https://opendart.fss.or.kr/guide/detail.do?apiGrpCd=DS004&apiId=2019022
+- https://opendart.fss.or.kr/guide/detail.do?apiGrpCd=DS001&apiId=2019002 (기업개황)
+- https://opendart.fss.or.kr/guide/detail.do?apiGrpCd=DS002&apiId=2019005 (최대주주)
+- https://opendart.fss.or.kr/guide/detail.do?apiGrpCd=DS004&apiId=2019022 (주요주주)
 """
 
 import asyncio
@@ -67,6 +73,88 @@ class ShareholderType(str, Enum):
     INSTITUTION = "기관"
     FOREIGN = "외국인"
     UNKNOWN = "기타"
+
+
+@dataclass
+class CompanyInfo:
+    """기업개황 정보 (100% Fact - DART 공시)"""
+    corp_code: str  # DART 고유번호
+    corp_name: str  # 정식 회사명
+    corp_name_eng: Optional[str] = None  # 영문명
+    stock_name: Optional[str] = None  # 종목명 (상장사)
+    stock_code: Optional[str] = None  # 종목코드 (상장사)
+    ceo_name: Optional[str] = None  # 대표이사
+    corp_cls: Optional[str] = None  # 법인구분 (Y:유가, K:코스닥, N:코넥스, E:기타)
+    jurir_no: Optional[str] = None  # 법인등록번호
+    bizr_no: Optional[str] = None  # 사업자등록번호
+    adres: Optional[str] = None  # 주소
+    hm_url: Optional[str] = None  # 홈페이지 URL
+    ir_url: Optional[str] = None  # IR 홈페이지 URL
+    phn_no: Optional[str] = None  # 전화번호
+    fax_no: Optional[str] = None  # 팩스번호
+    induty_code: Optional[str] = None  # 업종코드
+    est_dt: Optional[str] = None  # 설립일 (YYYYMMDD)
+    acc_mt: Optional[str] = None  # 결산월 (MM)
+    source: str = "DART"
+    confidence: str = "HIGH"  # DART 공시는 100% Fact
+
+    def to_dict(self) -> dict:
+        return {
+            "corp_code": self.corp_code,
+            "corp_name": self.corp_name,
+            "corp_name_eng": self.corp_name_eng,
+            "stock_name": self.stock_name,
+            "stock_code": self.stock_code,
+            "ceo_name": self.ceo_name,
+            "corp_cls": self.corp_cls,
+            "jurir_no": self.jurir_no,
+            "bizr_no": self.bizr_no,
+            "adres": self.adres,
+            "hm_url": self.hm_url,
+            "ir_url": self.ir_url,
+            "phn_no": self.phn_no,
+            "fax_no": self.fax_no,
+            "induty_code": self.induty_code,
+            "est_dt": self.est_dt,
+            "acc_mt": self.acc_mt,
+            "source": self.source,
+            "confidence": self.confidence,
+        }
+
+
+@dataclass
+class LargestShareholder:
+    """최대주주 현황 정보 (100% Fact - DART 공시)"""
+    nm: str  # 성명
+    relate: Optional[str] = None  # 관계 (본인, 친인척 등)
+    stock_knd: Optional[str] = None  # 주식 종류 (보통주, 우선주 등)
+    bsis_posesn_stock_co: int = 0  # 기초 소유 주식수
+    bsis_posesn_stock_qota_rt: float = 0.0  # 기초 소유 지분율
+    trmend_posesn_stock_co: int = 0  # 기말 소유 주식수
+    trmend_posesn_stock_qota_rt: float = 0.0  # 기말 소유 지분율
+    rm: Optional[str] = None  # 비고
+    report_date: Optional[str] = None  # 보고서 기준일
+    source: str = "DART"
+    source_url: Optional[str] = None
+    confidence: str = "HIGH"  # DART 공시는 100% Fact
+
+    def to_dict(self) -> dict:
+        return {
+            "name": self.nm,
+            "relate": self.relate,
+            "stock_knd": self.stock_knd,
+            "bsis_posesn_stock_co": self.bsis_posesn_stock_co,
+            "bsis_posesn_stock_qota_rt": self.bsis_posesn_stock_qota_rt,
+            "trmend_posesn_stock_co": self.trmend_posesn_stock_co,
+            "trmend_posesn_stock_qota_rt": self.trmend_posesn_stock_qota_rt,
+            "ratio_pct": self.trmend_posesn_stock_qota_rt,  # 호환성
+            "share_count": self.trmend_posesn_stock_co,  # 호환성
+            "rm": self.rm,
+            "report_date": self.report_date,
+            "source": self.source,
+            "source_url": self.source_url,
+            "confidence": self.confidence,
+        }
 
 
 @dataclass
@@ -238,7 +326,360 @@ async def get_corp_code(
 
 
 # ============================================================================
-# Major Shareholder API
+# P0: Company Info API (기업개황)
+# ============================================================================
+
+async def get_company_info(corp_code: str) -> Optional[CompanyInfo]:
+    """
+    DART 기업개황 조회 (100% Fact)
+
+    공시대상 기업의 기본 정보를 조회합니다.
+    CEO 이름, 설립일, 주소, 업종코드 등 기본 정보를 DART에서 직접 가져옵니다.
+
+    API: https://opendart.fss.or.kr/api/company.json
+
+    Args:
+        corp_code: DART 고유번호 (8자리)
+
+    Returns:
+        CompanyInfo 객체 또는 None
+    """
+    url = f"{DART_BASE_URL}/company.json"
+    params = {
+        "crtfc_key": DART_API_KEY,
+        "corp_code": corp_code,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=DART_TIMEOUT) as client:
+            response = await client.get(url, params=params)
+            response.raise_for_status()
+            data = response.json()
+
+            status = data.get("status", "")
+            message = data.get("message", "")
+
+            if status == DART_STATUS_NO_DATA:
+                logger.info(f"[DartAPI] No company info for corp_code={corp_code}")
+                return None
+
+            if status != DART_STATUS_SUCCESS:
+                raise DartError(status, message)
+
+            return CompanyInfo(
+                corp_code=data.get("corp_code", corp_code),
+                corp_name=data.get("corp_name", ""),
+                corp_name_eng=data.get("corp_name_eng"),
+                stock_name=data.get("stock_name"),
+                stock_code=data.get("stock_code"),
+                ceo_name=data.get("ceo_nm"),
+                corp_cls=data.get("corp_cls"),
+                jurir_no=data.get("jurir_no"),
+                bizr_no=data.get("bizr_no"),
+                adres=data.get("adres"),
+                hm_url=data.get("hm_url"),
+                ir_url=data.get("ir_url"),
+                phn_no=data.get("phn_no"),
+                fax_no=data.get("fax_no"),
+                induty_code=data.get("induty_code"),
+                est_dt=data.get("est_dt"),
+                acc_mt=data.get("acc_mt"),
+                source="DART",
+                confidence="HIGH",
+            )
+
+    except httpx.HTTPError as e:
+        logger.error(f"[DartAPI] HTTP error getting company info: {e}")
+        return None
+    except DartError as e:
+        logger.error(f"[DartAPI] {e}")
+        return None
+    except Exception as e:
+        logger.error(f"[DartAPI] Unexpected error getting company info: {e}")
+        return None
+
+
+async def get_company_info_by_name(corp_name: str) -> Optional[CompanyInfo]:
+    """
+    기업명으로 기업개황 조회
+
+    Args:
+        corp_name: 기업명 (예: "삼성전자", "엠케이전자")
+
+    Returns:
+        CompanyInfo 객체 또는 None
+    """
+    corp_code = await get_corp_code(corp_name=corp_name)
+    if not corp_code:
+        logger.warning(f"[DartAPI] Could not find corp_code for '{corp_name}'")
+        return None
+    return await get_company_info(corp_code)
+
+
+# ============================================================================
+# P0: Largest Shareholder API (최대주주 현황)
+# ============================================================================
+
+async def get_largest_shareholders(
+    corp_code: str,
+    bsns_year: Optional[str] = None,
+    reprt_code: str = "11011",  # 11011: 사업보고서
+) -> list[LargestShareholder]:
+    """
+    DART 최대주주 현황 조회 (100% Fact)
+
+    사업보고서에 기재된 최대주주 현황을 조회합니다.
+    elestock.json(주요주주 소유보고)보다 더 정확한 최대주주 정보를 제공합니다.
+
+    API: https://opendart.fss.or.kr/api/hyslrSttus.json
+
+    Args:
+        corp_code: DART 고유번호 (8자리)
+        bsns_year: 사업연도 (미지정 시 최근 연도)
+        reprt_code: 보고서 코드
+            - 11011: 사업보고서 (1년 전체)
+            - 11012: 반기보고서
+            - 11013: 1분기보고서
+            - 11014: 3분기보고서
+
+    Returns:
+        LargestShareholder 객체 리스트
+    """
+    url = f"{DART_BASE_URL}/hyslrSttus.json"
+
+    # 사업연도 미지정 시 전년도 사용 (사업보고서는 전년도 기준)
+    if not bsns_year:
+        bsns_year = str(datetime.now().year - 1)
+
+    params = {
+        "crtfc_key": DART_API_KEY,
+        "corp_code": corp_code,
+        "bsns_year": bsns_year,
+        "reprt_code": reprt_code,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=DART_TIMEOUT) as client:
+            response = await client.get(url, params=params)
+            response.raise_for_status()
+            data = response.json()
+
+            status = data.get("status", "")
+            message = data.get("message", "")
+
+            if status == DART_STATUS_NO_DATA:
+                logger.info(f"[DartAPI] No largest shareholder data for corp_code={corp_code}, year={bsns_year}")
+                # 전년도 데이터가 없으면 2년 전 시도
+                if bsns_year == str(datetime.now().year - 1):
+                    logger.info(f"[DartAPI] Trying previous year...")
+                    return await get_largest_shareholders(
+                        corp_code,
+                        bsns_year=str(datetime.now().year - 2),
+                        reprt_code=reprt_code,
+                    )
+                return []
+
+            if status != DART_STATUS_SUCCESS:
+                raise DartError(status, message)
+
+            shareholders = []
+            items = data.get("list", [])
+
+            for item in items:
+                shareholder = _parse_largest_shareholder_item(item, bsns_year)
+                if shareholder:
+                    shareholders.append(shareholder)
+
+            # 기말 지분율 기준 정렬
+            shareholders.sort(key=lambda s: s.trmend_posesn_stock_qota_rt, reverse=True)
+
+            logger.info(f"[DartAPI] Found {len(shareholders)} largest shareholders for corp_code={corp_code}")
+            return shareholders
+
+    except httpx.HTTPError as e:
+        logger.error(f"[DartAPI] HTTP error getting largest shareholders: {e}")
+        return []
+    except DartError as e:
+        logger.error(f"[DartAPI] {e}")
+        return []
+    except Exception as e:
+        logger.error(f"[DartAPI] Unexpected error getting largest shareholders: {e}")
+        return []
+
+
+def _parse_largest_shareholder_item(item: dict, bsns_year: str) -> Optional[LargestShareholder]:
+    """DART 최대주주 현황 응답 항목을 LargestShareholder 객체로 변환"""
+    try:
+        nm = item.get("nm", "").strip()
+        if not nm or nm == "-":
+            return None
+
+        # 지분율 파싱
+        def parse_float(val: str) -> float:
+            if not val or val == "-":
+                return 0.0
+            try:
+                return float(val.replace(",", ""))
+            except ValueError:
+                return 0.0
+
+        def parse_int(val: str) -> int:
+            if not val or val == "-":
+                return 0
+            try:
+                return int(val.replace(",", ""))
+            except ValueError:
+                return 0
+
+        return LargestShareholder(
+            nm=nm,
+            relate=item.get("relate"),
+            stock_knd=item.get("stock_knd"),
+            bsis_posesn_stock_co=parse_int(item.get("bsis_posesn_stock_co", "0")),
+            bsis_posesn_stock_qota_rt=parse_float(item.get("bsis_posesn_stock_qota_rt", "0")),
+            trmend_posesn_stock_co=parse_int(item.get("trmend_posesn_stock_co", "0")),
+            trmend_posesn_stock_qota_rt=parse_float(item.get("trmend_posesn_stock_qota_rt", "0")),
+            rm=item.get("rm"),
+            report_date=f"{bsns_year}1231",  # 사업보고서 기준일
+            source="DART",
+            source_url=None,
+            confidence="HIGH",
+        )
+
+    except Exception as e:
+        logger.warning(f"[DartAPI] Failed to parse largest shareholder item: {e}")
+        return None
+
+
+async def get_largest_shareholders_by_name(corp_name: str) -> list[LargestShareholder]:
+    """
+    기업명으로 최대주주 현황 조회
+
+    Args:
+        corp_name: 기업명 (예: "삼성전자", "엠케이전자")
+
+    Returns:
+        LargestShareholder 객체 리스트
+    """
+    corp_code = await get_corp_code(corp_name=corp_name)
+    if not corp_code:
+        logger.warning(f"[DartAPI] Could not find corp_code for '{corp_name}'")
+        return []
+    return await get_largest_shareholders(corp_code)
+
+
+# ============================================================================
+# P0: Fact-Based Profile Data (통합 조회)
+# ============================================================================
+
+@dataclass
+class FactBasedProfileData:
+    """
+    DART에서 가져온 Fact 기반 프로필 데이터
+
+    LLM 추출 대신 DART 공시를 사용하여 100% Hallucination 제거
+    """
+    company_info: Optional[CompanyInfo] = None
+    largest_shareholders: list[LargestShareholder] = field(default_factory=list)
+    corp_code: Optional[str] = None
+    fetch_timestamp: Optional[str] = None
+    errors: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return {
+            "company_info": self.company_info.to_dict() if self.company_info else None,
+            "largest_shareholders": [s.to_dict() for s in self.largest_shareholders],
+            "corp_code": self.corp_code,
+            "fetch_timestamp": self.fetch_timestamp,
+            "errors": self.errors,
+            "source": "DART",
+            "confidence": "HIGH",
+        }
+
+    @property
+    def ceo_name(self) -> Optional[str]:
+        """CEO 이름 (100% Fact)"""
+        return self.company_info.ceo_name if self.company_info else None
+
+    @property
+    def headquarters(self) -> Optional[str]:
+        """본사 주소 (100% Fact)"""
+        return self.company_info.adres if self.company_info else None
+
+    @property
+    def founded_year(self) -> Optional[int]:
+        """설립연도 (100% Fact)"""
+        if self.company_info and self.company_info.est_dt:
+            try:
+                return int(self.company_info.est_dt[:4])
+            except (ValueError, IndexError):
+                return None
+        return None
+
+    @property
+    def shareholders(self) -> list[dict]:
+        """주주 정보 (100% Fact)"""
+        return [s.to_dict() for s in self.largest_shareholders]
+
+
+async def get_fact_based_profile(corp_name: str) -> FactBasedProfileData:
+    """
+    DART에서 Fact 기반 프로필 데이터 조회 (통합)
+
+    기업개황 + 최대주주 현황을 한 번에 조회하여
+    LLM 추출 없이 100% Fact 기반 데이터를 제공합니다.
+
+    Args:
+        corp_name: 기업명
+
+    Returns:
+        FactBasedProfileData 객체
+    """
+    result = FactBasedProfileData(
+        fetch_timestamp=datetime.now(UTC).isoformat(),
+        errors=[],
+    )
+
+    # 1. Corp Code 조회
+    corp_code = await get_corp_code(corp_name=corp_name)
+    if not corp_code:
+        result.errors.append(f"DART 고유번호를 찾을 수 없습니다: {corp_name}")
+        logger.warning(f"[DartAPI] Could not find corp_code for '{corp_name}'")
+        return result
+
+    result.corp_code = corp_code
+
+    # 2. 기업개황 조회 (비동기)
+    try:
+        company_info = await get_company_info(corp_code)
+        result.company_info = company_info
+        if not company_info:
+            result.errors.append("기업개황 정보를 찾을 수 없습니다")
+    except Exception as e:
+        result.errors.append(f"기업개황 조회 실패: {str(e)}")
+        logger.error(f"[DartAPI] Failed to get company info: {e}")
+
+    # 3. 최대주주 현황 조회 (비동기)
+    try:
+        shareholders = await get_largest_shareholders(corp_code)
+        result.largest_shareholders = shareholders
+        if not shareholders:
+            result.errors.append("최대주주 현황 정보를 찾을 수 없습니다")
+    except Exception as e:
+        result.errors.append(f"최대주주 현황 조회 실패: {str(e)}")
+        logger.error(f"[DartAPI] Failed to get largest shareholders: {e}")
+
+    logger.info(
+        f"[DartAPI] Fact-based profile for '{corp_name}': "
+        f"company_info={'있음' if result.company_info else '없음'}, "
+        f"shareholders={len(result.largest_shareholders)}명"
+    )
+
+    return result
+
+
+# ============================================================================
+# Major Shareholder API (기존 - 주요주주 소유보고)
 # ============================================================================
 
 async def get_major_shareholders(

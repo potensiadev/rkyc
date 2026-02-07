@@ -17,6 +17,15 @@ from app.services.dart_api import (
     get_verified_shareholders,
     load_corp_codes,
     _corp_code_loaded,
+    # P0: Fact-Based APIs
+    get_company_info,
+    get_company_info_by_name,
+    get_largest_shareholders,
+    get_largest_shareholders_by_name,
+    get_fact_based_profile,
+    CompanyInfo,
+    LargestShareholder,
+    FactBasedProfileData,
 )
 
 logger = logging.getLogger(__name__)
@@ -76,6 +85,67 @@ class DartStatusResponse(BaseModel):
     corp_codes_loaded: bool
     corp_code_count: int
     api_available: bool
+
+
+# ============================================================================
+# P0: Fact-Based Models
+# ============================================================================
+
+class CompanyInfoResponse(BaseModel):
+    """기업개황 응답 (100% Fact)"""
+    corp_code: str
+    corp_name: str
+    corp_name_eng: Optional[str] = None
+    stock_name: Optional[str] = None
+    stock_code: Optional[str] = None
+    ceo_name: Optional[str] = None
+    corp_cls: Optional[str] = None
+    jurir_no: Optional[str] = None
+    bizr_no: Optional[str] = None
+    adres: Optional[str] = None
+    hm_url: Optional[str] = None
+    ir_url: Optional[str] = None
+    phn_no: Optional[str] = None
+    fax_no: Optional[str] = None
+    induty_code: Optional[str] = None
+    est_dt: Optional[str] = None
+    acc_mt: Optional[str] = None
+    source: str = "DART"
+    confidence: str = "HIGH"
+
+
+class LargestShareholderResponse(BaseModel):
+    """최대주주 현황 응답 (100% Fact)"""
+    name: str
+    relate: Optional[str] = None
+    stock_knd: Optional[str] = None
+    bsis_posesn_stock_co: int = 0
+    bsis_posesn_stock_qota_rt: float = 0.0
+    trmend_posesn_stock_co: int = 0
+    trmend_posesn_stock_qota_rt: float = 0.0
+    ratio_pct: float = 0.0  # 호환성 (기말 지분율)
+    share_count: int = 0  # 호환성 (기말 주식수)
+    rm: Optional[str] = None
+    report_date: Optional[str] = None
+    source: str = "DART"
+    confidence: str = "HIGH"
+
+
+class FactBasedProfileResponse(BaseModel):
+    """Fact 기반 프로필 응답"""
+    corp_name: str
+    corp_code: Optional[str] = None
+    company_info: Optional[CompanyInfoResponse] = None
+    largest_shareholders: list[LargestShareholderResponse] = []
+    # 편의용 필드
+    ceo_name: Optional[str] = None
+    headquarters: Optional[str] = None
+    founded_year: Optional[int] = None
+    shareholders_count: int = 0
+    fetch_timestamp: Optional[str] = None
+    errors: list[str] = []
+    source: str = "DART"
+    confidence: str = "HIGH"
 
 
 # ============================================================================
@@ -292,3 +362,239 @@ async def get_verified_shareholders_endpoint(
         "count": len(verified),
         "metadata": metadata,
     }
+
+
+# ============================================================================
+# P0: Fact-Based Endpoints (100% Hallucination 제거)
+# ============================================================================
+
+@router.get("/company/{corp_code}", response_model=CompanyInfoResponse)
+async def get_company_info_endpoint(corp_code: str):
+    """
+    P0: DART 기업개황 조회 (100% Fact)
+
+    공시대상 기업의 기본 정보를 DART에서 직접 조회합니다.
+    CEO 이름, 설립일, 주소, 업종코드 등 100% Fact 기반 데이터를 제공합니다.
+
+    Args:
+        corp_code: DART 고유번호 (8자리)
+
+    Returns:
+        CompanyInfoResponse: 기업개황 정보
+    """
+    if len(corp_code) != 8:
+        raise HTTPException(status_code=400, detail="corp_code must be 8 characters")
+
+    company_info = await get_company_info(corp_code)
+
+    if not company_info:
+        raise HTTPException(status_code=404, detail=f"Company info not found for corp_code={corp_code}")
+
+    return CompanyInfoResponse(
+        corp_code=company_info.corp_code,
+        corp_name=company_info.corp_name,
+        corp_name_eng=company_info.corp_name_eng,
+        stock_name=company_info.stock_name,
+        stock_code=company_info.stock_code,
+        ceo_name=company_info.ceo_name,
+        corp_cls=company_info.corp_cls,
+        jurir_no=company_info.jurir_no,
+        bizr_no=company_info.bizr_no,
+        adres=company_info.adres,
+        hm_url=company_info.hm_url,
+        ir_url=company_info.ir_url,
+        phn_no=company_info.phn_no,
+        fax_no=company_info.fax_no,
+        induty_code=company_info.induty_code,
+        est_dt=company_info.est_dt,
+        acc_mt=company_info.acc_mt,
+        source=company_info.source,
+        confidence=company_info.confidence,
+    )
+
+
+@router.get("/company-by-name")
+async def get_company_info_by_name_endpoint(
+    corp_name: str = Query(..., description="기업명 (예: 삼성전자, 엠케이전자)"),
+):
+    """
+    P0: 기업명으로 DART 기업개황 조회 (100% Fact)
+
+    기업명으로 DART 고유번호를 찾은 후 기업개황을 조회합니다.
+
+    Args:
+        corp_name: 기업명
+
+    Returns:
+        dict: 기업개황 정보 및 메타데이터
+    """
+    company_info = await get_company_info_by_name(corp_name)
+
+    if not company_info:
+        return {
+            "corp_name": corp_name,
+            "found": False,
+            "company_info": None,
+            "message": f"DART에서 '{corp_name}'을(를) 찾을 수 없습니다.",
+        }
+
+    return {
+        "corp_name": corp_name,
+        "found": True,
+        "company_info": company_info.to_dict(),
+    }
+
+
+@router.get("/largest-shareholders/{corp_code}")
+async def get_largest_shareholders_endpoint(
+    corp_code: str,
+    bsns_year: Optional[str] = Query(None, description="사업연도 (예: 2024)"),
+):
+    """
+    P0: DART 최대주주 현황 조회 (100% Fact)
+
+    사업보고서에 기재된 최대주주 현황을 조회합니다.
+    주요주주 소유보고(elestock.json)보다 더 정확한 최대주주 정보를 제공합니다.
+
+    Args:
+        corp_code: DART 고유번호 (8자리)
+        bsns_year: 사업연도 (미지정 시 최근 연도)
+
+    Returns:
+        dict: 최대주주 현황 목록
+    """
+    if len(corp_code) != 8:
+        raise HTTPException(status_code=400, detail="corp_code must be 8 characters")
+
+    shareholders = await get_largest_shareholders(corp_code, bsns_year=bsns_year)
+
+    return {
+        "corp_code": corp_code,
+        "bsns_year": bsns_year,
+        "shareholders": [s.to_dict() for s in shareholders],
+        "count": len(shareholders),
+        "source": "DART",
+        "confidence": "HIGH",
+    }
+
+
+@router.get("/largest-shareholders-by-name")
+async def get_largest_shareholders_by_name_endpoint(
+    corp_name: str = Query(..., description="기업명 (예: 삼성전자, 엠케이전자)"),
+):
+    """
+    P0: 기업명으로 DART 최대주주 현황 조회 (100% Fact)
+
+    기업명으로 DART 고유번호를 찾은 후 최대주주 현황을 조회합니다.
+
+    Args:
+        corp_name: 기업명
+
+    Returns:
+        dict: 최대주주 현황 목록 및 메타데이터
+    """
+    shareholders = await get_largest_shareholders_by_name(corp_name)
+
+    if not shareholders:
+        # Corp code 찾기
+        corp_code = await get_corp_code(corp_name=corp_name)
+        if not corp_code:
+            return {
+                "corp_name": corp_name,
+                "found": False,
+                "shareholders": [],
+                "message": f"DART에서 '{corp_name}'을(를) 찾을 수 없습니다.",
+            }
+        else:
+            return {
+                "corp_name": corp_name,
+                "corp_code": corp_code,
+                "found": True,
+                "shareholders": [],
+                "message": f"'{corp_name}'의 최대주주 현황이 없습니다.",
+            }
+
+    return {
+        "corp_name": corp_name,
+        "found": True,
+        "shareholders": [s.to_dict() for s in shareholders],
+        "count": len(shareholders),
+        "source": "DART",
+        "confidence": "HIGH",
+    }
+
+
+@router.get("/fact-profile")
+async def get_fact_based_profile_endpoint(
+    corp_name: str = Query(..., description="기업명 (예: 삼성전자, 엠케이전자)"),
+):
+    """
+    P0: DART Fact 기반 프로필 통합 조회 (100% Hallucination 제거)
+
+    기업개황 + 최대주주 현황을 한 번에 조회하여
+    LLM 추출 없이 100% Fact 기반 데이터를 제공합니다.
+
+    이 API를 사용하면 주주 정보, CEO 이름, 설립일 등의
+    Hallucination을 100% 제거할 수 있습니다.
+
+    Args:
+        corp_name: 기업명
+
+    Returns:
+        FactBasedProfileResponse: Fact 기반 프로필 데이터
+    """
+    profile = await get_fact_based_profile(corp_name)
+
+    # 회사 정보 변환
+    company_info_response = None
+    if profile.company_info:
+        company_info_response = CompanyInfoResponse(
+            corp_code=profile.company_info.corp_code,
+            corp_name=profile.company_info.corp_name,
+            corp_name_eng=profile.company_info.corp_name_eng,
+            stock_name=profile.company_info.stock_name,
+            stock_code=profile.company_info.stock_code,
+            ceo_name=profile.company_info.ceo_name,
+            corp_cls=profile.company_info.corp_cls,
+            jurir_no=profile.company_info.jurir_no,
+            bizr_no=profile.company_info.bizr_no,
+            adres=profile.company_info.adres,
+            hm_url=profile.company_info.hm_url,
+            ir_url=profile.company_info.ir_url,
+            phn_no=profile.company_info.phn_no,
+            fax_no=profile.company_info.fax_no,
+            induty_code=profile.company_info.induty_code,
+            est_dt=profile.company_info.est_dt,
+            acc_mt=profile.company_info.acc_mt,
+        )
+
+    # 주주 정보 변환
+    shareholders_response = [
+        LargestShareholderResponse(
+            name=s.nm,
+            relate=s.relate,
+            stock_knd=s.stock_knd,
+            bsis_posesn_stock_co=s.bsis_posesn_stock_co,
+            bsis_posesn_stock_qota_rt=s.bsis_posesn_stock_qota_rt,
+            trmend_posesn_stock_co=s.trmend_posesn_stock_co,
+            trmend_posesn_stock_qota_rt=s.trmend_posesn_stock_qota_rt,
+            ratio_pct=s.trmend_posesn_stock_qota_rt,
+            share_count=s.trmend_posesn_stock_co,
+            rm=s.rm,
+            report_date=s.report_date,
+        )
+        for s in profile.largest_shareholders
+    ]
+
+    return FactBasedProfileResponse(
+        corp_name=corp_name,
+        corp_code=profile.corp_code,
+        company_info=company_info_response,
+        largest_shareholders=shareholders_response,
+        ceo_name=profile.ceo_name,
+        headquarters=profile.headquarters,
+        founded_year=profile.founded_year,
+        shareholders_count=len(profile.largest_shareholders),
+        fetch_timestamp=profile.fetch_timestamp,
+        errors=profile.errors,
+    )
