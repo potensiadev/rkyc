@@ -26,6 +26,18 @@ from app.services.dart_api import (
     CompanyInfo,
     LargestShareholder,
     FactBasedProfileData,
+    # P2: Financial Statement APIs
+    get_financial_statements,
+    get_financial_statements_by_name,
+    FinancialStatement,
+    # P3: Major Event APIs
+    get_major_events,
+    get_major_events_by_name,
+    MajorEvent,
+    MajorEventType,
+    # P2/P3: Extended Profile
+    get_extended_fact_profile,
+    ExtendedFactProfile,
 )
 
 logger = logging.getLogger(__name__)
@@ -598,3 +610,252 @@ async def get_fact_based_profile_endpoint(
         fetch_timestamp=profile.fetch_timestamp,
         errors=profile.errors,
     )
+
+
+# ============================================================================
+# P2: Financial Statement Endpoints (재무제표 - 100% Fact)
+# ============================================================================
+
+class FinancialStatementResponse(BaseModel):
+    """재무제표 응답"""
+    bsns_year: str
+    revenue: Optional[int] = None
+    operating_profit: Optional[int] = None
+    net_income: Optional[int] = None
+    total_assets: Optional[int] = None
+    total_liabilities: Optional[int] = None
+    total_equity: Optional[int] = None
+    debt_ratio: Optional[float] = None
+    report_code: Optional[str] = None
+    source: str = "DART"
+    confidence: str = "HIGH"
+
+
+@router.get("/financials/{corp_code}")
+async def get_financial_statements_endpoint(
+    corp_code: str,
+    bsns_year: Optional[str] = Query(None, description="사업연도 (예: 2024)"),
+    fs_div: str = Query("OFS", description="재무제표 구분 (OFS=개별, CFS=연결)"),
+):
+    """
+    P2: DART 재무제표 주요계정 조회 (100% Fact)
+
+    매출액, 영업이익, 당기순이익, 총자산, 부채비율 등을 조회합니다.
+
+    Args:
+        corp_code: DART 고유번호 (8자리)
+        bsns_year: 사업연도 (미지정 시 최근 3년)
+        fs_div: 재무제표 구분
+
+    Returns:
+        dict: 재무제표 목록
+    """
+    if len(corp_code) != 8:
+        raise HTTPException(status_code=400, detail="corp_code must be 8 characters")
+
+    statements = await get_financial_statements(
+        corp_code,
+        bsns_year=bsns_year,
+        fs_div=fs_div,
+    )
+
+    return {
+        "corp_code": corp_code,
+        "financial_statements": [s.to_dict() for s in statements],
+        "count": len(statements),
+        "source": "DART",
+        "confidence": "HIGH",
+    }
+
+
+@router.get("/financials-by-name")
+async def get_financial_statements_by_name_endpoint(
+    corp_name: str = Query(..., description="기업명 (예: 삼성전자, 엠케이전자)"),
+):
+    """
+    P2: 기업명으로 DART 재무제표 조회 (100% Fact)
+
+    Args:
+        corp_name: 기업명
+
+    Returns:
+        dict: 재무제표 목록 (최근 3년)
+    """
+    statements = await get_financial_statements_by_name(corp_name)
+
+    if not statements:
+        corp_code = await get_corp_code(corp_name=corp_name)
+        if not corp_code:
+            return {
+                "corp_name": corp_name,
+                "found": False,
+                "financial_statements": [],
+                "message": f"DART에서 '{corp_name}'을(를) 찾을 수 없습니다.",
+            }
+        else:
+            return {
+                "corp_name": corp_name,
+                "corp_code": corp_code,
+                "found": True,
+                "financial_statements": [],
+                "message": f"'{corp_name}'의 재무제표 정보가 없습니다.",
+            }
+
+    return {
+        "corp_name": corp_name,
+        "found": True,
+        "financial_statements": [s.to_dict() for s in statements],
+        "count": len(statements),
+        "source": "DART",
+        "confidence": "HIGH",
+    }
+
+
+# ============================================================================
+# P3: Major Event Endpoints (주요사항보고서 - 100% Fact)
+# ============================================================================
+
+class MajorEventResponse(BaseModel):
+    """주요사항보고서 응답"""
+    rcept_no: str
+    rcept_dt: str
+    report_nm: str
+    event_type: str
+    corp_name: str
+    flr_nm: Optional[str] = None
+    rm: Optional[str] = None
+    source_url: Optional[str] = None
+    source: str = "DART"
+    confidence: str = "HIGH"
+
+
+@router.get("/events/{corp_code}")
+async def get_major_events_endpoint(
+    corp_code: str,
+    bgn_de: Optional[str] = Query(None, description="시작일 (YYYYMMDD)"),
+    end_de: Optional[str] = Query(None, description="종료일 (YYYYMMDD)"),
+):
+    """
+    P3: DART 주요사항보고서 조회 (100% Fact)
+
+    인수/합병, 유상증자, 소송, 감사의견 등 중요 이벤트를 조회합니다.
+
+    Args:
+        corp_code: DART 고유번호 (8자리)
+        bgn_de: 시작일 (미지정 시 1년 전)
+        end_de: 종료일 (미지정 시 오늘)
+
+    Returns:
+        dict: 주요사항보고서 목록
+    """
+    if len(corp_code) != 8:
+        raise HTTPException(status_code=400, detail="corp_code must be 8 characters")
+
+    events = await get_major_events(corp_code, bgn_de=bgn_de, end_de=end_de)
+
+    return {
+        "corp_code": corp_code,
+        "major_events": [e.to_dict() for e in events],
+        "count": len(events),
+        "has_risk_events": any(
+            e.event_type in {MajorEventType.LITIGATION, MajorEventType.SANCTION, MajorEventType.DEFAULT, MajorEventType.AUDIT_OPINION}
+            for e in events
+        ),
+        "source": "DART",
+        "confidence": "HIGH",
+    }
+
+
+@router.get("/events-by-name")
+async def get_major_events_by_name_endpoint(
+    corp_name: str = Query(..., description="기업명 (예: 삼성전자, 엠케이전자)"),
+):
+    """
+    P3: 기업명으로 DART 주요사항보고서 조회 (100% Fact)
+
+    Args:
+        corp_name: 기업명
+
+    Returns:
+        dict: 주요사항보고서 목록 (최근 1년)
+    """
+    events = await get_major_events_by_name(corp_name)
+
+    if not events:
+        corp_code = await get_corp_code(corp_name=corp_name)
+        if not corp_code:
+            return {
+                "corp_name": corp_name,
+                "found": False,
+                "major_events": [],
+                "message": f"DART에서 '{corp_name}'을(를) 찾을 수 없습니다.",
+            }
+        else:
+            return {
+                "corp_name": corp_name,
+                "corp_code": corp_code,
+                "found": True,
+                "major_events": [],
+                "message": f"'{corp_name}'의 최근 1년 내 주요사항보고서가 없습니다.",
+            }
+
+    return {
+        "corp_name": corp_name,
+        "found": True,
+        "major_events": [e.to_dict() for e in events],
+        "count": len(events),
+        "has_risk_events": any(
+            e.event_type in {MajorEventType.LITIGATION, MajorEventType.SANCTION, MajorEventType.DEFAULT, MajorEventType.AUDIT_OPINION}
+            for e in events
+        ),
+        "source": "DART",
+        "confidence": "HIGH",
+    }
+
+
+# ============================================================================
+# P2/P3: Extended Fact Profile (통합 조회)
+# ============================================================================
+
+@router.get("/extended-profile")
+async def get_extended_fact_profile_endpoint(
+    corp_name: str = Query(..., description="기업명 (예: 삼성전자, 엠케이전자)"),
+):
+    """
+    P2/P3: 확장된 DART Fact 프로필 통합 조회
+
+    기업개황 + 최대주주 + 재무제표(3년) + 주요사항보고서(1년)을
+    한 번에 조회하여 100% Fact 기반 데이터를 제공합니다.
+
+    Args:
+        corp_name: 기업명
+
+    Returns:
+        dict: 확장된 Fact 프로필
+    """
+    profile = await get_extended_fact_profile(corp_name)
+
+    # 회사 정보 변환
+    company_info = None
+    if profile.company_info:
+        company_info = profile.company_info.to_dict()
+
+    return {
+        "corp_name": corp_name,
+        "corp_code": profile.corp_code,
+        "company_info": company_info,
+        "largest_shareholders": [s.to_dict() for s in profile.largest_shareholders],
+        "financial_statements": [f.to_dict() for f in profile.financial_statements],
+        "major_events": [e.to_dict() for e in profile.major_events],
+        # 편의용 필드
+        "latest_revenue": profile.latest_revenue,
+        "latest_net_income": profile.latest_net_income,
+        "has_risk_events": profile.has_risk_events,
+        "shareholders_count": len(profile.largest_shareholders),
+        "financials_count": len(profile.financial_statements),
+        "events_count": len(profile.major_events),
+        "fetch_timestamp": profile.fetch_timestamp,
+        "errors": profile.errors,
+        "source": "DART",
+        "confidence": "HIGH",
+    }

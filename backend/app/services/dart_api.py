@@ -679,6 +679,531 @@ async def get_fact_based_profile(corp_name: str) -> FactBasedProfileData:
 
 
 # ============================================================================
+# P2: Financial Statement API (재무제표)
+# ============================================================================
+
+@dataclass
+class FinancialStatement:
+    """재무제표 정보 (100% Fact - DART 공시)"""
+    bsns_year: str  # 사업연도
+    revenue: Optional[int] = None  # 매출액
+    operating_profit: Optional[int] = None  # 영업이익
+    net_income: Optional[int] = None  # 당기순이익
+    total_assets: Optional[int] = None  # 총자산
+    total_liabilities: Optional[int] = None  # 총부채
+    total_equity: Optional[int] = None  # 총자본
+    debt_ratio: Optional[float] = None  # 부채비율
+    report_code: Optional[str] = None  # 보고서 코드 (11011=사업보고서)
+    source: str = "DART"
+    confidence: str = "HIGH"
+
+    def to_dict(self) -> dict:
+        return {
+            "bsns_year": self.bsns_year,
+            "revenue": self.revenue,
+            "operating_profit": self.operating_profit,
+            "net_income": self.net_income,
+            "total_assets": self.total_assets,
+            "total_liabilities": self.total_liabilities,
+            "total_equity": self.total_equity,
+            "debt_ratio": self.debt_ratio,
+            "report_code": self.report_code,
+            "source": self.source,
+            "confidence": self.confidence,
+        }
+
+
+async def get_financial_statements(
+    corp_code: str,
+    bsns_year: Optional[str] = None,
+    reprt_code: str = "11011",  # 11011: 사업보고서
+    fs_div: str = "OFS",  # OFS: 개별재무제표, CFS: 연결재무제표
+) -> list[FinancialStatement]:
+    """
+    P2: DART 재무제표 주요계정 조회 (100% Fact)
+
+    단일회사 주요계정 API를 호출하여 매출액, 영업이익, 순이익 등을 조회합니다.
+
+    API: https://opendart.fss.or.kr/api/fnlttSinglAcnt.json
+
+    Args:
+        corp_code: DART 고유번호 (8자리)
+        bsns_year: 사업연도 (미지정 시 최근 3년)
+        reprt_code: 보고서 코드 (11011=사업보고서, 11012=반기, 11013=1분기, 11014=3분기)
+        fs_div: 재무제표 구분 (OFS=개별, CFS=연결)
+
+    Returns:
+        FinancialStatement 객체 리스트
+    """
+    url = f"{DART_BASE_URL}/fnlttSinglAcnt.json"
+
+    # 사업연도 미지정 시 최근 3년 조회
+    years = []
+    if bsns_year:
+        years = [bsns_year]
+    else:
+        current_year = datetime.now().year
+        years = [str(current_year - i) for i in range(1, 4)]  # 전년도, 2년전, 3년전
+
+    all_statements = []
+
+    for year in years:
+        params = {
+            "crtfc_key": DART_API_KEY,
+            "corp_code": corp_code,
+            "bsns_year": year,
+            "reprt_code": reprt_code,
+            "fs_div": fs_div,
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=DART_TIMEOUT) as client:
+                response = await client.get(url, params=params)
+                response.raise_for_status()
+                data = response.json()
+
+                status = data.get("status", "")
+                message = data.get("message", "")
+
+                if status == DART_STATUS_NO_DATA:
+                    logger.debug(f"[DartAPI] No financial data for corp_code={corp_code}, year={year}")
+                    continue
+
+                if status != DART_STATUS_SUCCESS:
+                    logger.warning(f"[DartAPI] Financial API error: {message}")
+                    continue
+
+                # 재무 항목 파싱
+                items = data.get("list", [])
+                statement = _parse_financial_items(items, year, reprt_code)
+                if statement:
+                    all_statements.append(statement)
+
+        except Exception as e:
+            logger.warning(f"[DartAPI] Failed to get financial data for year={year}: {e}")
+            continue
+
+    logger.info(f"[DartAPI] Found {len(all_statements)} financial statements for corp_code={corp_code}")
+    return all_statements
+
+
+def _parse_financial_items(items: list[dict], bsns_year: str, reprt_code: str) -> Optional[FinancialStatement]:
+    """DART 재무제표 항목 파싱"""
+    if not items:
+        return None
+
+    def parse_amount(val: str) -> Optional[int]:
+        if not val or val == "-":
+            return None
+        try:
+            return int(val.replace(",", ""))
+        except ValueError:
+            return None
+
+    revenue = None
+    operating_profit = None
+    net_income = None
+    total_assets = None
+    total_liabilities = None
+    total_equity = None
+
+    for item in items:
+        account_nm = item.get("account_nm", "")
+        thstrm_amount = item.get("thstrm_amount", "")  # 당기
+
+        # 주요 계정 매핑
+        if "매출액" in account_nm or "수익(매출액)" in account_nm:
+            revenue = parse_amount(thstrm_amount)
+        elif "영업이익" in account_nm:
+            operating_profit = parse_amount(thstrm_amount)
+        elif "당기순이익" in account_nm or "당기순손익" in account_nm:
+            net_income = parse_amount(thstrm_amount)
+        elif account_nm == "자산총계":
+            total_assets = parse_amount(thstrm_amount)
+        elif account_nm == "부채총계":
+            total_liabilities = parse_amount(thstrm_amount)
+        elif account_nm == "자본총계":
+            total_equity = parse_amount(thstrm_amount)
+
+    # 부채비율 계산
+    debt_ratio = None
+    if total_liabilities and total_equity and total_equity > 0:
+        debt_ratio = round((total_liabilities / total_equity) * 100, 2)
+
+    return FinancialStatement(
+        bsns_year=bsns_year,
+        revenue=revenue,
+        operating_profit=operating_profit,
+        net_income=net_income,
+        total_assets=total_assets,
+        total_liabilities=total_liabilities,
+        total_equity=total_equity,
+        debt_ratio=debt_ratio,
+        report_code=reprt_code,
+        source="DART",
+        confidence="HIGH",
+    )
+
+
+async def get_financial_statements_by_name(corp_name: str) -> list[FinancialStatement]:
+    """
+    기업명으로 재무제표 조회
+
+    Args:
+        corp_name: 기업명
+
+    Returns:
+        FinancialStatement 객체 리스트 (최근 3년)
+    """
+    corp_code = await get_corp_code(corp_name=corp_name)
+    if not corp_code:
+        logger.warning(f"[DartAPI] Could not find corp_code for '{corp_name}'")
+        return []
+    return await get_financial_statements(corp_code)
+
+
+# ============================================================================
+# P3: Major Event Report API (주요사항보고서)
+# ============================================================================
+
+class MajorEventType(str, Enum):
+    """주요사항보고서 유형"""
+    # 경영권 관련
+    TAKEOVER = "인수/합병"
+    MERGER = "합병"
+    SPLIT = "분할"
+    STOCK_TRANSFER = "주식양수도"
+    # 자본 관련
+    CAPITAL_INCREASE = "유상증자"
+    CAPITAL_DECREASE = "감자"
+    CONVERTIBLE_BOND = "전환사채"
+    BOND_WITH_WARRANT = "신주인수권부사채"
+    # 사업 관련
+    BUSINESS_TRANSFER = "영업양수도"
+    NEW_FACILITY = "신규시설투자"
+    OVERSEAS_INVESTMENT = "해외투자"
+    # 재무/부정
+    AUDIT_OPINION = "감사의견"
+    LITIGATION = "소송"
+    SANCTION = "제재"
+    DEFAULT = "채무불이행"
+    # 기타
+    OTHER = "기타"
+
+
+@dataclass
+class MajorEvent:
+    """주요사항보고서 정보 (100% Fact - DART 공시)"""
+    rcept_no: str  # 접수번호
+    rcept_dt: str  # 접수일자
+    report_nm: str  # 보고서명
+    event_type: MajorEventType  # 이벤트 유형
+    corp_name: str  # 회사명
+    flr_nm: Optional[str] = None  # 제출인
+    rm: Optional[str] = None  # 비고
+    source_url: Optional[str] = None
+    source: str = "DART"
+    confidence: str = "HIGH"
+
+    def to_dict(self) -> dict:
+        return {
+            "rcept_no": self.rcept_no,
+            "rcept_dt": self.rcept_dt,
+            "report_nm": self.report_nm,
+            "event_type": self.event_type.value,
+            "corp_name": self.corp_name,
+            "flr_nm": self.flr_nm,
+            "rm": self.rm,
+            "source_url": self.source_url or f"https://dart.fss.or.kr/dsaf001/main.do?rcpNo={self.rcept_no}",
+            "source": self.source,
+            "confidence": self.confidence,
+        }
+
+
+def _classify_event_type(report_nm: str) -> MajorEventType:
+    """보고서명으로 이벤트 유형 분류"""
+    report_nm = report_nm.lower()
+
+    # 경영권 관련
+    if "인수" in report_nm or "취득" in report_nm:
+        return MajorEventType.TAKEOVER
+    if "합병" in report_nm:
+        return MajorEventType.MERGER
+    if "분할" in report_nm:
+        return MajorEventType.SPLIT
+    if "양수도" in report_nm and "주식" in report_nm:
+        return MajorEventType.STOCK_TRANSFER
+
+    # 자본 관련
+    if "유상증자" in report_nm or "증자" in report_nm:
+        return MajorEventType.CAPITAL_INCREASE
+    if "감자" in report_nm:
+        return MajorEventType.CAPITAL_DECREASE
+    if "전환사채" in report_nm:
+        return MajorEventType.CONVERTIBLE_BOND
+    if "신주인수권" in report_nm:
+        return MajorEventType.BOND_WITH_WARRANT
+
+    # 사업 관련
+    if "영업양수도" in report_nm or "사업양수도" in report_nm:
+        return MajorEventType.BUSINESS_TRANSFER
+    if "시설투자" in report_nm or "설비투자" in report_nm:
+        return MajorEventType.NEW_FACILITY
+    if "해외" in report_nm and ("투자" in report_nm or "진출" in report_nm):
+        return MajorEventType.OVERSEAS_INVESTMENT
+
+    # 재무/부정
+    if "감사" in report_nm and ("의견" in report_nm or "거절" in report_nm):
+        return MajorEventType.AUDIT_OPINION
+    if "소송" in report_nm:
+        return MajorEventType.LITIGATION
+    if "제재" in report_nm or "조치" in report_nm:
+        return MajorEventType.SANCTION
+    if "채무불이행" in report_nm or "부도" in report_nm:
+        return MajorEventType.DEFAULT
+
+    return MajorEventType.OTHER
+
+
+async def get_major_events(
+    corp_code: str,
+    bgn_de: Optional[str] = None,  # 시작일 (YYYYMMDD)
+    end_de: Optional[str] = None,  # 종료일 (YYYYMMDD)
+    pblntf_ty: str = "B",  # B: 주요사항보고
+) -> list[MajorEvent]:
+    """
+    P3: DART 주요사항보고서 조회 (100% Fact)
+
+    공시검색 API를 호출하여 주요사항보고서를 조회합니다.
+    인수/합병, 유상증자, 소송, 감사의견 등 중요 이벤트를 추적합니다.
+
+    API: https://opendart.fss.or.kr/api/list.json
+
+    Args:
+        corp_code: DART 고유번호 (8자리)
+        bgn_de: 시작일 (YYYYMMDD, 미지정 시 1년 전)
+        end_de: 종료일 (YYYYMMDD, 미지정 시 오늘)
+        pblntf_ty: 공시유형 (B=주요사항보고)
+
+    Returns:
+        MajorEvent 객체 리스트
+    """
+    url = f"{DART_BASE_URL}/list.json"
+
+    # 기본 기간: 최근 1년
+    if not end_de:
+        end_de = datetime.now().strftime("%Y%m%d")
+    if not bgn_de:
+        bgn_de = (datetime.now() - timedelta(days=365)).strftime("%Y%m%d")
+
+    params = {
+        "crtfc_key": DART_API_KEY,
+        "corp_code": corp_code,
+        "bgn_de": bgn_de,
+        "end_de": end_de,
+        "pblntf_ty": pblntf_ty,
+        "page_count": 100,  # 최대 100건
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=DART_TIMEOUT) as client:
+            response = await client.get(url, params=params)
+            response.raise_for_status()
+            data = response.json()
+
+            status = data.get("status", "")
+            message = data.get("message", "")
+
+            if status == DART_STATUS_NO_DATA:
+                logger.info(f"[DartAPI] No major events for corp_code={corp_code}")
+                return []
+
+            if status != DART_STATUS_SUCCESS:
+                raise DartError(status, message)
+
+            events = []
+            items = data.get("list", [])
+
+            for item in items:
+                event = MajorEvent(
+                    rcept_no=item.get("rcept_no", ""),
+                    rcept_dt=item.get("rcept_dt", ""),
+                    report_nm=item.get("report_nm", ""),
+                    event_type=_classify_event_type(item.get("report_nm", "")),
+                    corp_name=item.get("corp_name", ""),
+                    flr_nm=item.get("flr_nm"),
+                    rm=item.get("rm"),
+                )
+                events.append(event)
+
+            logger.info(f"[DartAPI] Found {len(events)} major events for corp_code={corp_code}")
+            return events
+
+    except httpx.HTTPError as e:
+        logger.error(f"[DartAPI] HTTP error getting major events: {e}")
+        return []
+    except DartError as e:
+        logger.error(f"[DartAPI] {e}")
+        return []
+    except Exception as e:
+        logger.error(f"[DartAPI] Unexpected error getting major events: {e}")
+        return []
+
+
+async def get_major_events_by_name(corp_name: str) -> list[MajorEvent]:
+    """
+    기업명으로 주요사항보고서 조회
+
+    Args:
+        corp_name: 기업명
+
+    Returns:
+        MajorEvent 객체 리스트 (최근 1년)
+    """
+    corp_code = await get_corp_code(corp_name=corp_name)
+    if not corp_code:
+        logger.warning(f"[DartAPI] Could not find corp_code for '{corp_name}'")
+        return []
+    return await get_major_events(corp_code)
+
+
+# ============================================================================
+# P2/P3: Extended Fact-Based Profile (재무 + 주요이벤트 포함)
+# ============================================================================
+
+@dataclass
+class ExtendedFactProfile:
+    """
+    확장된 Fact 기반 프로필 (P0 + P2 + P3)
+
+    - 기업개황 (P0)
+    - 최대주주 현황 (P0)
+    - 재무제표 (P2)
+    - 주요사항보고서 (P3)
+    """
+    company_info: Optional[CompanyInfo] = None
+    largest_shareholders: list[LargestShareholder] = field(default_factory=list)
+    financial_statements: list[FinancialStatement] = field(default_factory=list)
+    major_events: list[MajorEvent] = field(default_factory=list)
+    corp_code: Optional[str] = None
+    fetch_timestamp: Optional[str] = None
+    errors: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return {
+            "company_info": self.company_info.to_dict() if self.company_info else None,
+            "largest_shareholders": [s.to_dict() for s in self.largest_shareholders],
+            "financial_statements": [f.to_dict() for f in self.financial_statements],
+            "major_events": [e.to_dict() for e in self.major_events],
+            "corp_code": self.corp_code,
+            "fetch_timestamp": self.fetch_timestamp,
+            "errors": self.errors,
+            "source": "DART",
+            "confidence": "HIGH",
+        }
+
+    @property
+    def latest_revenue(self) -> Optional[int]:
+        """최신 매출액"""
+        if self.financial_statements:
+            return self.financial_statements[0].revenue
+        return None
+
+    @property
+    def latest_net_income(self) -> Optional[int]:
+        """최신 당기순이익"""
+        if self.financial_statements:
+            return self.financial_statements[0].net_income
+        return None
+
+    @property
+    def has_risk_events(self) -> bool:
+        """위험 이벤트 존재 여부"""
+        risk_types = {
+            MajorEventType.LITIGATION,
+            MajorEventType.SANCTION,
+            MajorEventType.DEFAULT,
+            MajorEventType.AUDIT_OPINION,
+        }
+        return any(e.event_type in risk_types for e in self.major_events)
+
+
+async def get_extended_fact_profile(corp_name: str) -> ExtendedFactProfile:
+    """
+    확장된 Fact 기반 프로필 조회 (P0 + P2 + P3)
+
+    기업개황, 최대주주, 재무제표, 주요사항보고서를 한 번에 조회합니다.
+
+    Args:
+        corp_name: 기업명
+
+    Returns:
+        ExtendedFactProfile 객체
+    """
+    result = ExtendedFactProfile(
+        fetch_timestamp=datetime.now(UTC).isoformat(),
+        errors=[],
+    )
+
+    # 1. Corp Code 조회
+    corp_code = await get_corp_code(corp_name=corp_name)
+    if not corp_code:
+        result.errors.append(f"DART 고유번호를 찾을 수 없습니다: {corp_name}")
+        return result
+
+    result.corp_code = corp_code
+
+    # 2. 병렬 조회
+    try:
+        company_info_task = get_company_info(corp_code)
+        shareholders_task = get_largest_shareholders(corp_code)
+        financial_task = get_financial_statements(corp_code)
+        events_task = get_major_events(corp_code)
+
+        company_info, shareholders, financials, events = await asyncio.gather(
+            company_info_task,
+            shareholders_task,
+            financial_task,
+            events_task,
+            return_exceptions=True,
+        )
+
+        # 결과 처리
+        if isinstance(company_info, Exception):
+            result.errors.append(f"기업개황 조회 실패: {str(company_info)}")
+        else:
+            result.company_info = company_info
+
+        if isinstance(shareholders, Exception):
+            result.errors.append(f"최대주주 조회 실패: {str(shareholders)}")
+        else:
+            result.largest_shareholders = shareholders or []
+
+        if isinstance(financials, Exception):
+            result.errors.append(f"재무제표 조회 실패: {str(financials)}")
+        else:
+            result.financial_statements = financials or []
+
+        if isinstance(events, Exception):
+            result.errors.append(f"주요사항 조회 실패: {str(events)}")
+        else:
+            result.major_events = events or []
+
+    except Exception as e:
+        result.errors.append(f"조회 중 오류: {str(e)}")
+
+    logger.info(
+        f"[DartAPI] Extended fact profile for '{corp_name}': "
+        f"company={'있음' if result.company_info else '없음'}, "
+        f"shareholders={len(result.largest_shareholders)}, "
+        f"financials={len(result.financial_statements)}, "
+        f"events={len(result.major_events)}"
+    )
+
+    return result
+
+
+# ============================================================================
 # Major Shareholder API (기존 - 주요주주 소유보고)
 # ============================================================================
 

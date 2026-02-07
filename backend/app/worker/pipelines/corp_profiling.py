@@ -50,12 +50,17 @@ from app.worker.llm.key_rotator import get_key_rotator
 from app.worker.llm.validator import get_validator, ValidationResult
 from app.worker.llm.search_providers import get_multi_search_manager
 
-# DART API for shareholder verification
+# DART API for shareholder verification and Fact-based data (P0/P1)
 from app.services.dart_api import (
     get_verified_shareholders,
     verify_shareholders,
     get_corp_code,
     initialize_dart_client,
+    # P1: Fact-Based Profile Data
+    get_fact_based_profile,
+    get_company_info_by_name,
+    get_largest_shareholders_by_name,
+    FactBasedProfileData,
 )
 
 logger = logging.getLogger(__name__)
@@ -2039,6 +2044,26 @@ class CorpProfilingPipeline:
         self._db_session = db_session
         self._perplexity_api_key = perplexity_api_key
 
+        # =========================================================================
+        # P1: DART Fact-Based Data (100% Hallucination 제거)
+        # DART 공시에서 CEO, 설립일, 주소, 최대주주 등을 먼저 가져옴
+        # LLM 추출 결과보다 DART 데이터가 우선순위 (100% Fact)
+        # =========================================================================
+        dart_fact_data: Optional[FactBasedProfileData] = None
+        try:
+            dart_fact_data = await get_fact_based_profile(corp_name)
+            if dart_fact_data and dart_fact_data.company_info:
+                logger.info(
+                    f"[P1-DART] Fact data loaded: CEO={dart_fact_data.ceo_name}, "
+                    f"Founded={dart_fact_data.founded_year}, "
+                    f"Shareholders={len(dart_fact_data.largest_shareholders)}"
+                )
+            else:
+                logger.info(f"[P1-DART] No DART data available for '{corp_name}'")
+        except Exception as e:
+            logger.warning(f"[P1-DART] Failed to fetch DART fact data: {e}")
+            dart_fact_data = None
+
         # Generate industry hints dynamically using LLM (with caching)
         try:
             self._industry_hints = await get_industry_hints(industry_code, llm_service)
@@ -2114,14 +2139,22 @@ class CorpProfilingPipeline:
         )
 
         # Build final profile with orchestrator result
+        # P1: dart_fact_data 전달하여 DART Fact 데이터 우선 적용
         profile = self._build_final_profile(
             orchestrator_result=orchestrator_result,
             corp_id=corp_id,
             industry_name=industry_name,
+            dart_fact_data=dart_fact_data,
         )
 
         # DART 2-Source Verification for shareholders
-        if DART_VERIFICATION_ENABLED and profile.get("shareholders"):
+        # P1: DART Fact에서 이미 주주 데이터를 가져온 경우 스킵
+        dart_shareholders_applied = (
+            dart_fact_data and
+            dart_fact_data.largest_shareholders and
+            len(dart_fact_data.largest_shareholders) > 0
+        )
+        if DART_VERIFICATION_ENABLED and profile.get("shareholders") and not dart_shareholders_applied:
             try:
                 perplexity_shareholders = profile.get("shareholders", [])
                 verified_shareholders, dart_metadata = await self._verify_shareholders_with_dart(
@@ -2244,8 +2277,21 @@ class CorpProfilingPipeline:
         orchestrator_result: OrchestratorResult,
         corp_id: str,
         industry_name: str,
+        dart_fact_data: Optional[FactBasedProfileData] = None,
     ) -> dict:
-        """Build final profile dict from orchestrator result."""
+        """
+        Build final profile dict from orchestrator result.
+
+        P1 Enhancement: DART Fact 데이터가 있으면 우선 적용 (100% Hallucination 제거)
+        - CEO 이름, 설립연도, 본사 주소, 최대주주: DART 데이터 우선
+        - 나머지 필드: Orchestrator 결과 사용
+
+        Args:
+            orchestrator_result: Orchestrator 실행 결과
+            corp_id: 기업 ID
+            industry_name: 업종명
+            dart_fact_data: P1 DART Fact 데이터 (Optional)
+        """
         raw_profile = orchestrator_result.profile or {}
 
         # Determine overall confidence from fallback layer
@@ -2282,6 +2328,31 @@ class CorpProfilingPipeline:
                 if field not in merged_provenance:
                     merged_provenance[field] = prov
 
+        # =========================================================================
+        # P1: DART Fact 데이터 우선 적용 (100% Hallucination 제거)
+        # DART 공시 데이터가 있으면 LLM 추출 결과보다 우선
+        # =========================================================================
+        dart_ceo_name = None
+        dart_founded_year = None
+        dart_headquarters = None
+        dart_shareholders = []
+
+        if dart_fact_data:
+            # DART 기업개황에서 CEO, 설립연도, 본사 주소
+            if dart_fact_data.company_info:
+                dart_ceo_name = dart_fact_data.ceo_name
+                dart_founded_year = dart_fact_data.founded_year
+                dart_headquarters = dart_fact_data.headquarters
+                logger.info(
+                    f"[P1-DART] Applying Fact data: CEO={dart_ceo_name}, "
+                    f"Founded={dart_founded_year}, HQ={dart_headquarters[:30] if dart_headquarters else None}..."
+                )
+
+            # DART 최대주주 현황
+            if dart_fact_data.largest_shareholders:
+                dart_shareholders = dart_fact_data.shareholders
+                logger.info(f"[P1-DART] Applying {len(dart_shareholders)} shareholders from DART")
+
         profile = {
             "profile_id": str(uuid4()),
             "corp_id": corp_id,
@@ -2290,10 +2361,11 @@ class CorpProfilingPipeline:
             "revenue_krw": raw_profile.get("revenue_krw"),
             "export_ratio_pct": raw_profile.get("export_ratio_pct"),
             # PRD v1.2 new fields - Basic info
-            "ceo_name": raw_profile.get("ceo_name"),
+            # P1: DART Fact 우선, 없으면 LLM 결과 사용
+            "ceo_name": dart_ceo_name or raw_profile.get("ceo_name"),
             "employee_count": raw_profile.get("employee_count"),
-            "founded_year": raw_profile.get("founded_year"),
-            "headquarters": raw_profile.get("headquarters"),
+            "founded_year": dart_founded_year or raw_profile.get("founded_year"),
+            "headquarters": dart_headquarters or raw_profile.get("headquarters"),
             "executives": raw_profile.get("executives", []),
             # PRD v1.2 new fields - Value chain
             "industry_overview": raw_profile.get("industry_overview"),
@@ -2310,7 +2382,8 @@ class CorpProfilingPipeline:
             # Normalize supply_chain to ensure proper structure
             "supply_chain": self._normalize_supply_chain(raw_profile.get("supply_chain", {})),
             "overseas_business": raw_profile.get("overseas_business", {}),
-            "shareholders": raw_profile.get("shareholders", []),
+            # P1: DART 최대주주 우선, 없으면 LLM 결과 사용
+            "shareholders": dart_shareholders if dart_shareholders else raw_profile.get("shareholders", []),
             # Metadata
             "profile_confidence": overall_confidence,
             "field_confidences": raw_profile.get("field_confidences", {}),
@@ -2354,6 +2427,40 @@ class CorpProfilingPipeline:
                 "retry_count": orchestrator_result.retry_count,
                 "error_messages": orchestrator_result.error_messages or [],
             }
+
+        # =========================================================================
+        # P1: DART Fact 데이터 출처 추적 (field_provenance 업데이트)
+        # =========================================================================
+        if dart_fact_data:
+            dart_provenance = {
+                "source": "DART",
+                "source_url": "https://dart.fss.or.kr",
+                "confidence": "HIGH",
+                "is_fact": True,  # 100% Fact 데이터 표시
+                "fetch_timestamp": dart_fact_data.fetch_timestamp,
+            }
+
+            if dart_ceo_name:
+                profile["field_provenance"]["ceo_name"] = dart_provenance.copy()
+                profile["field_confidences"]["ceo_name"] = "HIGH"
+
+            if dart_founded_year:
+                profile["field_provenance"]["founded_year"] = dart_provenance.copy()
+                profile["field_confidences"]["founded_year"] = "HIGH"
+
+            if dart_headquarters:
+                profile["field_provenance"]["headquarters"] = dart_provenance.copy()
+                profile["field_confidences"]["headquarters"] = "HIGH"
+
+            if dart_shareholders:
+                profile["field_provenance"]["shareholders"] = dart_provenance.copy()
+                profile["field_confidences"]["shareholders"] = "HIGH"
+                # 주주 정보는 이미 DART에서 가져왔으므로 검증 스킵 가능
+                profile["shareholders_verification"] = {
+                    "source": "DART_DIRECT",
+                    "verified": True,
+                    "dart_available": True,
+                }
 
         return profile
 
