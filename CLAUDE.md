@@ -1868,5 +1868,213 @@ CLAUDE.md
 
 **향후 계획**: 해커톤 이후 P0~P3 재검토
 
+### 세션 22 (2026-02-08) - P0 Anti-Hallucination Hard Validation ✅
+**목표**: 시그널 hallucination 방지를 위한 Hard Validation 구현
+
+**문제 발견**:
+- 엠케이전자에서 "2025년 3분기 영업이익 88% 감소" 허위 정보 생성
+- 실제로는 반도체 부문 매출 30.4% 증가, 최대 실적 경신 중
+- 원인: Soft Guardrails만 존재, 강제 검증 없음
+
+**Root Cause 분석**:
+1. **외부 검색 실패 시 신호 전달 부족**: 빈 배열 `[]` 반환 → LLM이 "정보 없음" 구분 불가
+2. **Evidence 검증 미흡**: URL이 실제 존재하는지 검증 안 함
+3. **Soft Guardrails만 존재**: LLM 권고사항일 뿐, 강제 검증 없음
+
+**완료 항목**:
+
+#### 1. signal_extraction.py - Hard Validation 추가
+- `_detect_number_hallucination()`: 숫자(%)가 입력 데이터에 있는지 검증
+  - 50% 이상 극단적 수치 → 즉시 거부
+  - 30% 이상 수치 → `needs_review` 플래그
+- `_validate_evidence_sources()`: Evidence URL 검증
+  - URL이 실제 검색 결과에 있는지 확인
+  - SNAPSHOT_KEYPATH가 실제 존재하는지 확인
+- `_validate_keypath()`: JSON Pointer 경로 존재 검증
+- `_extract_domain()`: URL 도메인 추출
+
+#### 2. base.py (BaseSignalAgent) - 동일 검증 추가
+- Multi-Agent 모드에서도 동일한 Anti-Hallucination 검증 적용
+- 3-Agent 병렬 실행 시 각 Agent에서 Hard Validation
+
+#### 3. Admin API - Hallucination 스캔 기능
+- `POST /admin/signals/scan-hallucinations`: 기존 시그널 hallucination 스캔
+  - dry_run=true: 스캔만 (기본값)
+  - dry_run=false: 탐지된 hallucination 자동 DISMISSED 처리
+- `GET /admin/signals/hallucination-stats`: 통계 조회
+
+**수정된 파일**:
+```
+backend/app/worker/pipelines/signal_extraction.py
+backend/app/worker/pipelines/signal_agents/base.py
+backend/app/api/v1/endpoints/admin.py
+CLAUDE.md
+```
+
+**Anti-Hallucination 4-Layer Defense (강화됨)**:
+| Layer | 목적 | 구현 | 상태 |
+|-------|------|------|------|
+| Layer 1 | Soft Guardrails | LLM 프롬프트 권고 | ✅ 기존 |
+| Layer 2 | **Number Validation** | 50%+ 수치 입력 데이터 검증 | ✅ 신규 |
+| Layer 3 | **Evidence Validation** | URL/Keypath 실존 검증 | ✅ 신규 |
+| Layer 4 | **Admin Scan** | 기존 DB hallucination 탐지 | ✅ 신규 |
+
+**예상 효과**:
+- "88% 감소" 같은 극단적 허위 수치 → 즉시 거부
+- LLM이 생성한 가짜 URL → Evidence 검증에서 거부
+- 기존 DB 허위 시그널 → Admin API로 일괄 정리 가능
+
+### 세션 23 (2026-02-08) - DART API 2-Source Verification 구현
+**목표**: DART API로 주주 정보 검증 - Perplexity + DART 교차 검증
+
+**완료 항목**:
+
+#### 1. DART OpenAPI 클라이언트 구현
+- `backend/app/services/dart_api.py` 신규 생성
+- Corp Code 조회: `get_corp_code()` - 기업명/종목코드로 DART 고유번호 조회
+- 주요주주 조회: `get_major_shareholders()` - elestock.json API 호출
+- 2-Source Verification: `verify_shareholders()` - Perplexity + DART 교차 검증
+- Integration Helper: `get_verified_shareholders()` - Corp Profiling 통합용
+
+#### 2. DART API 구현 세부사항
+| 함수 | 용도 |
+|------|------|
+| `load_corp_codes()` | DART corpCode.xml ZIP 파일 다운로드 및 파싱 |
+| `get_corp_code()` | 기업명/종목코드로 DART 고유번호(8자리) 조회 |
+| `get_major_shareholders()` | 주요주주 소유보고 조회 (elestock.json) |
+| `verify_shareholders()` | 2-Source Verification 수행 |
+| `get_verified_shareholders()` | 검증된 주주 정보 반환 (통합용) |
+
+#### 3. DART API 엔드포인트
+| Method | Endpoint | 설명 |
+|--------|----------|------|
+| GET | `/dart/status` | DART API 상태 확인 |
+| POST | `/dart/initialize` | Corp code 목록 초기화 |
+| GET | `/dart/corp-code` | 기업 고유번호 조회 |
+| GET | `/dart/shareholders/{corp_code}` | 주요주주 조회 |
+| GET | `/dart/shareholders-by-name` | 기업명으로 주주 조회 |
+| POST | `/dart/verify` | 2-Source Verification |
+| GET | `/dart/verified-shareholders` | 검증된 주주 조회 |
+
+#### 4. Corp Profiling 통합
+- `corp_profiling.py`에 DART 검증 로직 통합
+- `execute()` 메서드에서 shareholders 필드 DART 검증
+- `_verify_shareholders_with_dart()` async 헬퍼 메서드 추가
+- `DART_VERIFICATION_ENABLED` 설정으로 활성화/비활성화
+
+#### 5. 2-Source Verification 알고리즘
+1. Perplexity에서 추출한 주주 정보 수집
+2. 기업명으로 DART corp_code 조회
+3. DART API에서 주요주주 소유보고 조회
+4. 이름 매칭 (정규화 후 포함 관계 비교)
+5. 매칭된 주주 → HIGH 신뢰도 (DART_VERIFIED)
+6. DART에만 있는 주주 → HIGH 신뢰도 (공시 데이터)
+7. Perplexity에만 있는 주주 → LOW 신뢰도 (검증 실패)
+
+**신규 파일**:
+```
+backend/app/services/dart_api.py
+backend/app/api/v1/endpoints/dart.py
+```
+
+**수정된 파일**:
+```
+backend/app/services/__init__.py
+backend/app/api/v1/router.py
+backend/app/core/config.py (DART_API_KEY, DART_VERIFICATION_ENABLED 추가)
+backend/app/worker/pipelines/corp_profiling.py (DART 검증 통합)
+backend/.env.example (DART 설정 추가)
+CLAUDE.md
+```
+
+**DART API 키**: 제공된 키가 config.py에 기본값으로 설정됨
+- `a5cf6e4eedca9a82191e4ab1bcdeda7f6d6e4861`
+
+**주요 기능**:
+- 주주 정보 Hallucination 방지: DART 공시와 교차 검증
+- 자동 신뢰도 조정: 검증 여부에 따라 HIGH/LOW confidence
+- 통합 API: `/dart/*` 엔드포인트로 개별 테스트 가능
+- Corp Profiling 자동 통합: PROFILING 파이프라인에서 자동 검증
+
+### 세션 24 (2026-02-08) - DART 필드 전체 코드베이스 싱크 ✅
+**목표**: DART API 필드 (jurir_no, corp_name_eng, acc_mt, executives)를 전체 코드베이스에 통합
+
+**완료 항목**:
+
+#### 1. P4 임원현황 API 구현
+- `dart_api.py`에 `Executive` 데이터클래스 추가
+- `get_executives()`, `get_executives_by_name()` 함수 구현
+- `ExtendedFactProfile`에 executives 필드 추가
+- `/dart/executives/{corp_name}` REST 엔드포인트 추가
+
+#### 2. DB 마이그레이션
+- `migration_v13_dart_corp_extended.sql` - corp 테이블에 jurir_no, corp_name_eng, acc_mt 컬럼 추가
+- Supabase에 마이그레이션 적용 완료
+
+#### 3. Backend 모델/스키마 통합
+- `models/corporation.py` - 9개 DART 필드 추가 (dart_corp_code ~ dart_updated_at)
+- `schemas/corporation.py` - CorporationUpdate, CorporationResponse에 DART 필드 추가
+- `services/dart_api.py` - ExtendedFactProfile에 호환 프로퍼티 추가 (ceo_name, headquarters, founded_year, shareholders)
+
+#### 4. Worker 파이프라인 통합
+- `snapshot.py` - corporation 딕셔너리에 9개 DART 필드 추가
+- `context.py` - unified context에 9개 DART 필드 추가
+- `corp_profiling.py`:
+  - `get_extended_fact_profile()` 사용으로 executives 포함
+  - executives 필드에 DART 데이터 우선 적용
+  - jurir_no, corp_name_eng, acc_mt 프로필에 추가
+- `signal_extraction.py` - LLM 프롬프트에 DART 필드 전달
+- `prompts.py`:
+  - `format_signal_extraction_prompt()`에 DART 파라미터 추가
+  - `SIGNAL_EXTRACTION_USER_TEMPLATE`에 DART 정보 섹션 추가
+
+#### 5. Frontend 통합
+- `src/lib/api.ts` - ApiCorporation 인터페이스에 9개 DART 필드 추가 (snake_case)
+- `src/data/corporations.ts` - Corporation 인터페이스에 DART 필드 추가 (camelCase)
+- `src/hooks/useApi.ts` - mapApiCorporationToFrontend에 DART 필드 매핑 추가
+- `CorporateDetailPage.tsx` - "DART 공시 정보" 섹션 추가 (100% Fact 배지 표시)
+
+**DART 필드 전체 목록**:
+| DB Column | Backend Model | Frontend Interface | 설명 |
+|-----------|---------------|-------------------|------|
+| dart_corp_code | dart_corp_code | dartCorpCode | DART 고유번호 |
+| established_date | established_date | establishedDate | 설립일 |
+| headquarters | headquarters | headquarters | 본사 주소 |
+| corp_class | corp_class | corpClass | 법인 구분 |
+| homepage_url | homepage_url | homepageUrl | 홈페이지 URL |
+| jurir_no | jurir_no | jurirNo | 법인등록번호 |
+| corp_name_eng | corp_name_eng | corpNameEng | 영문 회사명 |
+| acc_mt | acc_mt | accMt | 결산월 |
+| dart_updated_at | dart_updated_at | dartUpdatedAt | 최종 갱신일 |
+
+**LLM 컨텍스트에 추가된 DART 정보**:
+```
+# DART 공시 정보 (100% Fact)
+- DART 고유번호: 00123456
+- 법인등록번호: 1101110012345
+- 영문명: EXAMPLE CORP
+- 설립일: 20000101
+- 본사: 서울특별시 강남구...
+- 결산월: 12월
+```
+
+**수정된 파일**:
+```
+backend/app/services/dart_api.py
+backend/app/api/v1/endpoints/dart.py
+backend/app/models/corporation.py
+backend/app/schemas/corporation.py
+backend/app/worker/pipelines/snapshot.py
+backend/app/worker/pipelines/context.py
+backend/app/worker/pipelines/corp_profiling.py
+backend/app/worker/pipelines/signal_extraction.py
+backend/app/worker/llm/prompts.py
+backend/sql/migration_v13_dart_corp_extended.sql
+src/lib/api.ts
+src/data/corporations.ts
+src/hooks/useApi.ts
+src/pages/CorporateDetailPage.tsx
+```
+
 ---
-*Last Updated: 2026-02-07 (세션 21 - P0 롤백)*
+*Last Updated: 2026-02-08 (세션 24 - DART 필드 전체 코드베이스 싱크)*

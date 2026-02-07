@@ -1074,17 +1074,19 @@ async def get_major_events_by_name(corp_name: str) -> list[MajorEvent]:
 @dataclass
 class ExtendedFactProfile:
     """
-    확장된 Fact 기반 프로필 (P0 + P2 + P3)
+    확장된 Fact 기반 프로필 (P0 + P2 + P3 + P4)
 
     - 기업개황 (P0)
     - 최대주주 현황 (P0)
     - 재무제표 (P2)
     - 주요사항보고서 (P3)
+    - 임원현황 (P4)
     """
     company_info: Optional[CompanyInfo] = None
     largest_shareholders: list[LargestShareholder] = field(default_factory=list)
     financial_statements: list[FinancialStatement] = field(default_factory=list)
     major_events: list[MajorEvent] = field(default_factory=list)
+    executives: list[Executive] = field(default_factory=list)  # P4
     corp_code: Optional[str] = None
     fetch_timestamp: Optional[str] = None
     errors: list[str] = field(default_factory=list)
@@ -1095,6 +1097,7 @@ class ExtendedFactProfile:
             "largest_shareholders": [s.to_dict() for s in self.largest_shareholders],
             "financial_statements": [f.to_dict() for f in self.financial_statements],
             "major_events": [e.to_dict() for e in self.major_events],
+            "executives": [e.to_dict() for e in self.executives],  # P4
             "corp_code": self.corp_code,
             "fetch_timestamp": self.fetch_timestamp,
             "errors": self.errors,
@@ -1127,12 +1130,38 @@ class ExtendedFactProfile:
         }
         return any(e.event_type in risk_types for e in self.major_events)
 
+    # FactBasedProfileData와 호환되는 프로퍼티들 (corp_profiling.py에서 사용)
+    @property
+    def ceo_name(self) -> Optional[str]:
+        """CEO 이름 (100% Fact)"""
+        return self.company_info.ceo_name if self.company_info else None
+
+    @property
+    def headquarters(self) -> Optional[str]:
+        """본사 주소 (100% Fact)"""
+        return self.company_info.adres if self.company_info else None
+
+    @property
+    def founded_year(self) -> Optional[int]:
+        """설립연도 (100% Fact)"""
+        if self.company_info and self.company_info.est_dt:
+            try:
+                return int(self.company_info.est_dt[:4])
+            except (ValueError, IndexError):
+                return None
+        return None
+
+    @property
+    def shareholders(self) -> list[dict]:
+        """주주 정보 (100% Fact)"""
+        return [s.to_dict() for s in self.largest_shareholders]
+
 
 async def get_extended_fact_profile(corp_name: str) -> ExtendedFactProfile:
     """
-    확장된 Fact 기반 프로필 조회 (P0 + P2 + P3)
+    확장된 Fact 기반 프로필 조회 (P0 + P2 + P3 + P4)
 
-    기업개황, 최대주주, 재무제표, 주요사항보고서를 한 번에 조회합니다.
+    기업개황, 최대주주, 재무제표, 주요사항보고서, 임원현황을 한 번에 조회합니다.
 
     Args:
         corp_name: 기업명
@@ -1153,18 +1182,20 @@ async def get_extended_fact_profile(corp_name: str) -> ExtendedFactProfile:
 
     result.corp_code = corp_code
 
-    # 2. 병렬 조회
+    # 2. 병렬 조회 (P0 + P2 + P3 + P4)
     try:
         company_info_task = get_company_info(corp_code)
         shareholders_task = get_largest_shareholders(corp_code)
         financial_task = get_financial_statements(corp_code)
         events_task = get_major_events(corp_code)
+        executives_task = get_executives(corp_code)  # P4
 
-        company_info, shareholders, financials, events = await asyncio.gather(
+        company_info, shareholders, financials, events, executives = await asyncio.gather(
             company_info_task,
             shareholders_task,
             financial_task,
             events_task,
+            executives_task,
             return_exceptions=True,
         )
 
@@ -1189,6 +1220,11 @@ async def get_extended_fact_profile(corp_name: str) -> ExtendedFactProfile:
         else:
             result.major_events = events or []
 
+        if isinstance(executives, Exception):
+            result.errors.append(f"임원현황 조회 실패: {str(executives)}")
+        else:
+            result.executives = executives or []
+
     except Exception as e:
         result.errors.append(f"조회 중 오류: {str(e)}")
 
@@ -1197,7 +1233,8 @@ async def get_extended_fact_profile(corp_name: str) -> ExtendedFactProfile:
         f"company={'있음' if result.company_info else '없음'}, "
         f"shareholders={len(result.largest_shareholders)}, "
         f"financials={len(result.financial_statements)}, "
-        f"events={len(result.major_events)}"
+        f"events={len(result.major_events)}, "
+        f"executives={len(result.executives)}"
     )
 
     return result
@@ -1592,6 +1629,177 @@ async def get_verified_shareholders(
         unverified_list.append(sh_copy)
 
     return unverified_list, metadata
+
+
+# ============================================================================
+# P4: Executive API (임원현황)
+# ============================================================================
+
+@dataclass
+class Executive:
+    """임원 정보 (100% Fact - DART 공시)"""
+    nm: str  # 성명
+    sexdstn: Optional[str] = None  # 성별 (남, 여)
+    birth_ym: Optional[str] = None  # 출생년월 (YYYY년 MM월)
+    ofcps: Optional[str] = None  # 직위
+    rgist_exctv_at: Optional[str] = None  # 등기임원여부 (등기임원, 미등기임원)
+    fte_at: Optional[str] = None  # 상근여부 (상근, 비상근)
+    chrg_job: Optional[str] = None  # 담당업무
+    main_career: Optional[str] = None  # 주요약력
+    mxmm_shrholdr_relate: Optional[str] = None  # 최대주주와의 관계
+    tenure_start: Optional[str] = None  # 임기 시작일
+    tenure_end: Optional[str] = None  # 임기 종료일
+    report_date: Optional[str] = None  # 보고서 기준일
+    source: str = "DART"
+    confidence: str = "HIGH"
+
+    def to_dict(self) -> dict:
+        return {
+            "name": self.nm,
+            "gender": self.sexdstn,
+            "birth_ym": self.birth_ym,
+            "position": self.ofcps,
+            "is_registered": self.rgist_exctv_at == "등기임원",
+            "is_fulltime": self.fte_at == "상근",
+            "job": self.chrg_job,
+            "career": self.main_career,
+            "relation_to_largest_shareholder": self.mxmm_shrholdr_relate,
+            "tenure_start": self.tenure_start,
+            "tenure_end": self.tenure_end,
+            "report_date": self.report_date,
+            "source": self.source,
+            "confidence": self.confidence,
+        }
+
+
+async def get_executives(
+    corp_code: str,
+    bsns_year: Optional[str] = None,
+    reprt_code: str = "11011",  # 11011: 사업보고서
+) -> list[Executive]:
+    """
+    P4: DART 임원현황 조회 (100% Fact)
+
+    사업보고서에 기재된 임원 현황을 조회합니다.
+    대표이사, 이사, 감사 등 임원 정보를 반환합니다.
+
+    API: https://opendart.fss.or.kr/api/exctvSttus.json
+
+    Args:
+        corp_code: DART 고유번호 (8자리)
+        bsns_year: 사업연도 (미지정 시 전년도)
+        reprt_code: 보고서 코드
+            - 11011: 사업보고서 (1년 전체)
+            - 11012: 반기보고서
+            - 11013: 1분기보고서
+            - 11014: 3분기보고서
+
+    Returns:
+        Executive 객체 리스트
+    """
+    url = f"{DART_BASE_URL}/exctvSttus.json"
+
+    # 사업연도 미지정 시 전년도 사용
+    if not bsns_year:
+        bsns_year = str(datetime.now().year - 1)
+
+    params = {
+        "crtfc_key": DART_API_KEY,
+        "corp_code": corp_code,
+        "bsns_year": bsns_year,
+        "reprt_code": reprt_code,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=DART_TIMEOUT) as client:
+            response = await client.get(url, params=params)
+            response.raise_for_status()
+            data = response.json()
+
+            status = data.get("status", "")
+            message = data.get("message", "")
+
+            if status == DART_STATUS_NO_DATA:
+                logger.info(f"[DartAPI] No executive data for corp_code={corp_code}, year={bsns_year}")
+                # 전년도 데이터가 없으면 2년 전 시도
+                if bsns_year == str(datetime.now().year - 1):
+                    logger.info(f"[DartAPI] Trying previous year for executives...")
+                    return await get_executives(
+                        corp_code,
+                        bsns_year=str(datetime.now().year - 2),
+                        reprt_code=reprt_code,
+                    )
+                return []
+
+            if status != DART_STATUS_SUCCESS:
+                raise DartError(status, message)
+
+            executives = []
+            items = data.get("list", [])
+
+            for item in items:
+                executive = _parse_executive_item(item, bsns_year)
+                if executive:
+                    executives.append(executive)
+
+            logger.info(f"[DartAPI] Found {len(executives)} executives for corp_code={corp_code}")
+            return executives
+
+    except httpx.HTTPError as e:
+        logger.error(f"[DartAPI] HTTP error getting executives: {e}")
+        return []
+    except DartError as e:
+        logger.error(f"[DartAPI] {e}")
+        return []
+    except Exception as e:
+        logger.error(f"[DartAPI] Unexpected error getting executives: {e}")
+        return []
+
+
+def _parse_executive_item(item: dict, bsns_year: str) -> Optional[Executive]:
+    """DART 임원현황 응답 항목을 Executive 객체로 변환"""
+    try:
+        nm = item.get("nm", "").strip()
+        if not nm or nm == "-":
+            return None
+
+        return Executive(
+            nm=nm,
+            sexdstn=item.get("sexdstn"),
+            birth_ym=item.get("birth_ym"),
+            ofcps=item.get("ofcps"),
+            rgist_exctv_at=item.get("rgist_exctv_at"),
+            fte_at=item.get("fte_at"),
+            chrg_job=item.get("chrg_job"),
+            main_career=item.get("main_career"),
+            mxmm_shrholdr_relate=item.get("mxmm_shrholdr_relate"),
+            tenure_start=item.get("entcondt"),
+            tenure_end=item.get("retiradt"),
+            report_date=f"{bsns_year}1231",
+            source="DART",
+            confidence="HIGH",
+        )
+
+    except Exception as e:
+        logger.warning(f"[DartAPI] Failed to parse executive item: {e}")
+        return None
+
+
+async def get_executives_by_name(corp_name: str) -> list[Executive]:
+    """
+    기업명으로 임원현황 조회
+
+    Args:
+        corp_name: 기업명 (예: "삼성전자", "엠케이전자")
+
+    Returns:
+        Executive 객체 리스트
+    """
+    corp_code = await get_corp_code(corp_name=corp_name)
+    if not corp_code:
+        logger.warning(f"[DartAPI] Could not find corp_code for '{corp_name}'")
+        return []
+    return await get_executives(corp_code)
 
 
 # ============================================================================

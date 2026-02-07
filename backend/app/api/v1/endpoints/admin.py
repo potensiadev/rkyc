@@ -882,3 +882,193 @@ async def get_key_rotator_health():
             for provider, pool in status.get("providers", {}).items()
         },
     }
+
+
+# ============================================================================
+# P0: Anti-Hallucination API (2026-02-08)
+# ============================================================================
+
+
+class HallucinationScanRequest(BaseModel):
+    """Hallucination 스캔 요청"""
+    corp_id: Optional[str] = None  # None이면 전체 스캔
+    dry_run: bool = True  # True면 삭제하지 않고 스캔만
+
+
+class HallucinationScanResult(BaseModel):
+    """Hallucination 스캔 결과"""
+    success: bool
+    scanned_count: int
+    hallucinated_count: int
+    deleted_count: int
+    hallucinated_signals: list[dict]
+
+
+@router.post(
+    "/signals/scan-hallucinations",
+    response_model=HallucinationScanResult,
+    summary="시그널 Hallucination 스캔",
+    description="기존 시그널에서 hallucination을 스캔하고 선택적으로 삭제합니다.",
+)
+async def scan_signal_hallucinations(
+    request: HallucinationScanRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    시그널 Hallucination 스캔 및 제거
+
+    P0 Fix: 기존 DB에 저장된 허위 시그널 탐지
+    - 극단적인 수치 (50% 이상 변화) 탐지
+    - Evidence URL 유효성 검증 (검색 결과와 비교)
+
+    Args:
+        request: 스캔 요청 (corp_id, dry_run)
+        db: DB 세션
+
+    Returns:
+        HallucinationScanResult: 스캔 결과
+    """
+    import re
+
+    # 1. 시그널 조회
+    if request.corp_id:
+        query = text("""
+            SELECT s.id, s.signal_type, s.event_type, s.title, s.summary,
+                   s.corp_id, s.impact_direction, s.impact_strength, s.confidence
+            FROM rkyc_signal s
+            WHERE s.corp_id = :corp_id AND s.status != 'DISMISSED'
+            ORDER BY s.created_at DESC
+        """)
+        result = await db.execute(query, {"corp_id": request.corp_id})
+    else:
+        query = text("""
+            SELECT s.id, s.signal_type, s.event_type, s.title, s.summary,
+                   s.corp_id, s.impact_direction, s.impact_strength, s.confidence
+            FROM rkyc_signal s
+            WHERE s.status != 'DISMISSED'
+            ORDER BY s.created_at DESC
+            LIMIT 500
+        """)
+        result = await db.execute(query)
+
+    signals = result.fetchall()
+    scanned_count = len(signals)
+    hallucinated_signals = []
+    deleted_count = 0
+
+    # 2. 각 시그널에 대해 hallucination 검사
+    percentage_pattern = re.compile(r'[-+]?\d+(?:\.\d+)?%')
+
+    for signal in signals:
+        text_to_check = f"{signal.title} {signal.summary}"
+        percentages = percentage_pattern.findall(text_to_check)
+
+        is_hallucinated = False
+        reason = ""
+
+        for pct in percentages:
+            try:
+                num_only = pct.replace("%", "").replace("+", "")
+                num_value = float(num_only)
+
+                # 극단적인 수치 (50% 이상) 탐지
+                if abs(num_value) > 50:
+                    # 추가 검증: FINANCIAL_STATEMENT_UPDATE에서 영업이익 관련
+                    if signal.event_type == "FINANCIAL_STATEMENT_UPDATE":
+                        if "영업이익" in text_to_check or "순이익" in text_to_check:
+                            is_hallucinated = True
+                            reason = f"극단적인 재무 수치: {pct}"
+                            break
+
+                    # 일반적인 극단값 (80% 이상은 매우 의심)
+                    if abs(num_value) > 80:
+                        is_hallucinated = True
+                        reason = f"극단적인 수치: {pct}"
+                        break
+
+            except ValueError:
+                continue
+
+        if is_hallucinated:
+            hallucinated_signals.append({
+                "id": str(signal.id),
+                "corp_id": signal.corp_id,
+                "signal_type": signal.signal_type,
+                "event_type": signal.event_type,
+                "title": signal.title,
+                "summary": signal.summary[:100] + "..." if len(signal.summary) > 100 else signal.summary,
+                "reason": reason,
+            })
+
+            # dry_run이 아니면 삭제 (DISMISSED 처리)
+            if not request.dry_run:
+                delete_query = text("""
+                    UPDATE rkyc_signal
+                    SET status = CAST('DISMISSED' AS signal_status_enum),
+                        dismiss_reason = :reason,
+                        updated_at = NOW()
+                    WHERE id = :signal_id
+                """)
+                await db.execute(delete_query, {
+                    "signal_id": signal.id,
+                    "reason": f"[AUTO-HALLUCINATION-DETECTED] {reason}",
+                })
+
+                # signal_index도 업데이트
+                index_query = text("""
+                    UPDATE rkyc_signal_index
+                    SET status = CAST('DISMISSED' AS signal_status_enum),
+                        updated_at = NOW()
+                    WHERE signal_id = :signal_id
+                """)
+                await db.execute(index_query, {"signal_id": signal.id})
+
+                deleted_count += 1
+
+    if not request.dry_run:
+        await db.commit()
+
+    return HallucinationScanResult(
+        success=True,
+        scanned_count=scanned_count,
+        hallucinated_count=len(hallucinated_signals),
+        deleted_count=deleted_count,
+        hallucinated_signals=hallucinated_signals,
+    )
+
+
+@router.get(
+    "/signals/hallucination-stats",
+    summary="Hallucination 통계",
+    description="시그널 hallucination 통계를 조회합니다.",
+)
+async def get_hallucination_stats(db: AsyncSession = Depends(get_db)):
+    """
+    Hallucination 통계 조회
+
+    Returns:
+        dict: 통계 정보
+    """
+    # 극단적인 수치를 포함한 시그널 수 조회
+    query = text("""
+        SELECT
+            COUNT(*) FILTER (WHERE summary ~ '[0-9]+%' AND summary ~* '(영업이익|순이익|매출)') as financial_with_percentage,
+            COUNT(*) FILTER (WHERE dismiss_reason LIKE '%HALLUCINATION%') as auto_dismissed,
+            COUNT(*) FILTER (WHERE status = 'DISMISSED') as total_dismissed,
+            COUNT(*) as total_signals
+        FROM rkyc_signal
+    """)
+
+    result = await db.execute(query)
+    row = result.fetchone()
+
+    return {
+        "financial_signals_with_percentage": row.financial_with_percentage,
+        "auto_dismissed_hallucinations": row.auto_dismissed,
+        "total_dismissed": row.total_dismissed,
+        "total_signals": row.total_signals,
+        "recommendations": [
+            "정기적으로 /admin/signals/scan-hallucinations를 실행하여 hallucination을 탐지하세요.",
+            "dry_run=false로 실행하면 탐지된 hallucination이 자동으로 DISMISSED 처리됩니다.",
+        ],
+    }

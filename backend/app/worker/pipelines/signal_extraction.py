@@ -474,7 +474,7 @@ class SignalExtractionPipeline:
             industry_name=industry_name,
         )
 
-        # Format prompt with context data (3-track events)
+        # Format prompt with context data (3-track events + DART info)
         user_prompt = format_signal_extraction_prompt(
             corp_name=corp_name,
             corp_reg_no=context.get("corp_reg_no", ""),
@@ -506,6 +506,13 @@ class SignalExtractionPipeline:
                 ensure_ascii=False,
                 indent=2,
             ),
+            # DART 공시 기반 정보 (100% Fact 데이터)
+            dart_corp_code=context.get("dart_corp_code"),
+            established_date=context.get("established_date"),
+            headquarters=context.get("headquarters"),
+            jurir_no=context.get("jurir_no"),
+            corp_name_eng=context.get("corp_name_eng"),
+            acc_mt=context.get("acc_mt"),
         )
 
         logger.info(
@@ -578,6 +585,8 @@ class SignalExtractionPipeline:
         4. Signal type / Event type mapping
         5. Forbidden words check
         6. Length constraints (headline, title, summary)
+        7. [P0] Hallucination detection - numbers must exist in input data
+        8. [P0] Evidence URL validation - URLs must be from actual search results
 
         Returns None if signal is invalid.
         """
@@ -595,6 +604,29 @@ class SignalExtractionPipeline:
         evidence = signal.get("evidence", [])
         if not evidence:
             logger.warning("Signal has no evidence, skipping")
+            return None
+
+        # =====================================================================
+        # P0: Anti-Hallucination Validation (2026-02-08)
+        # =====================================================================
+
+        # 7. Validate numbers in summary exist in input data
+        hallucination_result = self._detect_number_hallucination(signal, context)
+        if hallucination_result["is_hallucinated"]:
+            logger.warning(
+                f"[HALLUCINATION DETECTED] Signal rejected: {hallucination_result['reason']} "
+                f"| title='{signal.get('title', '')[:30]}' "
+                f"| hallucinated_number={hallucination_result.get('number', 'N/A')}"
+            )
+            return None
+
+        # 8. Validate evidence URLs are from actual search results
+        evidence_validation = self._validate_evidence_sources(evidence, context)
+        if not evidence_validation["valid"]:
+            logger.warning(
+                f"[EVIDENCE INVALID] Signal rejected: {evidence_validation['reason']} "
+                f"| title='{signal.get('title', '')[:30]}'"
+            )
             return None
 
         # 3. Validate enums
@@ -666,6 +698,217 @@ class SignalExtractionPipeline:
         signal["event_signature"] = self._compute_signature(signal)
 
         return signal
+
+    # =========================================================================
+    # P0: Anti-Hallucination Methods (2026-02-08)
+    # =========================================================================
+
+    def _detect_number_hallucination(
+        self, signal: dict, context: dict
+    ) -> dict:
+        """
+        Detect if numbers in signal summary are hallucinated.
+
+        P0 Fix: Numbers (especially percentages) must exist in:
+        - Internal snapshot data
+        - External search results (direct_events, industry_events, environment_events)
+        - Document facts
+
+        Returns:
+            dict with keys:
+            - is_hallucinated: bool
+            - reason: str (if hallucinated)
+            - number: str (the hallucinated number)
+        """
+        summary = signal.get("summary", "")
+        title = signal.get("title", "")
+        text_to_check = f"{title} {summary}"
+
+        # Extract all percentages from signal text
+        # Pattern: number followed by % (e.g., 88%, 30.4%, -20%)
+        percentage_pattern = re.compile(r'[-+]?\d+(?:\.\d+)?%')
+        percentages_in_signal = percentage_pattern.findall(text_to_check)
+
+        if not percentages_in_signal:
+            # No percentages to validate
+            return {"is_hallucinated": False}
+
+        # Build reference text from all input sources
+        reference_texts = []
+
+        # 1. Snapshot JSON (stringify for searching)
+        snapshot = context.get("snapshot_json", {})
+        if snapshot:
+            reference_texts.append(json.dumps(snapshot, ensure_ascii=False))
+
+        # 2. External search results
+        for event_key in ["direct_events", "industry_events", "environment_events", "external_events"]:
+            events = context.get(event_key, [])
+            if events:
+                reference_texts.append(json.dumps(events, ensure_ascii=False))
+
+        # 3. Document facts
+        doc_facts = context.get("document_facts", [])
+        if doc_facts:
+            reference_texts.append(json.dumps(doc_facts, ensure_ascii=False))
+
+        # 4. Corp profile (if available)
+        corp_profile = context.get("corp_profile", {})
+        if corp_profile:
+            reference_texts.append(json.dumps(corp_profile, ensure_ascii=False))
+
+        combined_reference = " ".join(reference_texts)
+
+        # Check each percentage
+        for pct in percentages_in_signal:
+            # Normalize: remove + sign, handle negative
+            normalized = pct.replace("+", "")
+
+            # Check if this percentage exists in reference
+            if normalized not in combined_reference:
+                # Also check without % sign (e.g., "88" instead of "88%")
+                num_only = normalized.replace("%", "")
+                if num_only not in combined_reference:
+                    # This percentage is likely hallucinated
+                    # Additional check: is it an extreme value?
+                    try:
+                        num_value = float(num_only)
+                        # Extreme values (>50% change) are highly suspicious
+                        if abs(num_value) > 50:
+                            return {
+                                "is_hallucinated": True,
+                                "reason": f"Extreme percentage {pct} not found in any input data",
+                                "number": pct,
+                            }
+                        # For moderate values, mark as needs_review but don't reject
+                        # (could be calculated from input data)
+                        if abs(num_value) > 30:
+                            signal["needs_review"] = True
+                            signal["review_reason"] = f"Percentage {pct} not directly in input"
+                    except ValueError:
+                        pass
+
+        return {"is_hallucinated": False}
+
+    def _validate_evidence_sources(
+        self, evidence: list[dict], context: dict
+    ) -> dict:
+        """
+        Validate that evidence URLs are from actual search results.
+
+        P0 Fix: Prevent LLM from generating fake URLs.
+
+        Returns:
+            dict with keys:
+            - valid: bool
+            - reason: str (if invalid)
+        """
+        # Collect all valid URLs from external search results
+        valid_urls = set()
+
+        for event_key in ["direct_events", "industry_events", "environment_events", "external_events"]:
+            events = context.get(event_key, [])
+            for event in events:
+                if isinstance(event, dict):
+                    # URL could be in different fields
+                    for url_field in ["url", "source_url", "ref_value", "link"]:
+                        url = event.get(url_field, "")
+                        if url and url.startswith("http"):
+                            valid_urls.add(url)
+                    # Also check citations array
+                    citations = event.get("citations", [])
+                    for citation in citations:
+                        if isinstance(citation, str) and citation.startswith("http"):
+                            valid_urls.add(citation)
+                        elif isinstance(citation, dict):
+                            valid_urls.add(citation.get("url", ""))
+
+        # Check each evidence item
+        for ev in evidence:
+            ref_type = ev.get("ref_type", "")
+            ref_value = ev.get("ref_value", "")
+
+            # Only validate URL type evidence
+            if ref_type == "URL" and ref_value:
+                if ref_value.startswith("http"):
+                    # Check if this URL is from our search results
+                    if ref_value not in valid_urls:
+                        # Check partial match (domain level)
+                        domain_match = False
+                        for valid_url in valid_urls:
+                            # Extract domain from both URLs
+                            if self._extract_domain(ref_value) == self._extract_domain(valid_url):
+                                domain_match = True
+                                break
+
+                        if not domain_match and valid_urls:
+                            # URL is completely fabricated - reject
+                            return {
+                                "valid": False,
+                                "reason": f"Evidence URL not from search results: {ref_value[:50]}",
+                            }
+
+            # Validate SNAPSHOT_KEYPATH references
+            elif ref_type == "SNAPSHOT_KEYPATH" and ref_value:
+                # Check if the keypath actually exists in snapshot
+                snapshot = context.get("snapshot_json", {})
+                if not self._validate_keypath(ref_value, snapshot):
+                    return {
+                        "valid": False,
+                        "reason": f"Snapshot keypath does not exist: {ref_value}",
+                    }
+
+        return {"valid": True}
+
+    def _extract_domain(self, url: str) -> str:
+        """Extract domain from URL."""
+        try:
+            # Simple extraction: get the part between // and next /
+            if "://" in url:
+                url = url.split("://")[1]
+            if "/" in url:
+                url = url.split("/")[0]
+            return url.lower()
+        except Exception:
+            return ""
+
+    def _validate_keypath(self, keypath: str, data: dict) -> bool:
+        """
+        Validate that a JSON Pointer keypath exists in data.
+
+        Args:
+            keypath: JSON Pointer format (e.g., "/credit/loan_summary/overdue_flag")
+            data: The snapshot JSON data
+
+        Returns:
+            True if keypath exists, False otherwise
+        """
+        if not keypath or not data:
+            return False
+
+        # Remove leading slash and split
+        parts = keypath.strip("/").split("/")
+
+        current = data
+        for part in parts:
+            if isinstance(current, dict):
+                if part in current:
+                    current = current[part]
+                else:
+                    return False
+            elif isinstance(current, list):
+                try:
+                    idx = int(part)
+                    if 0 <= idx < len(current):
+                        current = current[idx]
+                    else:
+                        return False
+                except ValueError:
+                    return False
+            else:
+                return False
+
+        return True
 
     def _compute_signature(self, signal: dict) -> str:
         """

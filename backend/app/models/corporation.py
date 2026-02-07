@@ -34,6 +34,17 @@ class Corporation(Base):
     biz_item = Column(Text, nullable=True, comment="종목 (상세 업종)")
     is_corporation = Column(Boolean, default=True, comment="법인사업자 여부")
 
+    # DART 공시 기반 정보 (migration_v12, v13 - 100% Fact 데이터)
+    dart_corp_code = Column(String(8), nullable=True, comment="DART 고유번호 (8자리)")
+    established_date = Column(String(8), nullable=True, comment="설립일 (YYYYMMDD) - DART 공시")
+    headquarters = Column(Text, nullable=True, comment="본사 주소 - DART 공시")
+    corp_class = Column(String(1), nullable=True, comment="법인 구분 (Y:유가, K:코스닥, N:코넥스, E:기타)")
+    homepage_url = Column(Text, nullable=True, comment="회사 홈페이지 URL")
+    jurir_no = Column(String(20), nullable=True, comment="법인등록번호 (13자리) - DART 공시")
+    corp_name_eng = Column(Text, nullable=True, comment="영문 회사명 - DART 공시")
+    acc_mt = Column(String(2), nullable=True, comment="결산월 (MM) - DART 공시")
+    dart_updated_at = Column(TIMESTAMP(timezone=True), nullable=True, comment="DART 데이터 최종 갱신 시각")
+
     # Timestamps
     created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
     updated_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)

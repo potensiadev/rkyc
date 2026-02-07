@@ -100,5 +100,15 @@ class SnapshotPipeline:
                     "biz_no": corporation.biz_no,
                     "industry_code": corporation.industry_code,
                     "ceo_name": corporation.ceo_name,
+                    # DART 공시 기반 정보 (100% Fact 데이터)
+                    "dart_corp_code": getattr(corporation, 'dart_corp_code', None),
+                    "established_date": getattr(corporation, 'established_date', None),
+                    "headquarters": getattr(corporation, 'headquarters', None),
+                    "corp_class": getattr(corporation, 'corp_class', None),
+                    "homepage_url": getattr(corporation, 'homepage_url', None),
+                    "jurir_no": getattr(corporation, 'jurir_no', None),
+                    "corp_name_eng": getattr(corporation, 'corp_name_eng', None),
+                    "acc_mt": getattr(corporation, 'acc_mt', None),
+                    "dart_updated_at": str(corporation.dart_updated_at) if getattr(corporation, 'dart_updated_at', None) else None,
                 },
             }

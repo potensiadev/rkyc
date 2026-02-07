@@ -635,7 +635,7 @@ SIGNAL_EXTRACTION_USER_TEMPLATE = """# 분석 대상 기업
 - 기업명: {corp_name}
 - 법인번호: {corp_reg_no}
 - 업종: {industry_code} ({industry_name})
-
+{dart_info}
 # 내부 스냅샷 데이터 (Internal Data)
 {snapshot_json}
 
@@ -851,6 +851,13 @@ def format_signal_extraction_prompt(
     direct_events: str = None,
     industry_events: str = None,
     environment_events: str = None,
+    # DART 공시 기반 정보 (100% Fact 데이터)
+    dart_corp_code: str = None,
+    established_date: str = None,
+    headquarters: str = None,
+    jurir_no: str = None,
+    corp_name_eng: str = None,
+    acc_mt: str = None,
 ) -> str:
     """
     Format the signal extraction user prompt with context data.
@@ -867,6 +874,12 @@ def format_signal_extraction_prompt(
         direct_events: Company-specific events (3-track search)
         industry_events: Industry-wide events (3-track search)
         environment_events: Policy/regulation events (3-track search)
+        dart_corp_code: DART 고유번호 (8자리)
+        established_date: 설립일 (YYYYMMDD)
+        headquarters: 본사 주소
+        jurir_no: 법인등록번호 (13자리)
+        corp_name_eng: 영문 회사명
+        acc_mt: 결산월 (MM)
     """
     # Sanitize all inputs
     safe_corp_name = sanitize_input(corp_name, "corp_name", max_length=200)
@@ -888,11 +901,31 @@ def format_signal_extraction_prompt(
         safe_industry = "[]"
         safe_environment = "[]"
 
+    # Build DART info section (100% Fact 데이터)
+    dart_info_parts = []
+    if dart_corp_code:
+        dart_info_parts.append(f"- DART 고유번호: {dart_corp_code}")
+    if jurir_no:
+        dart_info_parts.append(f"- 법인등록번호: {jurir_no}")
+    if corp_name_eng:
+        dart_info_parts.append(f"- 영문명: {corp_name_eng}")
+    if established_date:
+        dart_info_parts.append(f"- 설립일: {established_date}")
+    if headquarters:
+        dart_info_parts.append(f"- 본사: {headquarters}")
+    if acc_mt:
+        dart_info_parts.append(f"- 결산월: {acc_mt}월")
+
+    dart_info = ""
+    if dart_info_parts:
+        dart_info = "\n# DART 공시 정보 (100% Fact)\n" + "\n".join(dart_info_parts) + "\n"
+
     return SIGNAL_EXTRACTION_USER_TEMPLATE.format(
         corp_name=safe_corp_name,
         corp_reg_no=safe_corp_reg_no or "N/A",
         industry_code=safe_industry_code,
         industry_name=safe_industry_name,
+        dart_info=dart_info,
         snapshot_json=safe_snapshot,
         direct_events=safe_direct,
         industry_events=safe_industry,

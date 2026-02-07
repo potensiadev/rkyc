@@ -55,6 +55,15 @@ export interface Corporation {
   shareholders: Shareholder[];
   recentSignalTypes: ("direct" | "industry" | "environment")[];
   lastReviewed: string;
+  // DART 공시 기반 정보 (100% Fact 데이터)
+  dartCorpCode?: string | null;      // DART 고유번호 (8자리)
+  establishedDate?: string | null;   // 설립일 (YYYYMMDD)
+  corpClass?: string | null;         // 법인 구분 (Y:유가, K:코스닥, N:코넥스, E:기타)
+  homepageUrl?: string | null;       // 회사 홈페이지 URL
+  jurirNo?: string | null;           // 법인등록번호 (13자리)
+  corpNameEng?: string | null;       // 영문 회사명
+  accMt?: string | null;             // 결산월 (MM)
+  dartUpdatedAt?: string | null;     // DART 데이터 최종 갱신 시각
 }
 
 // 업종 코드 → 업종명 변환 (industry_master 테이블과 동기화)

@@ -50,7 +50,7 @@ from app.worker.llm.key_rotator import get_key_rotator
 from app.worker.llm.validator import get_validator, ValidationResult
 from app.worker.llm.search_providers import get_multi_search_manager
 
-# DART API for shareholder verification and Fact-based data (P0/P1)
+# DART API for shareholder verification and Fact-based data (P0/P1/P4)
 from app.services.dart_api import (
     get_verified_shareholders,
     verify_shareholders,
@@ -61,6 +61,9 @@ from app.services.dart_api import (
     get_company_info_by_name,
     get_largest_shareholders_by_name,
     FactBasedProfileData,
+    # P4: Extended Fact Profile (including executives)
+    get_extended_fact_profile,
+    ExtendedFactProfile,
 )
 
 logger = logging.getLogger(__name__)
@@ -2045,23 +2048,24 @@ class CorpProfilingPipeline:
         self._perplexity_api_key = perplexity_api_key
 
         # =========================================================================
-        # P1: DART Fact-Based Data (100% Hallucination 제거)
-        # DART 공시에서 CEO, 설립일, 주소, 최대주주 등을 먼저 가져옴
+        # P1+P4: DART Fact-Based Data (100% Hallucination 제거)
+        # DART 공시에서 CEO, 설립일, 주소, 최대주주, 임원현황 등을 먼저 가져옴
         # LLM 추출 결과보다 DART 데이터가 우선순위 (100% Fact)
         # =========================================================================
-        dart_fact_data: Optional[FactBasedProfileData] = None
+        dart_fact_data: Optional[ExtendedFactProfile] = None
         try:
-            dart_fact_data = await get_fact_based_profile(corp_name)
+            dart_fact_data = await get_extended_fact_profile(corp_name)
             if dart_fact_data and dart_fact_data.company_info:
                 logger.info(
-                    f"[P1-DART] Fact data loaded: CEO={dart_fact_data.ceo_name}, "
+                    f"[P1+P4-DART] Fact data loaded: CEO={dart_fact_data.ceo_name}, "
                     f"Founded={dart_fact_data.founded_year}, "
-                    f"Shareholders={len(dart_fact_data.largest_shareholders)}"
+                    f"Shareholders={len(dart_fact_data.largest_shareholders)}, "
+                    f"Executives={len(dart_fact_data.executives)}"
                 )
             else:
-                logger.info(f"[P1-DART] No DART data available for '{corp_name}'")
+                logger.info(f"[P1+P4-DART] No DART data available for '{corp_name}'")
         except Exception as e:
-            logger.warning(f"[P1-DART] Failed to fetch DART fact data: {e}")
+            logger.warning(f"[P1+P4-DART] Failed to fetch DART fact data: {e}")
             dart_fact_data = None
 
         # Generate industry hints dynamically using LLM (with caching)
@@ -2329,13 +2333,17 @@ class CorpProfilingPipeline:
                     merged_provenance[field] = prov
 
         # =========================================================================
-        # P1: DART Fact 데이터 우선 적용 (100% Hallucination 제거)
+        # P1+P4: DART Fact 데이터 우선 적용 (100% Hallucination 제거)
         # DART 공시 데이터가 있으면 LLM 추출 결과보다 우선
         # =========================================================================
         dart_ceo_name = None
         dart_founded_year = None
         dart_headquarters = None
         dart_shareholders = []
+        dart_executives = []
+        dart_jurir_no = None
+        dart_corp_name_eng = None
+        dart_acc_mt = None
 
         if dart_fact_data:
             # DART 기업개황에서 CEO, 설립연도, 본사 주소
@@ -2343,15 +2351,34 @@ class CorpProfilingPipeline:
                 dart_ceo_name = dart_fact_data.ceo_name
                 dart_founded_year = dart_fact_data.founded_year
                 dart_headquarters = dart_fact_data.headquarters
+                # P4: 추가 필드 (jurir_no, corp_name_eng, acc_mt)
+                dart_jurir_no = dart_fact_data.company_info.jurir_no
+                dart_corp_name_eng = dart_fact_data.company_info.corp_name_eng
+                dart_acc_mt = dart_fact_data.company_info.acc_mt
                 logger.info(
-                    f"[P1-DART] Applying Fact data: CEO={dart_ceo_name}, "
-                    f"Founded={dart_founded_year}, HQ={dart_headquarters[:30] if dart_headquarters else None}..."
+                    f"[P1+P4-DART] Applying Fact data: CEO={dart_ceo_name}, "
+                    f"Founded={dart_founded_year}, HQ={dart_headquarters[:30] if dart_headquarters else None}..., "
+                    f"JurirNo={dart_jurir_no}, AccMt={dart_acc_mt}"
                 )
 
             # DART 최대주주 현황
             if dart_fact_data.largest_shareholders:
                 dart_shareholders = dart_fact_data.shareholders
                 logger.info(f"[P1-DART] Applying {len(dart_shareholders)} shareholders from DART")
+
+            # P4: DART 임원현황
+            if hasattr(dart_fact_data, 'executives') and dart_fact_data.executives:
+                dart_executives = [
+                    {
+                        "name": exec.nm,
+                        "position": exec.ofcps or "",
+                        "is_registered": exec.rgist_exctv_at == "등기임원",
+                        "is_full_time": exec.fte_at == "상근",
+                        "responsibilities": exec.chrg_job or "",
+                    }
+                    for exec in dart_fact_data.executives
+                ]
+                logger.info(f"[P4-DART] Applying {len(dart_executives)} executives from DART")
 
         profile = {
             "profile_id": str(uuid4()),
@@ -2361,12 +2388,17 @@ class CorpProfilingPipeline:
             "revenue_krw": raw_profile.get("revenue_krw"),
             "export_ratio_pct": raw_profile.get("export_ratio_pct"),
             # PRD v1.2 new fields - Basic info
-            # P1: DART Fact 우선, 없으면 LLM 결과 사용
+            # P1+P4: DART Fact 우선, 없으면 LLM 결과 사용
             "ceo_name": dart_ceo_name or raw_profile.get("ceo_name"),
             "employee_count": raw_profile.get("employee_count"),
             "founded_year": dart_founded_year or raw_profile.get("founded_year"),
             "headquarters": dart_headquarters or raw_profile.get("headquarters"),
-            "executives": raw_profile.get("executives", []),
+            # P4: DART 임원현황 우선 적용
+            "executives": dart_executives if dart_executives else raw_profile.get("executives", []),
+            # P4: DART 추가 필드 (LLM Context에 사용)
+            "jurir_no": dart_jurir_no,
+            "corp_name_eng": dart_corp_name_eng,
+            "acc_mt": dart_acc_mt,
             # PRD v1.2 new fields - Value chain
             "industry_overview": raw_profile.get("industry_overview"),
             "business_model": raw_profile.get("business_model"),

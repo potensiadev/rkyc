@@ -26,6 +26,16 @@ export interface ApiCorporation {
   biz_type: string | null;      // 업태
   biz_item: string | null;      // 종목 (상세 업종)
   is_corporation: boolean | null;
+  // DART 공시 기반 정보 (migration_v12, v13 - 100% Fact 데이터)
+  dart_corp_code: string | null;     // DART 고유번호 (8자리)
+  established_date: string | null;   // 설립일 (YYYYMMDD)
+  headquarters: string | null;       // 본사 주소 - DART 공시
+  corp_class: string | null;         // 법인 구분 (Y:유가, K:코스닥, N:코넥스, E:기타)
+  homepage_url: string | null;       // 회사 홈페이지 URL
+  jurir_no: string | null;           // 법인등록번호 (13자리)
+  corp_name_eng: string | null;      // 영문 회사명
+  acc_mt: string | null;             // 결산월 (MM)
+  dart_updated_at: string | null;    // DART 데이터 최종 갱신 시각
   created_at: string;
   updated_at: string;
 }

@@ -59,6 +59,16 @@ class ContextPipeline:
             "industry_code": industry_code,
             "industry_name": industry_name,
             "ceo_name": corporation.get("ceo_name", ""),
+            # DART 공시 기반 정보 (100% Fact 데이터)
+            "dart_corp_code": corporation.get("dart_corp_code"),
+            "established_date": corporation.get("established_date"),
+            "headquarters": corporation.get("headquarters"),
+            "corp_class": corporation.get("corp_class"),
+            "homepage_url": corporation.get("homepage_url"),
+            "jurir_no": corporation.get("jurir_no"),
+            "corp_name_eng": corporation.get("corp_name_eng"),
+            "acc_mt": corporation.get("acc_mt"),
+            "dart_updated_at": corporation.get("dart_updated_at"),
 
             # Snapshot data
             "snapshot_version": snapshot_data.get("snapshot_version", 0),

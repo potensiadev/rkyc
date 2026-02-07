@@ -594,15 +594,49 @@ export default function CorporateDetailPage() {
                 <SectionHeader icon={IconBuilding} title="Corporate Profile" />
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-8">
                   <DataField label="CEO" value={corporation.ceo} isHighlighted />
-                  <DataField label="Established" value={corporation.foundedYear > 0 ? `${corporation.foundedYear}년` : '-'} />
+                  <DataField label="Established" value={corporation.foundedYear > 0 ? `${corporation.foundedYear}년` : (corporation.establishedDate ? `${corporation.establishedDate.substring(0,4)}년` : '-')} />
                   <DataField label="Biz Type" value={corporation.bizType || '-'} />
                   <DataField label="Industry" value={corporation.industryCode} />
                   <div className="lg:col-span-2">
                     <DataField label="Headquarters" value={corporation.headquarters || corporation.address} />
                   </div>
                   <DataField label="Tax Code" value={corporation.businessNumber || '-'} />
-                  <DataField label="Corp Code" value={corporation.corpRegNo || '-'} />
+                  <DataField label="Corp Code" value={corporation.corpRegNo || corporation.jurirNo || '-'} />
                 </div>
+
+                {/* DART 공시 기반 정보 */}
+                {(corporation.dartCorpCode || corporation.corpNameEng || corporation.accMt || corporation.homepageUrl) && (
+                  <div className="mt-6 pt-6 border-t border-slate-100">
+                    <div className="flex items-center gap-2 mb-4">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">DART 공시 정보</span>
+                      <span className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-green-100 text-green-700">100% Fact</span>
+                    </div>
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 text-sm">
+                      {corporation.dartCorpCode && (
+                        <DataField label="DART Code" value={corporation.dartCorpCode} />
+                      )}
+                      {corporation.corpNameEng && (
+                        <div className="lg:col-span-2">
+                          <DataField label="English Name" value={corporation.corpNameEng} />
+                        </div>
+                      )}
+                      {corporation.accMt && (
+                        <DataField label="Fiscal Month" value={`${corporation.accMt}월 결산`} />
+                      )}
+                      {corporation.homepageUrl && (
+                        <div className="lg:col-span-2">
+                          <div className="flex flex-col gap-1.5">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Homepage</span>
+                            <a href={corporation.homepageUrl} target="_blank" rel="noopener noreferrer" className="text-[13px] text-indigo-600 hover:underline truncate flex items-center gap-1">
+                              {corporation.homepageUrl.replace(/^https?:\/\//, '')}
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </GlassCard>
             </div>
 

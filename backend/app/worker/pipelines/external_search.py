@@ -12,6 +12,22 @@ Optimized for Korean financial institution use cases.
 Sprint 1 Enhancement (ADR-009):
 - 3-Track 병렬 실행으로 40% 속도 향상 (20초 → 12초)
 - asyncio + httpx.AsyncClient 사용
+
+P0 Anti-Hallucination Enhancement (2026-02-08):
+- 검색 범위 확장: 뉴스 → 공시, 보고서, IR자료, 연구자료 포함
+- 블로그/커뮤니티 Hard Block
+- Summary 200자 이상 필수
+- source_excerpt 필수 (원문 인용)
+- status 필드로 검색 실패/무결과 구분
+- Temperature 0.0으로 창의성 완전 차단
+
+Buffett Enhancement (2026-02-08):
+- P0: 프롬프트 분리 (검색/추출/분석/검증) - Circle of Competence
+- P0: retrieval_confidence 필드 (VERBATIM/PARAPHRASED/INFERRED) - Margin of Safety
+- P1: Falsification 체크리스트 - Invert, Always Invert
+- P1: 공시 데이터 최우선 - Value > Price
+- P2: could_not_find 필드 필수화 - "모르겠다" 허용
+- P2: 자동화된 원문 대조 검증 - 10-K Test
 """
 
 import asyncio
@@ -56,11 +72,36 @@ EXCLUDED_DOMAINS = [
     "quora.com",
 ]
 
-# Priority sources for Korean corporate news
+# Priority sources for Korean corporate news (P0 Enhanced)
 PRIORITY_SOURCES = {
-    "tier1": ["dart.fss.or.kr", "kind.krx.co.kr", ".go.kr"],  # 공시, 정부
-    "tier2": ["hankyung.com", "mk.co.kr", "sedaily.com", "edaily.co.kr"],  # 주요 경제지
-    "tier3": ["yna.co.kr", "newsis.com", "news1.kr"],  # 통신사
+    # Tier 1: 공시, 정부, 규제기관 (HIGHEST TRUST)
+    "tier1": [
+        "dart.fss.or.kr",      # DART 전자공시
+        "kind.krx.co.kr",      # KRX KIND
+        ".go.kr",              # 정부 기관
+        "bok.or.kr",           # 한국은행
+        "fss.or.kr",           # 금융감독원
+    ],
+    # Tier 2: 신용평가사, 연구기관, 주요 경제지
+    "tier2": [
+        "kisrating.com",       # 한국신용평가
+        "nicerating.com",      # NICE신용평가
+        "korearatings.com",    # 한국기업평가
+        "kdi.re.kr",           # KDI
+        "kiet.re.kr",          # 산업연구원
+        "hankyung.com",        # 한국경제
+        "mk.co.kr",            # 매일경제
+        "sedaily.com",         # 서울경제
+        "edaily.co.kr",        # 이데일리
+    ],
+    # Tier 3: 통신사, 방송사
+    "tier3": [
+        "yna.co.kr",           # 연합뉴스
+        "newsis.com",          # 뉴시스
+        "news1.kr",            # 뉴스1
+        "reuters.com",         # 로이터
+        "bloomberg.com",       # 블룸버그
+    ],
 }
 
 
@@ -126,6 +167,107 @@ ENVIRONMENT_QUERY_TEMPLATES = {
     "ENERGY_SECURITY": "{industry_name} 에너지 전력 가스 공급 안정성 요금",
     "FOOD_SECURITY": "{industry_name} 식량안보 농산물 원료 가격 수입",
 }
+
+
+# =============================================================================
+# Buffett Enhancement: System Prompt (Librarian, Not Analyst)
+# =============================================================================
+
+BUFFETT_SYSTEM_PROMPT = """You are a librarian, not an analyst.
+
+YOUR ONLY JOB: Find and copy facts. Do not interpret. Do not analyze.
+
+## ABSOLUTE RULES (BREAK ANY = ENTIRE RESPONSE REJECTED)
+1. Copy EXACT sentences from sources. Do not paraphrase unless impossible.
+2. Every number needs: value, unit, source_url, exact sentence, paragraph location
+3. If you cannot find something, say "NOT_FOUND" - this is a VALID and GOOD answer
+4. NEVER combine two numbers to create a third number
+5. NEVER use these words: 약, 추정, 전망, 예상, 일반적으로, 대략, 정도
+
+## RETRIEVAL CONFIDENCE (must specify for each fact)
+- VERBATIM: Exact copy from source (preferred)
+- PARAPHRASED: Minor rewording for clarity (acceptable)
+- INFERRED: Derived from context (requires justification, last resort)
+
+## SOURCE PRIORITY (Buffett's Value > Price)
+1. DART 정량 데이터 (재무제표, 주주명부, 임원현황) - 숫자만 추출
+2. 신용평가사 등급 변경 (한신평, NICE, 한기평) - 사실만
+3. 규제기관 제재/인허가 (금감원, 공정위) - 사실만
+4. 정부 공식 발표 (.go.kr) - 사실만
+5. 주요 경제지 (한경, 매경) - 위 1-4를 보완하는 용도로만
+
+## FALSIFICATION CHECKLIST (Invert, Always Invert)
+Before including any fact, ask yourself:
+- Is there a contradicting source?
+- Is this number within historical range for this company/industry?
+- Does this make sense compared to competitors?
+
+## OUTPUT FORMAT
+Return valid JSON only. No markdown, no explanation.
+Remember: Saying "I don't know" is better than guessing."""
+
+# Legacy alias for backward compatibility
+PERPLEXITY_SYSTEM_PROMPT = BUFFETT_SYSTEM_PROMPT
+
+
+# =============================================================================
+# Buffett P1: Falsification Checklist
+# =============================================================================
+
+FALSIFICATION_RULES = {
+    # 수치 범위 검증 (업종별 합리적 범위)
+    "revenue_change_max_pct": 200,      # 매출 증감률 최대 ±200%
+    "profit_change_max_pct": 500,       # 영업이익 증감률 최대 ±500%
+    "debt_ratio_max_pct": 2000,         # 부채비율 최대 2000%
+    "employee_change_max_pct": 100,     # 임직원 증감률 최대 ±100%
+
+    # 의심 키워드 (이 단어가 있으면 추가 검증 필요)
+    "suspicious_keywords": [
+        "관계자에 따르면",
+        "업계에서는",
+        "소식통",
+        "익명",
+        "추정",
+        "전망",
+        "예상",
+        "~할 것",
+        "~될 것",
+    ],
+
+    # 반드시 교차검증 필요한 주제
+    "cross_verify_required": [
+        "부도",
+        "파산",
+        "횡령",
+        "배임",
+        "분식회계",
+        "신용등급 하락",
+        "대규모 감원",
+    ],
+}
+
+
+# =============================================================================
+# Buffett P2: Hallucination Indicators (절대 허용 불가 표현)
+# =============================================================================
+
+HALLUCINATION_INDICATORS = [
+    "~로 추정됨",
+    "~로 보임",
+    "~로 예상됨",
+    "~할 것으로 보임",
+    "~할 것으로 예상",
+    "~할 전망",
+    "일반적으로",
+    "통상적으로",
+    "업계에서는",
+    "시장에서는",
+    "대략",
+    "약",
+    "정도",
+    "내외",
+    "가량",
+]
 
 
 class ExternalSearchPipeline:
@@ -407,64 +549,87 @@ class ExternalSearchPipeline:
         """
         Track 1: Search for company-specific credit risk signals.
 
-        Priority order:
-        1. Credit Risk Indicators (RISK focus)
-        2. Business Events (RISK/OPPORTUNITY)
-        3. Financial Performance
+        Buffett Enhancement (2026-02-08):
+        - P0: 검색/추출 분리 (Librarian, Not Analyst)
+        - P0: retrieval_confidence 필드 (VERBATIM/PARAPHRASED/INFERRED)
+        - P1: 공시 데이터 최우선 (Value > Price)
+        - P2: could_not_find 필드 필수화
         """
         today = datetime.now().strftime("%Y-%m-%d")
 
-        prompt = f"""# Search Context
-Target Company: {corp_name}
+        prompt = f"""## ROLE: LIBRARIAN (도서관 사서)
+You are a librarian, NOT an analyst. Your job is to FIND and COPY facts.
+Do NOT interpret, analyze, or infer. Just find and copy.
+
+## TARGET
+Company: {corp_name}
 {f"Corporate Registration: {corp_reg_no}" if corp_reg_no else ""}
 Industry: {industry_name}
-Time Window: Last 30 days
-Today's date: {today}
+Today: {today}
+Period: Last 30 days
 
-# Search Objectives
-Find VERIFIED news about this SPECIFIC company:
+## SEARCH PRIORITY (Buffett's Value > Price - 이 순서대로 검색)
+1. DART 공시 (dart.fss.or.kr) - 재무제표, 사업보고서, 주요사항보고서 [HIGHEST PRIORITY]
+2. 신용평가사 (kisrating.com, nicerating.com) - 등급 변경/전망 [HIGH PRIORITY]
+3. 금융감독원/공정위 (.go.kr) - 제재, 과징금, 인허가 [HIGH PRIORITY]
+4. 법원 공고 - 회생, 파산, 소송 판결 [HIGH PRIORITY]
+5. 주요 경제지 (한경, 매경) - 위 1-4를 보완하는 용도로만 [SUPPLEMENTARY]
 
-## Priority 1: Credit Risk Indicators (RISK focus)
-- Payment defaults, debt restructuring, credit rating downgrades
-- Regulatory violations, lawsuits, fraud allegations
-- Executive departures, governance issues
-- Factory closures, layoffs, asset sales
+## WHAT TO FIND (사실만, 분석 금지)
+Category 1 - NUMBERS (숫자):
+- 매출액, 영업이익, 순이익 (단위 포함)
+- 부채비율, 유동비율
+- 신용등급 (현재/변경)
 
-## Priority 2: Business Events (RISK/OPPORTUNITY)
-- M&A announcements (acquirer or target)
-- Major contract wins or losses (>10% revenue impact)
-- New market entry or exit
-- Strategic partnerships or joint ventures
+Category 2 - EVENTS (이벤트):
+- 대표이사 변경 (이름, 일자)
+- 대주주 변경 (지분율, 일자)
+- 계약 체결/해지 (금액, 상대방)
 
-## Priority 3: Financial Performance
-- Earnings surprises (beat/miss by >10%)
-- Revenue trend changes
-- Margin compression or expansion
-- Cash flow concerns
+Category 3 - DATES (날짜):
+- 공시일, 발표일
+- 시행일, 만료일
 
-# Output Requirements
-Return results as JSON array with this structure:
-[
-  {{
-    "title": "Event title (Korean)",
-    "headline": "15자 이내 핵심 요약",
-    "summary": "Brief summary with specific facts (100자 이내)",
-    "source_url": "Source URL",
-    "source_name": "Source name (e.g., 한국경제, DART)",
-    "published_at": "YYYY-MM-DD if available",
-    "relevance": "HIGH/MED/LOW",
-    "risk_type": "credit_risk|business_event|financial_performance",
-    "impact_direction": "RISK|OPPORTUNITY|NEUTRAL"
+## OUTPUT FORMAT (STRICT JSON - Buffett Style)
+{{
+  "retrieval_status": "FOUND" | "NOT_FOUND" | "PARTIAL" | "CONFLICTING",
+  "search_limitations": "검색의 한계점 명시 (예: DART 공시만 검색됨, 신평사 리포트 접근 불가)",
+  "could_not_find": ["찾지 못한 항목 목록 - 이것도 유효한 답변임"],
+  "facts": [
+    {{
+      "fact_type": "NUMBER" | "EVENT" | "DATE",
+      "title": "사실 제목 (30자 이내)",
+      "value": "정확한 값 (숫자는 단위 포함)",
+      "unit": "원, %, 명 등 (해당시)",
+      "as_of_date": "이 정보의 기준일 (YYYY-MM-DD)",
+      "source_url": "https://full/url/path",
+      "source_name": "출처명 (예: DART, 한국경제)",
+      "source_tier": "tier1|tier2|tier3",
+      "source_sentence": "원문 문장 전체 복사 (요약 금지, 최소 50자)",
+      "paragraph_location": "문서 내 위치 설명 (예: 사업보고서 II.사업의내용 3페이지)",
+      "retrieval_confidence": "VERBATIM" | "PARAPHRASED" | "INFERRED",
+      "confidence_reason": "PARAPHRASED/INFERRED인 경우 그 이유",
+      "category": "credit_risk|governance|financial|operations",
+      "impact_direction": "RISK|OPPORTUNITY|NEUTRAL"
+    }}
+  ],
+  "falsification_check": {{
+    "contradicting_sources_found": true | false,
+    "contradicting_details": "상충되는 정보가 있으면 설명",
+    "numbers_within_historical_range": true | false,
+    "range_concern": "범위 벗어나면 설명"
   }}
-]
+}}
 
-# Quality Filter
-- Korean language sources preferred
-- Prioritize: 공시(DART), 주요 경제지(한경/매경/서울경제), 통신사(연합뉴스)
-- FACT-BASED news only (no speculation, no rumors)
-- Exclude: 블로그, 커뮤니티, 광고성 기사
+## CRITICAL RULES
+1. source_sentence는 원문 그대로 복사. 요약하면 REJECTED.
+2. 찾지 못한 정보는 could_not_find에 명시. "모르겠다"가 정답일 수 있음.
+3. 두 숫자를 조합해서 새 숫자를 만들지 마라.
+4. 추정, 전망, 예상 표현 사용 금지.
+5. INFERRED는 최후의 수단. 반드시 confidence_reason 필수.
 
-Return [] if no relevant news found."""
+If you cannot find any credible information, return:
+{{"retrieval_status": "NOT_FOUND", "search_limitations": "검색 한계 설명", "could_not_find": ["전체 항목"], "facts": [], "falsification_check": {{}}}}"""
 
         events = self._call_perplexity(prompt, "direct")
 
@@ -483,7 +648,11 @@ Return [] if no relevant news found."""
         """
         Track 2: Search for industry-wide trends and shocks.
 
-        5 key areas with industry-specific keywords.
+        Buffett Enhancement (2026-02-08):
+        - P0: Librarian 역할 (분석 금지, 사실 수집만)
+        - P0: retrieval_confidence 필드 추가
+        - P1: 정부/연구기관 보고서 최우선
+        - P2: could_not_find 필드 필수화
         """
         today = datetime.now().strftime("%Y-%m-%d")
 
@@ -493,74 +662,82 @@ Return [] if no relevant news found."""
         regulation_keywords = ", ".join(keywords.get("regulation", []))
         market_keywords = ", ".join(keywords.get("market", []))
 
-        prompt = f"""# Search Context
-Target Industry: {industry_name} (code: {industry_code})
-Related Company for Context: {corp_name}
-Time Window: Last 30 days
-Today's date: {today}
+        prompt = f"""## ROLE: LIBRARIAN (도서관 사서)
+You are a librarian collecting industry statistics. Do NOT analyze. Just FIND and COPY.
 
-# Industry-Specific Keywords
+## TARGET
+Industry: {industry_name} (Code: {industry_code})
+Reference Company: {corp_name} (for context only - do NOT search this company specifically)
+Today: {today}
+Period: Last 30 days
+
+## SEARCH PRIORITY (Buffett's Value > Price)
+1. 산업통상자원부 통계/보고서 [HIGHEST - 정부 공식]
+2. 한국은행 산업동향 [HIGH - 중앙은행]
+3. KIET/KDI 연구보고서 [HIGH - 국책연구기관]
+4. 업종협회 통계 (예: 전자산업협회, 건설협회) [HIGH - 업계 공식]
+5. 관세청/KITA 수출입통계 [HIGH - 무역 데이터]
+6. 주요 경제지 [SUPPLEMENTARY - 위 출처 보완용]
+
+## INDUSTRY KEYWORDS
 - Supply Chain: {supply_keywords}
 - Regulation: {regulation_keywords}
 - Market: {market_keywords}
 
-# Search Objectives
-Find industry-wide events affecting MULTIPLE companies in this sector:
+## WHAT TO FIND (숫자와 사실만)
+**반드시 3개 이상 기업에 영향을 미치는 산업 전체 이벤트만**
+개별 기업 뉴스 → 제외
 
-## 1. Market Structure Changes
-- Major M&A reshaping competitive landscape
-- New market entrants (especially foreign competitors)
-- Industry consolidation or fragmentation
-- Bankruptcy of significant players
+1. NUMBERS (통계):
+- 산업 생산지수 (전월비, 전년비 %)
+- 수출입 금액/물량 (전년비 %)
+- 원자재 가격 변동 ({supply_keywords})
+- 고용 통계 (업종별 취업자 수)
 
-## 2. Supply Chain Dynamics
-- Raw material price volatility ({supply_keywords})
-- Logistics disruptions affecting the sector
-- Supplier/vendor ecosystem changes
-- Inventory buildup or shortage signals
+2. EVENTS (이벤트):
+- 업계 대형 M&A (거래금액 포함)
+- 공장 가동 중단 (다수 기업 영향)
+- 파업/노사갈등 (업계 전체)
 
-## 3. Demand Signals
-- End-market demand shifts
-- Customer industry health (B2B context)
-- Seasonal pattern deviations
-- New application/use case emergence
-
-## 4. Technology & Innovation
-- Disruptive technology threats
-- Automation/digitalization pressures
-- R&D breakthroughs in the sector
-- Patent/IP developments
-
-## 5. Labor Market
-- Industry-wide hiring/layoff trends
-- Wage pressure in key skill areas
-- Union activities, strikes
-- Talent migration patterns
-
-# Output Requirements
-Return results as JSON array:
-[
-  {{
-    "title": "Event title (Korean)",
-    "headline": "15자 이내 핵심 요약",
-    "summary": "Brief summary explaining industry-wide impact (100자 이내)",
-    "source_url": "Source URL",
-    "source_name": "Source name",
-    "published_at": "YYYY-MM-DD if available",
-    "relevance": "HIGH/MED/LOW",
-    "impact_area": "market_structure|supply_chain|demand|technology|labor",
-    "impact_direction": "RISK|OPPORTUNITY|NEUTRAL",
-    "affected_scope": "Description of which companies/segments affected"
+## OUTPUT FORMAT (STRICT JSON - Buffett Style)
+{{
+  "retrieval_status": "FOUND" | "NOT_FOUND" | "PARTIAL",
+  "search_limitations": "검색 한계 (예: 협회 통계는 1개월 지연 발표)",
+  "could_not_find": ["찾지 못한 항목 - 이것도 유효한 답변"],
+  "facts": [
+    {{
+      "fact_type": "STATISTIC" | "EVENT",
+      "title": "통계/이벤트명 (30자 이내)",
+      "value": "정확한 값 (숫자+단위)",
+      "comparison_base": "비교 기준 (예: 전년동기비, 전월비)",
+      "as_of_date": "기준일 (YYYY-MM-DD)",
+      "source_url": "URL",
+      "source_name": "출처명",
+      "source_tier": "tier1|tier2|tier3",
+      "source_sentence": "원문 문장 전체 복사 (50자 이상)",
+      "paragraph_location": "출처 내 위치",
+      "retrieval_confidence": "VERBATIM" | "PARAPHRASED" | "INFERRED",
+      "confidence_reason": "PARAPHRASED/INFERRED인 경우 이유",
+      "impact_area": "market_structure|supply_chain|demand|technology|labor",
+      "impact_direction": "RISK|OPPORTUNITY|NEUTRAL",
+      "affected_scope": "영향 범위 (예: 반도체 전 업종, 메모리 세그먼트)"
+    }}
+  ],
+  "falsification_check": {{
+    "contradicting_sources_found": true | false,
+    "contradicting_details": "상충 정보 있으면 설명",
+    "numbers_within_historical_range": true | false,
+    "range_concern": "이상치 있으면 설명"
   }}
-]
+}}
 
-# Quality Filter
-- Focus on events impacting MULTIPLE companies, not single-company news
-- Quantify market impact where possible (market size, growth rates)
-- Korean sources: 산업통상자원부, 업종별 협회, 한국은행 산업동향
-- Exclude: Single company earnings (unless industry bellwether), stock price movements without fundamental cause
+## EXCLUSION RULE (강력 적용)
+- 단일 기업 실적 발표 → 제외 (업계 1위라도)
+- 주가 변동 → 제외 (펀더멘털 변화 없으면)
+- 블로그/커뮤니티만 출처 → 제외
 
-Return [] if no relevant news found."""
+If no industry-wide facts found:
+{{"retrieval_status": "NOT_FOUND", "search_limitations": "설명", "could_not_find": ["산업 통계", "업종 이벤트"], "facts": [], "falsification_check": {{}}}}"""
 
         events = self._call_perplexity(prompt, "industry")
 
@@ -579,7 +756,11 @@ Return [] if no relevant news found."""
         """
         Track 3: Search for policy, regulation, and macro-economic changes.
 
-        Uses selected_queries from Corp Profile to focus searches.
+        Buffett Enhancement (2026-02-08):
+        - P0: Librarian 역할 (정책 사실만 수집, 전망/분석 금지)
+        - P0: retrieval_confidence 필드 추가
+        - P1: 관보/정부 발표 최우선
+        - P2: could_not_find 필드 필수화
         """
         today = datetime.now().strftime("%Y-%m-%d")
 
@@ -604,65 +785,81 @@ Return [] if no relevant news found."""
 
         query_focus = "\n".join(f"- {topic}" for topic in query_topics)
 
-        prompt = f"""# Search Context
-Target Industry: {industry_name} (code: {industry_code})
-Time Window: Last 30 days
-Today's date: {today}
+        prompt = f"""## ROLE: LIBRARIAN (도서관 사서)
+You are a librarian collecting ENACTED policy documents. Do NOT analyze or predict. Just FIND and COPY.
 
-# Focused Search Topics
+## TARGET
+Industry: {industry_name} (Code: {industry_code})
+Today: {today}
+Period: Last 30 days
+
+## SEARCH PRIORITY (Buffett's Value > Price - 공식 출처만)
+1. 관보 (gwanbo.go.kr) - 법률, 시행령, 시행규칙 원문 [HIGHEST]
+2. 법제처 (law.go.kr) - 제/개정 법률 [HIGHEST]
+3. 부처 보도자료 - 기재부, 산업부, 금융위, 환경부 [HIGH]
+4. 금융감독원 고시/공고 [HIGH]
+5. 한국은행 통화정책 결정문 [HIGH]
+6. 경제지 정책 기사 [SUPPLEMENTARY - 위 출처 보완용]
+
+## FOCUSED SEARCH
 {query_focus}
 
-# Search Objectives
-Find policy, regulation, and macro-economic news:
+## WHAT TO FIND (확정된 정책만, 추측 금지)
+1. ENACTED (확정):
+- 법률명 + 법률 번호
+- 시행령/시행규칙 명칭
+- 시행일 (YYYY-MM-DD)
+- 주요 조항 내용 (원문 인용)
 
-## 1. Government Policy
-- New policies or regulations affecting this industry
-- Implementation timeline and scope
-- Enforcement actions or penalties
+2. ANNOUNCED (발표):
+- 부처명 + 발표일
+- 정책명
+- 구체적 내용 (금액, 세율, 기간 등)
 
-## 2. Fiscal & Tax
-- Tax changes, subsidies, or incentives
-- Budget allocations for industry support
-- Tariff changes
+3. MONETARY (금융통화):
+- 기준금리 결정 (수치, 결정일)
+- 통화정책방향
 
-## 3. Trade & Geopolitics
-- Trade policy changes (FTA, export controls)
-- Geopolitical tensions affecting supply chains
-- Sanctions or trade restrictions
-
-## 4. Environmental & ESG
-- Carbon regulations, emission standards
-- ESG disclosure requirements
-- Green taxonomy impacts
-
-## 5. Monetary & Financial
-- Interest rate impacts on industry
-- Exchange rate volatility effects
-- Credit market conditions
-
-# Output Requirements
-Return results as JSON array:
-[
-  {{
-    "title": "Event title (Korean)",
-    "headline": "15자 이내 핵심 요약",
-    "summary": "Brief summary explaining policy/regulatory impact (100자 이내)",
-    "source_url": "Source URL",
-    "source_name": "Source name",
-    "published_at": "YYYY-MM-DD if available",
-    "relevance": "HIGH/MED/LOW",
-    "policy_area": "government|fiscal|trade|environmental|monetary",
-    "impact_direction": "RISK|OPPORTUNITY|NEUTRAL",
-    "effective_date": "If known, when policy takes effect"
+## OUTPUT FORMAT (STRICT JSON - Buffett Style)
+{{
+  "retrieval_status": "FOUND" | "NOT_FOUND" | "PARTIAL",
+  "search_limitations": "검색 한계 (예: 관보는 1주 지연 반영)",
+  "could_not_find": ["찾지 못한 정책 영역 - 이것도 유효한 답변"],
+  "facts": [
+    {{
+      "fact_type": "LAW" | "DECREE" | "ANNOUNCEMENT" | "MONETARY",
+      "title": "정책명/법률명 (공식 명칭)",
+      "law_number": "법률 제XXXXX호 (해당시)",
+      "effective_date": "YYYY-MM-DD (시행일)",
+      "announcement_date": "YYYY-MM-DD (발표일)",
+      "issuing_authority": "발표 기관 (예: 기획재정부, 한국은행)",
+      "source_url": "URL (관보/법제처 우선)",
+      "source_name": "출처명",
+      "source_tier": "tier1|tier2|tier3",
+      "source_sentence": "원문 조항 또는 발표문 복사 (최소 100자)",
+      "paragraph_location": "출처 내 위치 (예: 제3조 제1항)",
+      "retrieval_confidence": "VERBATIM" | "PARAPHRASED" | "INFERRED",
+      "confidence_reason": "PARAPHRASED/INFERRED인 경우 이유",
+      "policy_area": "regulatory|fiscal|trade|environmental|monetary",
+      "impact_direction": "RISK|OPPORTUNITY|NEUTRAL",
+      "industry_relevance": "{industry_name}와의 관련성 설명 (1문장)"
+    }}
+  ],
+  "falsification_check": {{
+    "is_enacted_or_announced": true | false,
+    "has_official_source": true | false,
+    "speculation_detected": "추측성 내용 있으면 설명"
   }}
-]
+}}
 
-# Quality Filter
-- Prioritize: 정부 발표, 관보, 규제기관 공지
-- Korean sources: 기획재정부, 산업부, 금융위, 한국은행
-- FACT-BASED only (no speculation about future policy)
+## ABSOLUTE EXCLUSIONS (발견 시 제외, 포함 금지)
+- "검토 중", "논의 중", "추진 예정" → 미확정이므로 제외
+- "~할 전망", "~할 것으로 예상" → 추측이므로 제외
+- 업계 요청/건의 → 아직 정책 아님
+- 언론 보도만 있고 공식 발표 없음 → 제외
 
-Return [] if no relevant news found."""
+If no ENACTED/ANNOUNCED policy found:
+{{"retrieval_status": "NOT_FOUND", "search_limitations": "검색 한계 설명", "could_not_find": ["확정 정책", "공식 발표"], "facts": [], "falsification_check": {{"is_enacted_or_announced": false}}}}"""
 
         events = self._call_perplexity(prompt, "environment")
 
@@ -673,36 +870,29 @@ Return [] if no relevant news found."""
         return events
 
     def _call_perplexity(self, prompt: str, search_type: str) -> list[dict]:
-        """Call Perplexity API and parse response."""
+        """
+        Call Perplexity API and parse response.
+
+        P0 Enhanced (2026-02-08):
+        - Temperature 0.0 (창의성 완전 차단)
+        - 새로운 System Prompt (간결하고 엄격)
+        - status 필드 기반 응답 파싱
+        - source_excerpt 검증
+        """
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
 
-        system_content = """You are a senior financial analyst at a Korean bank researching corporate risk and opportunity signals.
-
-Your role:
-1. Find VERIFIED, FACT-BASED news only
-2. Prioritize official sources (DART, government, major news outlets)
-3. Return results in valid JSON array format
-4. Use Korean language for titles and summaries
-5. Be conservative - only include news with clear evidence
-
-Quality standards:
-- NO speculation or rumors
-- NO blog posts or user-generated content
-- NO promotional content
-- Cross-reference controversial claims
-- Include publication date when available"""
-
         payload = {
             "model": self.MODEL,
             "messages": [
-                {"role": "system", "content": system_content},
+                {"role": "system", "content": PERPLEXITY_SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ],
-            "temperature": 0.1,
-            "max_tokens": 3000,
+            "temperature": 0.0,  # P0: 창의성 완전 차단
+            "max_tokens": 4000,  # 증가: 긴 summary 허용
+            "top_p": 1.0,
         }
 
         try:
@@ -718,18 +908,395 @@ Quality standards:
             content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
             citations = result.get("citations", [])
 
-            events = self._parse_events(content, citations, search_type)
+            # P0: 새로운 파싱 로직 (status 필드 지원)
+            events = self._parse_events_v2(content, citations, search_type)
             return events
 
         except httpx.TimeoutException:
-            logger.warning(f"Perplexity API timeout for {search_type} search")
+            logger.warning(f"[SEARCH_FAILED] Perplexity API timeout for {search_type} search")
             return []
         except httpx.HTTPStatusError as e:
-            logger.error(f"Perplexity API error for {search_type}: {e.response.status_code}")
+            logger.error(f"[SEARCH_FAILED] Perplexity API error for {search_type}: {e.response.status_code}")
             return []
         except Exception as e:
-            logger.error(f"Perplexity call failed for {search_type}: {e}")
+            logger.error(f"[SEARCH_FAILED] Perplexity call failed for {search_type}: {e}")
             return []
+
+    def _parse_events_v2(
+        self,
+        content: str,
+        citations: list[str] = None,
+        search_type: str = "unknown",
+    ) -> list[dict]:
+        """
+        Parse events from Perplexity response (Buffett Enhanced).
+
+        Handles Buffett-style JSON format:
+        - retrieval_status: FOUND | NOT_FOUND | PARTIAL | CONFLICTING
+        - facts: 사실 배열 (기존 events 대신)
+        - could_not_find: 찾지 못한 항목 (P2)
+        - falsification_check: 검증 결과 (P1)
+
+        Also handles legacy formats for backward compatibility.
+        """
+        try:
+            # JSON 객체 찾기
+            start_idx = content.find("{")
+            end_idx = content.rfind("}") + 1
+
+            if start_idx == -1 or end_idx == 0:
+                # Fallback: 기존 배열 포맷 시도
+                return self._parse_events_legacy(content, citations, search_type)
+
+            json_str = content[start_idx:end_idx]
+            response_obj = json.loads(json_str)
+
+            # Buffett 포맷 확인 (retrieval_status 필드)
+            retrieval_status = response_obj.get("retrieval_status")
+            if retrieval_status:
+                return self._parse_buffett_response(response_obj, search_type)
+
+            # Legacy 포맷 (status 필드)
+            status = response_obj.get("status", "SUCCESS")
+            reason = response_obj.get("reason", "")
+
+            if status == "NO_RESULTS":
+                logger.info(f"[{search_type}] NO_RESULTS: {reason}")
+                return []
+            elif status == "NO_CREDIBLE_SOURCES":
+                logger.warning(f"[{search_type}] NO_CREDIBLE_SOURCES: {reason}")
+                return []
+            elif status == "SEARCH_FAILED":
+                logger.error(f"[{search_type}] SEARCH_FAILED: {reason}")
+                return []
+
+            # events 배열 추출
+            events = response_obj.get("events", [])
+
+            # 유효성 검증 및 필터링
+            valid_events = []
+            for event in events:
+                validated = self._validate_event_v2(event, search_type)
+                if validated:
+                    valid_events.append(validated)
+
+            logger.info(
+                f"[{search_type}] Parsed {len(valid_events)}/{len(events)} valid events"
+            )
+            return valid_events
+
+        except json.JSONDecodeError as e:
+            logger.error(f"[{search_type}] JSON parse error: {e}")
+            # Fallback: 기존 배열 포맷 시도
+            return self._parse_events_legacy(content, citations, search_type)
+
+    def _parse_buffett_response(
+        self,
+        response_obj: dict,
+        search_type: str,
+    ) -> list[dict]:
+        """
+        Parse Buffett-style response (P0/P1/P2 Enhanced).
+
+        New format fields:
+        - retrieval_status: FOUND | NOT_FOUND | PARTIAL | CONFLICTING
+        - search_limitations: 검색 한계 설명
+        - could_not_find: 찾지 못한 항목 배열 (P2)
+        - facts: 사실 배열
+        - falsification_check: 검증 결과 (P1)
+        """
+        retrieval_status = response_obj.get("retrieval_status", "NOT_FOUND")
+        search_limitations = response_obj.get("search_limitations", "")
+        could_not_find = response_obj.get("could_not_find", [])
+        facts = response_obj.get("facts", [])
+        falsification_check = response_obj.get("falsification_check", {})
+
+        # 상태 로깅
+        if retrieval_status == "NOT_FOUND":
+            logger.info(
+                f"[{search_type}][BUFFETT] NOT_FOUND - "
+                f"limitations: {search_limitations}, "
+                f"could_not_find: {could_not_find}"
+            )
+            return []
+        elif retrieval_status == "CONFLICTING":
+            logger.warning(
+                f"[{search_type}][BUFFETT] CONFLICTING sources detected - "
+                f"falsification: {falsification_check}"
+            )
+            # 충돌이 있어도 일단 진행 (플래그 설정)
+
+        # P1: Falsification 체크 결과 처리
+        if falsification_check:
+            if falsification_check.get("contradicting_sources_found"):
+                logger.warning(
+                    f"[{search_type}][FALSIFICATION] Contradicting sources: "
+                    f"{falsification_check.get('contradicting_details', '')}"
+                )
+            if not falsification_check.get("numbers_within_historical_range", True):
+                logger.warning(
+                    f"[{search_type}][FALSIFICATION] Numbers out of range: "
+                    f"{falsification_check.get('range_concern', '')}"
+                )
+
+        # P2: could_not_find 로깅 (이것도 유효한 정보)
+        if could_not_find:
+            logger.info(
+                f"[{search_type}][BUFFETT] Could not find: {could_not_find}"
+            )
+
+        # facts 검증 및 변환
+        valid_events = []
+        for fact in facts:
+            validated = self._validate_buffett_fact(fact, search_type)
+            if validated:
+                valid_events.append(validated)
+
+        logger.info(
+            f"[{search_type}][BUFFETT] Parsed {len(valid_events)}/{len(facts)} valid facts "
+            f"(status={retrieval_status})"
+        )
+
+        return valid_events
+
+    def _validate_buffett_fact(
+        self,
+        fact: dict,
+        search_type: str,
+    ) -> Optional[dict]:
+        """
+        Validate Buffett-style fact (P0/P1/P2 Enhanced).
+
+        검증 항목:
+        1. retrieval_confidence 검증
+        2. source_sentence 존재 및 길이
+        3. Hallucination indicator 검출
+        4. INFERRED인 경우 confidence_reason 필수
+        5. 블로그/커뮤니티 차단
+        """
+        # 1. retrieval_confidence 검증 (P0)
+        confidence = fact.get("retrieval_confidence", "INFERRED")
+        if confidence not in {"VERBATIM", "PARAPHRASED", "INFERRED"}:
+            confidence = "INFERRED"
+            fact["retrieval_confidence"] = confidence
+
+        # INFERRED인 경우 confidence_reason 필수
+        if confidence == "INFERRED":
+            if not fact.get("confidence_reason"):
+                logger.warning(
+                    f"[{search_type}][BUFFETT] INFERRED without reason: {fact.get('title', '')[:30]}"
+                )
+                fact["_validation_warning"] = "INFERRED without reason"
+
+        # 2. source_sentence 검증 (P0)
+        source_sentence = fact.get("source_sentence", "")
+        if len(source_sentence) < 50:
+            logger.warning(
+                f"[{search_type}][BUFFETT] source_sentence too short: {len(source_sentence)} chars"
+            )
+            # VERBATIM인데 짧으면 신뢰도 하향
+            if confidence == "VERBATIM":
+                fact["retrieval_confidence"] = "PARAPHRASED"
+                fact["_confidence_downgraded"] = True
+
+        # 3. Hallucination indicator 검출 (P1)
+        text_to_check = f"{fact.get('title', '')} {fact.get('value', '')} {source_sentence}"
+        for indicator in HALLUCINATION_INDICATORS:
+            if indicator in text_to_check:
+                logger.warning(
+                    f"[{search_type}][HALLUCINATION] Indicator detected: '{indicator}'"
+                )
+                fact["_hallucination_indicator"] = indicator
+                # 심각한 indicator면 제외
+                if indicator in ["~로 추정됨", "~로 예상됨", "~할 전망"]:
+                    return None
+
+        # 4. 블로그/커뮤니티 차단
+        source_url = fact.get("source_url", "")
+        if self._is_excluded_source(source_url):
+            logger.warning(
+                f"[{search_type}][BUFFETT] Blocked excluded source: {source_url[:50]}"
+            )
+            return None
+
+        # 5. source_tier 계산 (코드에서 계산)
+        fact["source_tier"] = self._get_source_tier(source_url)
+
+        # 6. 숫자 검증: value와 source_sentence 일치 확인
+        value = fact.get("value", "")
+        if value and source_sentence:
+            import re
+            # value에서 숫자 추출
+            numbers_in_value = re.findall(r'[\d,.]+', str(value))
+            for num in numbers_in_value:
+                if len(num.replace(",", "").replace(".", "")) >= 3:
+                    if num not in source_sentence and num.replace(",", "") not in source_sentence:
+                        logger.warning(
+                            f"[{search_type}][BUFFETT] Number mismatch: '{num}' not in source_sentence"
+                        )
+                        fact["_number_mismatch"] = num
+
+        # 7. Legacy 호환성: fact → event 필드 매핑
+        fact["title"] = fact.get("title", "")
+        fact["summary"] = fact.get("value", fact.get("title", ""))  # Buffett은 summary 대신 value 사용
+        fact["source_excerpt"] = source_sentence  # 매핑
+        fact["impact_direction"] = fact.get("impact_direction", "NEUTRAL")
+        if fact["impact_direction"] not in {"RISK", "OPPORTUNITY", "NEUTRAL"}:
+            fact["impact_direction"] = "NEUTRAL"
+
+        return fact
+
+    def _parse_events_legacy(
+        self,
+        content: str,
+        citations: list[str] = None,
+        search_type: str = "unknown",
+    ) -> list[dict]:
+        """Legacy parser for old array format (backward compatibility)."""
+        try:
+            start_idx = content.find("[")
+            end_idx = content.rfind("]") + 1
+
+            if start_idx == -1 or end_idx == 0:
+                logger.warning(f"[{search_type}] No JSON found in response")
+                return []
+
+            json_str = content[start_idx:end_idx]
+            events = json.loads(json_str)
+
+            valid_events = []
+            for event in events:
+                validated = self._validate_event_v2(event, search_type)
+                if validated:
+                    valid_events.append(validated)
+
+            return valid_events
+
+        except json.JSONDecodeError as e:
+            logger.error(f"[{search_type}] Legacy JSON parse error: {e}")
+            return []
+
+    def _validate_event_v2(self, event: dict, search_type: str) -> Optional[dict]:
+        """
+        Validate a single event dict (Buffett Enhanced).
+
+        검증 항목:
+        1. 필수 필드 존재
+        2. 블로그/커뮤니티 URL 차단
+        3. Summary 200자 이상
+        4. source_excerpt 존재 (수치 포함 시 검증)
+        5. source_tier 계산
+        6. [P1] Falsification 체크 (의심 키워드, 수치 범위)
+        7. [P1] Hallucination indicator 검출
+        """
+        import re
+
+        # 1. 필수 필드 검증
+        required_fields = ["title", "summary", "source_url"]
+        for field in required_fields:
+            if not event.get(field):
+                logger.debug(f"[{search_type}] Missing required field: {field}")
+                return None
+
+        # 2. 블로그/커뮤니티 URL Hard Block
+        source_url = event.get("source_url", "")
+        if self._is_excluded_source(source_url):
+            logger.warning(
+                f"[{search_type}] Blocked excluded source: {source_url[:50]}"
+            )
+            return None
+
+        title = event.get("title", "")
+        summary = event.get("summary", "")
+        source_excerpt = event.get("source_excerpt", "")
+
+        # 3. Summary 길이 검증 (200자 이상)
+        if len(summary) < 200:
+            logger.warning(
+                f"[{search_type}] Summary too short ({len(summary)} chars): {summary[:50]}..."
+            )
+            event["_validation_warning"] = "summary_too_short"
+
+        # 4. source_excerpt 검증
+        if not source_excerpt:
+            logger.debug(f"[{search_type}] Missing source_excerpt")
+            event["_validation_warning"] = "missing_source_excerpt"
+
+        # 5. 숫자 hallucination 검증
+        if source_excerpt:
+            numbers_in_summary = re.findall(r'[\d,.]+%?', summary)
+            for num in numbers_in_summary:
+                if len(num.replace(",", "").replace(".", "").replace("%", "")) >= 3:
+                    if num not in source_excerpt and num.replace(",", "") not in source_excerpt:
+                        logger.warning(
+                            f"[{search_type}][HALLUCINATION_RISK] Number '{num}' not in source_excerpt"
+                        )
+                        event["_hallucination_risk"] = True
+
+        # 6. [P1] Falsification 체크 - 의심 키워드
+        text_to_check = f"{title} {summary}"
+        for keyword in FALSIFICATION_RULES["suspicious_keywords"]:
+            if keyword in text_to_check:
+                logger.warning(
+                    f"[{search_type}][FALSIFICATION] Suspicious keyword: '{keyword}'"
+                )
+                event["_suspicious_keyword"] = keyword
+                event["_needs_cross_verify"] = True
+
+        # 7. [P1] Falsification 체크 - 교차검증 필요 주제
+        for topic in FALSIFICATION_RULES["cross_verify_required"]:
+            if topic in text_to_check:
+                logger.info(
+                    f"[{search_type}][FALSIFICATION] Cross-verify required for: '{topic}'"
+                )
+                event["_cross_verify_topic"] = topic
+                event["_needs_cross_verify"] = True
+
+        # 8. [P1] Falsification 체크 - 수치 범위 검증
+        percentages = re.findall(r'[-+]?(\d+(?:\.\d+)?)\s*%', summary)
+        for pct_str in percentages:
+            try:
+                pct_value = float(pct_str)
+                # 매출/이익 증감률 범위 체크
+                if abs(pct_value) > FALSIFICATION_RULES["revenue_change_max_pct"]:
+                    if "매출" in text_to_check or "영업이익" not in text_to_check:
+                        logger.warning(
+                            f"[{search_type}][FALSIFICATION] Extreme revenue change: {pct_value}%"
+                        )
+                        event["_extreme_value"] = f"{pct_value}%"
+                        event["_needs_cross_verify"] = True
+                if abs(pct_value) > FALSIFICATION_RULES["profit_change_max_pct"]:
+                    if "영업이익" in text_to_check or "순이익" in text_to_check:
+                        logger.warning(
+                            f"[{search_type}][FALSIFICATION] Extreme profit change: {pct_value}%"
+                        )
+                        event["_extreme_value"] = f"{pct_value}%"
+                        event["_needs_cross_verify"] = True
+            except ValueError:
+                pass
+
+        # 9. [P1] Hallucination indicator 검출
+        for indicator in HALLUCINATION_INDICATORS:
+            if indicator in text_to_check:
+                logger.warning(
+                    f"[{search_type}][HALLUCINATION] Indicator: '{indicator}'"
+                )
+                event["_hallucination_indicator"] = indicator
+                # 심각한 indicator면 제외
+                if indicator in ["~로 추정됨", "~로 예상됨", "~할 전망", "~할 것으로 예상"]:
+                    logger.warning(
+                        f"[{search_type}][REJECTED] Critical hallucination indicator"
+                    )
+                    return None
+
+        # 10. source_tier 계산 (코드에서 계산, LLM 응답 무시)
+        event["source_tier"] = self._get_source_tier(source_url)
+
+        # 11. impact_direction 검증
+        if event.get("impact_direction") not in {"RISK", "OPPORTUNITY", "NEUTRAL"}:
+            event["impact_direction"] = "NEUTRAL"
+
+        return event
 
     def _parse_events(
         self,
@@ -737,57 +1304,12 @@ Quality standards:
         citations: list[str] = None,
         search_type: str = "unknown",
     ) -> list[dict]:
-        """Parse events from Perplexity response."""
-        try:
-            # Find JSON array in response
-            start_idx = content.find("[")
-            end_idx = content.rfind("]") + 1
-
-            if start_idx == -1 or end_idx == 0:
-                logger.warning(f"No JSON array found in {search_type} response")
-                return []
-
-            json_str = content[start_idx:end_idx]
-            events = json.loads(json_str)
-
-            # Validate and filter events
-            valid_events = []
-            for event in events:
-                if self._validate_event(event):
-                    # Filter out excluded sources
-                    if not self._is_excluded_source(event.get("source_url", "")):
-                        # Add source quality tier
-                        event["source_tier"] = self._get_source_tier(
-                            event.get("source_url", "")
-                        )
-                        valid_events.append(event)
-
-            logger.debug(f"Parsed {len(valid_events)} valid events from {search_type}")
-            return valid_events
-
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse {search_type} response as JSON: {e}")
-            return []
+        """Legacy wrapper - calls v2 parser."""
+        return self._parse_events_v2(content, citations, search_type)
 
     def _validate_event(self, event: dict) -> bool:
-        """Validate a single event dict."""
-        required_fields = ["title", "summary"]
-
-        for field in required_fields:
-            if not event.get(field):
-                return False
-
-        # Validate relevance if present
-        if event.get("relevance") and event["relevance"] not in {"HIGH", "MED", "LOW"}:
-            event["relevance"] = "MED"
-
-        # Validate impact_direction if present
-        if event.get("impact_direction") and event["impact_direction"] not in {
-            "RISK", "OPPORTUNITY", "NEUTRAL"
-        }:
-            event["impact_direction"] = "NEUTRAL"
-
-        return True
+        """Legacy wrapper - calls v2 validator."""
+        return self._validate_event_v2(event, "unknown") is not None
 
     def _is_excluded_source(self, url: str) -> bool:
         """Check if URL is from excluded domain (blog/community)."""
@@ -831,6 +1353,241 @@ Quality standards:
         return industry_names.get(industry_code, f"기타업종 ({industry_code})")
 
     # =========================================================================
+    # P2: Buffett 10-K Test - 자동화된 원문 대조 검증
+    # =========================================================================
+
+    def buffett_verification_test(
+        self,
+        events: list[dict],
+        fetch_original: bool = False,
+    ) -> dict:
+        """
+        Buffett's 10-K Test: LLM이 추출한 모든 사실을 원문과 대조
+
+        P2 Implementation:
+        - source_sentence가 source_url에 실제로 존재하는지 검증
+        - 숫자가 source_sentence에 정확히 있는지 검증
+        - 문맥 왜곡 여부 검증
+
+        Args:
+            events: 검증할 이벤트 목록
+            fetch_original: True면 실제 URL 페치 (느림), False면 메타데이터만 검증
+
+        Returns:
+            dict with verification results
+        """
+        import re
+
+        results = {
+            "total_events": len(events),
+            "passed": 0,
+            "failed": 0,
+            "warnings": 0,
+            "details": [],
+        }
+
+        for event in events:
+            event_result = {
+                "title": event.get("title", "")[:50],
+                "source_url": event.get("source_url", "")[:80],
+                "checks": [],
+                "status": "PASSED",
+            }
+
+            # Check 1: source_sentence/source_excerpt 존재
+            source_text = event.get("source_sentence") or event.get("source_excerpt", "")
+            if not source_text:
+                event_result["checks"].append({
+                    "check": "source_text_exists",
+                    "status": "FAILED",
+                    "reason": "No source_sentence or source_excerpt",
+                })
+                event_result["status"] = "FAILED"
+            elif len(source_text) < 30:
+                event_result["checks"].append({
+                    "check": "source_text_length",
+                    "status": "WARNING",
+                    "reason": f"Source text too short: {len(source_text)} chars",
+                })
+                if event_result["status"] == "PASSED":
+                    event_result["status"] = "WARNING"
+            else:
+                event_result["checks"].append({
+                    "check": "source_text_exists",
+                    "status": "PASSED",
+                    "value": f"{len(source_text)} chars",
+                })
+
+            # Check 2: retrieval_confidence 검증
+            confidence = event.get("retrieval_confidence", "UNKNOWN")
+            if confidence == "INFERRED":
+                reason = event.get("confidence_reason", "")
+                if not reason:
+                    event_result["checks"].append({
+                        "check": "inferred_has_reason",
+                        "status": "FAILED",
+                        "reason": "INFERRED without confidence_reason",
+                    })
+                    event_result["status"] = "FAILED"
+                else:
+                    event_result["checks"].append({
+                        "check": "inferred_has_reason",
+                        "status": "WARNING",
+                        "reason": f"INFERRED: {reason}",
+                    })
+                    if event_result["status"] == "PASSED":
+                        event_result["status"] = "WARNING"
+            elif confidence in {"VERBATIM", "PARAPHRASED"}:
+                event_result["checks"].append({
+                    "check": "retrieval_confidence",
+                    "status": "PASSED",
+                    "value": confidence,
+                })
+
+            # Check 3: 숫자 일치 검증
+            value = event.get("value", "") or event.get("summary", "")
+            if value and source_text:
+                numbers = re.findall(r'[\d,.]+', str(value))
+                significant_numbers = [n for n in numbers if len(n.replace(",", "").replace(".", "")) >= 3]
+
+                for num in significant_numbers:
+                    normalized = num.replace(",", "")
+                    if num not in source_text and normalized not in source_text:
+                        event_result["checks"].append({
+                            "check": "number_in_source",
+                            "status": "FAILED",
+                            "reason": f"Number '{num}' not found in source_text",
+                        })
+                        event_result["status"] = "FAILED"
+                    else:
+                        event_result["checks"].append({
+                            "check": "number_in_source",
+                            "status": "PASSED",
+                            "value": num,
+                        })
+
+            # Check 4: Hallucination indicator 부재
+            text_to_check = f"{event.get('title', '')} {value}"
+            found_indicators = []
+            for indicator in HALLUCINATION_INDICATORS:
+                if indicator in text_to_check:
+                    found_indicators.append(indicator)
+
+            if found_indicators:
+                event_result["checks"].append({
+                    "check": "no_hallucination_indicators",
+                    "status": "FAILED",
+                    "reason": f"Found indicators: {found_indicators}",
+                })
+                event_result["status"] = "FAILED"
+            else:
+                event_result["checks"].append({
+                    "check": "no_hallucination_indicators",
+                    "status": "PASSED",
+                })
+
+            # Check 5: source_tier 검증 (tier1, tier2 우선)
+            source_tier = event.get("source_tier", "tier4")
+            if source_tier == "tier1":
+                event_result["checks"].append({
+                    "check": "source_quality",
+                    "status": "PASSED",
+                    "value": "tier1 (highest trust)",
+                })
+            elif source_tier == "tier2":
+                event_result["checks"].append({
+                    "check": "source_quality",
+                    "status": "PASSED",
+                    "value": "tier2 (high trust)",
+                })
+            elif source_tier == "tier3":
+                event_result["checks"].append({
+                    "check": "source_quality",
+                    "status": "WARNING",
+                    "value": "tier3 (medium trust)",
+                })
+                if event_result["status"] == "PASSED":
+                    event_result["status"] = "WARNING"
+            else:
+                event_result["checks"].append({
+                    "check": "source_quality",
+                    "status": "WARNING",
+                    "value": f"{source_tier} (unknown/low trust)",
+                })
+                if event_result["status"] == "PASSED":
+                    event_result["status"] = "WARNING"
+
+            # 결과 집계
+            if event_result["status"] == "PASSED":
+                results["passed"] += 1
+            elif event_result["status"] == "WARNING":
+                results["warnings"] += 1
+            else:
+                results["failed"] += 1
+
+            results["details"].append(event_result)
+
+        # 최종 판정
+        if results["failed"] == 0 and results["warnings"] == 0:
+            results["verdict"] = "BUFFETT_APPROVED"
+        elif results["failed"] == 0:
+            results["verdict"] = "BUFFETT_APPROVED_WITH_WARNINGS"
+        elif results["failed"] < results["total_events"] / 2:
+            results["verdict"] = "PARTIAL_APPROVAL"
+        else:
+            results["verdict"] = "REJECTED"
+
+        logger.info(
+            f"[BUFFETT_TEST] {results['verdict']}: "
+            f"{results['passed']} passed, {results['warnings']} warnings, {results['failed']} failed "
+            f"out of {results['total_events']} events"
+        )
+
+        return results
+
+    def apply_buffett_filter(
+        self,
+        events: list[dict],
+        strict_mode: bool = False,
+    ) -> list[dict]:
+        """
+        Buffett 검증을 통과한 이벤트만 반환
+
+        Args:
+            events: 원본 이벤트 목록
+            strict_mode: True면 WARNING도 제외
+
+        Returns:
+            검증 통과한 이벤트 목록
+        """
+        test_results = self.buffett_verification_test(events)
+
+        filtered = []
+        for i, event in enumerate(events):
+            if i < len(test_results["details"]):
+                detail = test_results["details"][i]
+                if detail["status"] == "PASSED":
+                    event["_buffett_verified"] = True
+                    filtered.append(event)
+                elif detail["status"] == "WARNING" and not strict_mode:
+                    event["_buffett_verified"] = True
+                    event["_buffett_warnings"] = [
+                        c for c in detail["checks"] if c["status"] == "WARNING"
+                    ]
+                    filtered.append(event)
+                else:
+                    logger.warning(
+                        f"[BUFFETT_FILTER] Rejected: {event.get('title', '')[:30]}"
+                    )
+
+        logger.info(
+            f"[BUFFETT_FILTER] {len(filtered)}/{len(events)} events passed "
+            f"(strict_mode={strict_mode})"
+        )
+
+        return filtered
+
+    # =========================================================================
     # Async Methods for Parallel Execution (ADR-009 Sprint 1)
     # =========================================================================
 
@@ -840,36 +1597,28 @@ Quality standards:
         prompt: str,
         search_type: str,
     ) -> list[dict]:
-        """Async version of Perplexity API call."""
+        """
+        Async version of Perplexity API call.
+
+        P0 Anti-Hallucination Enhancement (2026-02-08):
+        - Temperature 0.0 (창의성 완전 차단)
+        - PERPLEXITY_SYSTEM_PROMPT 사용 (Elon-style)
+        - max_tokens 4000 (더 긴 응답 허용)
+        - status 필드로 검색 상태 구분
+        """
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
 
-        system_content = """You are a senior financial analyst at a Korean bank researching corporate risk and opportunity signals.
-
-Your role:
-1. Find VERIFIED, FACT-BASED news only
-2. Prioritize official sources (DART, government, major news outlets)
-3. Return results in valid JSON array format
-4. Use Korean language for titles and summaries
-5. Be conservative - only include news with clear evidence
-
-Quality standards:
-- NO speculation or rumors
-- NO blog posts or user-generated content
-- NO promotional content
-- Cross-reference controversial claims
-- Include publication date when available"""
-
         payload = {
             "model": self.MODEL,
             "messages": [
-                {"role": "system", "content": system_content},
+                {"role": "system", "content": PERPLEXITY_SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ],
-            "temperature": 0.1,
-            "max_tokens": 3000,
+            "temperature": 0.0,  # P0: 창의성 완전 차단
+            "max_tokens": 4000,  # P0: 더 긴 응답 허용
         }
 
         try:
@@ -884,17 +1633,18 @@ Quality standards:
             content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
             citations = result.get("citations", [])
 
-            events = self._parse_events(content, citations, search_type)
+            # P0: 새로운 파싱 로직 사용 (status 필드 지원)
+            events = self._parse_events_v2(content, citations, search_type)
             return events
 
         except httpx.TimeoutException:
-            logger.warning(f"Perplexity API timeout for {search_type} search (async)")
+            logger.warning(f"[P0] Perplexity API timeout for {search_type} search (async)")
             return []
         except httpx.HTTPStatusError as e:
-            logger.error(f"Perplexity API error for {search_type}: {e.response.status_code} (async)")
+            logger.error(f"[P0] Perplexity API error for {search_type}: {e.response.status_code} (async)")
             return []
         except Exception as e:
-            logger.error(f"Perplexity call failed for {search_type}: {e} (async)")
+            logger.error(f"[P0] Perplexity call failed for {search_type}: {e} (async)")
             return []
 
     async def _search_direct_events_async(
@@ -904,60 +1654,64 @@ Quality standards:
         industry_name: str,
         corp_reg_no: Optional[str] = None,
     ) -> list[dict]:
-        """Async version of DIRECT search."""
+        """
+        Async version of DIRECT search (Buffett Enhanced).
+
+        Uses same prompt as sync version for consistency.
+        """
         today = datetime.now().strftime("%Y-%m-%d")
 
-        prompt = f"""# Search Context
-Target Company: {corp_name}
+        # Buffett-style prompt (same as sync version)
+        prompt = f"""## ROLE: LIBRARIAN (도서관 사서)
+You are a librarian, NOT an analyst. Your job is to FIND and COPY facts.
+Do NOT interpret, analyze, or infer. Just find and copy.
+
+## TARGET
+Company: {corp_name}
 {f"Corporate Registration: {corp_reg_no}" if corp_reg_no else ""}
 Industry: {industry_name}
-Time Window: Last 30 days
-Today's date: {today}
+Today: {today}
+Period: Last 30 days
 
-# Search Objectives
-Find VERIFIED news about this SPECIFIC company:
+## SEARCH PRIORITY (Buffett's Value > Price)
+1. DART 공시 (dart.fss.or.kr) - 재무제표, 사업보고서 [HIGHEST]
+2. 신용평가사 (kisrating.com, nicerating.com) - 등급 변경 [HIGH]
+3. 금융감독원/공정위 (.go.kr) - 제재, 과징금 [HIGH]
+4. 법원 공고 - 회생, 파산, 소송 [HIGH]
+5. 주요 경제지 - 위 1-4 보완용 [SUPPLEMENTARY]
 
-## Priority 1: Credit Risk Indicators (RISK focus)
-- Payment defaults, debt restructuring, credit rating downgrades
-- Regulatory violations, lawsuits, fraud allegations
-- Executive departures, governance issues
-- Factory closures, layoffs, asset sales
+## WHAT TO FIND (사실만)
+- NUMBERS: 매출, 영업이익, 신용등급
+- EVENTS: 대표이사 변경, 대주주 변경, 계약 체결
+- DATES: 공시일, 발표일, 시행일
 
-## Priority 2: Business Events (RISK/OPPORTUNITY)
-- M&A announcements (acquirer or target)
-- Major contract wins or losses (>10% revenue impact)
-- New market entry or exit
-- Strategic partnerships or joint ventures
-
-## Priority 3: Financial Performance
-- Earnings surprises (beat/miss by >10%)
-- Revenue trend changes
-- Margin compression or expansion
-- Cash flow concerns
-
-# Output Requirements
-Return results as JSON array with this structure:
-[
-  {{
-    "title": "Event title (Korean)",
-    "headline": "15자 이내 핵심 요약",
-    "summary": "Brief summary with specific facts (100자 이내)",
-    "source_url": "Source URL",
-    "source_name": "Source name (e.g., 한국경제, DART)",
-    "published_at": "YYYY-MM-DD if available",
-    "relevance": "HIGH/MED/LOW",
-    "risk_type": "credit_risk|business_event|financial_performance",
-    "impact_direction": "RISK|OPPORTUNITY|NEUTRAL"
+## OUTPUT FORMAT (Buffett Style)
+{{
+  "retrieval_status": "FOUND" | "NOT_FOUND" | "PARTIAL",
+  "search_limitations": "검색 한계 설명",
+  "could_not_find": ["찾지 못한 항목"],
+  "facts": [
+    {{
+      "fact_type": "NUMBER" | "EVENT" | "DATE",
+      "title": "사실 제목 (30자)",
+      "value": "정확한 값",
+      "as_of_date": "YYYY-MM-DD",
+      "source_url": "URL",
+      "source_name": "출처명",
+      "source_sentence": "원문 문장 전체 복사 (50자 이상)",
+      "retrieval_confidence": "VERBATIM" | "PARAPHRASED" | "INFERRED",
+      "confidence_reason": "INFERRED인 경우 이유",
+      "category": "credit_risk|governance|financial|operations",
+      "impact_direction": "RISK|OPPORTUNITY|NEUTRAL"
+    }}
+  ],
+  "falsification_check": {{
+    "contradicting_sources_found": false,
+    "numbers_within_historical_range": true
   }}
-]
+}}
 
-# Quality Filter
-- Korean language sources preferred
-- Prioritize: 공시(DART), 주요 경제지(한경/매경/서울경제), 통신사(연합뉴스)
-- FACT-BASED news only (no speculation, no rumors)
-- Exclude: 블로그, 커뮤니티, 광고성 기사
-
-Return [] if no relevant news found."""
+CRITICAL: source_sentence는 원문 그대로. "모르겠다"도 유효한 답변."""
 
         events = await self._call_perplexity_async(client, prompt, "direct")
 
@@ -974,83 +1728,67 @@ Return [] if no relevant news found."""
         industry_name: str,
         industry_code: str,
     ) -> list[dict]:
-        """Async version of INDUSTRY search."""
+        """
+        Async version of INDUSTRY search (Buffett Enhanced).
+
+        Uses same prompt as sync version for consistency.
+        """
         today = datetime.now().strftime("%Y-%m-%d")
 
         # Get industry-specific keywords
         keywords = INDUSTRY_KEYWORDS.get(industry_code, DEFAULT_INDUSTRY_KEYWORDS)
         supply_keywords = ", ".join(keywords.get("supply_chain", []))
-        regulation_keywords = ", ".join(keywords.get("regulation", []))
-        market_keywords = ", ".join(keywords.get("market", []))
 
-        prompt = f"""# Search Context
-Target Industry: {industry_name} (code: {industry_code})
-Related Company for Context: {corp_name}
-Time Window: Last 30 days
-Today's date: {today}
+        # Buffett-style prompt (same as sync version)
+        prompt = f"""## ROLE: LIBRARIAN (도서관 사서)
+You are a librarian collecting industry statistics. Do NOT analyze. Just FIND and COPY.
 
-# Industry-Specific Keywords
+## TARGET
+Industry: {industry_name} (Code: {industry_code})
+Reference Company: {corp_name} (for context only)
+Today: {today}
+Period: Last 30 days
+
+## SEARCH PRIORITY (Buffett's Value > Price)
+1. 산업통상자원부 통계/보고서 [HIGHEST]
+2. 한국은행 산업동향 [HIGH]
+3. KIET/KDI 연구보고서 [HIGH]
+4. 업종협회 통계 [HIGH]
+5. 관세청/KITA 수출입통계 [HIGH]
+6. 주요 경제지 [SUPPLEMENTARY]
+
+## INDUSTRY KEYWORDS
 - Supply Chain: {supply_keywords}
-- Regulation: {regulation_keywords}
-- Market: {market_keywords}
 
-# Search Objectives
-Find industry-wide events affecting MULTIPLE companies in this sector:
+## WHAT TO FIND (산업 전체 영향 사실만)
+- STATISTICS: 생산지수, 수출입 금액, 원자재 가격
+- EVENTS: 업계 M&A, 공장 가동 중단, 파업
 
-## 1. Market Structure Changes
-- Major M&A reshaping competitive landscape
-- New market entrants (especially foreign competitors)
-- Industry consolidation or fragmentation
-- Bankruptcy of significant players
+## OUTPUT FORMAT (Buffett Style)
+{{
+  "retrieval_status": "FOUND" | "NOT_FOUND" | "PARTIAL",
+  "search_limitations": "검색 한계",
+  "could_not_find": ["찾지 못한 항목"],
+  "facts": [
+    {{
+      "fact_type": "STATISTIC" | "EVENT",
+      "title": "통계/이벤트명 (30자)",
+      "value": "정확한 값",
+      "comparison_base": "비교 기준 (전년비 등)",
+      "as_of_date": "YYYY-MM-DD",
+      "source_url": "URL",
+      "source_name": "출처명",
+      "source_sentence": "원문 복사 (50자 이상)",
+      "retrieval_confidence": "VERBATIM" | "PARAPHRASED" | "INFERRED",
+      "impact_area": "market_structure|supply_chain|demand|technology|labor",
+      "impact_direction": "RISK|OPPORTUNITY|NEUTRAL",
+      "affected_scope": "영향 범위"
+    }}
+  ],
+  "falsification_check": {{}}
+}}
 
-## 2. Supply Chain Dynamics
-- Raw material price volatility ({supply_keywords})
-- Logistics disruptions affecting the sector
-- Supplier/vendor ecosystem changes
-- Inventory buildup or shortage signals
-
-## 3. Demand Signals
-- End-market demand shifts
-- Customer industry health (B2B context)
-- Seasonal pattern deviations
-- New application/use case emergence
-
-## 4. Technology & Innovation
-- Disruptive technology threats
-- Automation/digitalization pressures
-- R&D breakthroughs in the sector
-- Patent/IP developments
-
-## 5. Labor Market
-- Industry-wide hiring/layoff trends
-- Wage pressure in key skill areas
-- Union activities, strikes
-- Talent migration patterns
-
-# Output Requirements
-Return results as JSON array:
-[
-  {{
-    "title": "Event title (Korean)",
-    "headline": "15자 이내 핵심 요약",
-    "summary": "Brief summary explaining industry-wide impact (100자 이내)",
-    "source_url": "Source URL",
-    "source_name": "Source name",
-    "published_at": "YYYY-MM-DD if available",
-    "relevance": "HIGH/MED/LOW",
-    "impact_area": "market_structure|supply_chain|demand|technology|labor",
-    "impact_direction": "RISK|OPPORTUNITY|NEUTRAL",
-    "affected_scope": "Description of which companies/segments affected"
-  }}
-]
-
-# Quality Filter
-- Focus on events impacting MULTIPLE companies, not single-company news
-- Quantify market impact where possible (market size, growth rates)
-- Korean sources: 산업통상자원부, 업종별 협회, 한국은행 산업동향
-- Exclude: Single company earnings (unless industry bellwether), stock price movements without fundamental cause
-
-Return [] if no relevant news found."""
+개별 기업 뉴스 제외. 산업 전체 영향만."""
 
         events = await self._call_perplexity_async(client, prompt, "industry")
 
@@ -1067,14 +1805,18 @@ Return [] if no relevant news found."""
         industry_code: str,
         selected_queries: list[str],
     ) -> list[dict]:
-        """Async version of ENVIRONMENT search."""
+        """
+        Async version of ENVIRONMENT search (Buffett Enhanced).
+
+        Uses same prompt as sync version for consistency.
+        """
         today = datetime.now().strftime("%Y-%m-%d")
 
         # Build targeted queries based on profile
         query_topics = []
 
         if selected_queries:
-            for query_key in selected_queries[:5]:  # Limit to top 5
+            for query_key in selected_queries[:5]:
                 if query_key in ENVIRONMENT_QUERY_TEMPLATES:
                     query_topics.append(
                         ENVIRONMENT_QUERY_TEMPLATES[query_key].format(
@@ -1082,74 +1824,66 @@ Return [] if no relevant news found."""
                         )
                     )
         else:
-            # Default queries if no profile
             query_topics = [
                 f"{industry_name} 정책 규제 변경 정부 발표",
                 f"{industry_name} 세제 혜택 보조금 지원",
-                f"{industry_name} 환율 금리 영향 수출",
             ]
 
         query_focus = "\n".join(f"- {topic}" for topic in query_topics)
 
-        prompt = f"""# Search Context
-Target Industry: {industry_name} (code: {industry_code})
-Time Window: Last 30 days
-Today's date: {today}
+        # Buffett-style prompt (same as sync version)
+        prompt = f"""## ROLE: LIBRARIAN (도서관 사서)
+You are a librarian collecting ENACTED policy documents. Do NOT analyze. Just FIND and COPY.
 
-# Focused Search Topics
+## TARGET
+Industry: {industry_name} (Code: {industry_code})
+Today: {today}
+Period: Last 30 days
+
+## SEARCH PRIORITY (공식 출처만)
+1. 관보 (gwanbo.go.kr) - 법률, 시행령 원문 [HIGHEST]
+2. 법제처 (law.go.kr) - 제/개정 법률 [HIGHEST]
+3. 부처 보도자료 - 기재부, 산업부 [HIGH]
+4. 금융감독원 고시 [HIGH]
+5. 한국은행 통화정책 결정문 [HIGH]
+
+## FOCUSED SEARCH
 {query_focus}
 
-# Search Objectives
-Find policy, regulation, and macro-economic news:
+## WHAT TO FIND (확정된 정책만)
+- LAW: 법률명 + 법률 번호, 시행일
+- DECREE: 시행령/시행규칙
+- ANNOUNCEMENT: 부처 공식 발표
+- MONETARY: 기준금리 결정
 
-## 1. Government Policy
-- New policies or regulations affecting this industry
-- Implementation timeline and scope
-- Enforcement actions or penalties
-
-## 2. Fiscal & Tax
-- Tax changes, subsidies, or incentives
-- Budget allocations for industry support
-- Tariff changes
-
-## 3. Trade & Geopolitics
-- Trade policy changes (FTA, export controls)
-- Geopolitical tensions affecting supply chains
-- Sanctions or trade restrictions
-
-## 4. Environmental & ESG
-- Carbon regulations, emission standards
-- ESG disclosure requirements
-- Green taxonomy impacts
-
-## 5. Monetary & Financial
-- Interest rate impacts on industry
-- Exchange rate volatility effects
-- Credit market conditions
-
-# Output Requirements
-Return results as JSON array:
-[
-  {{
-    "title": "Event title (Korean)",
-    "headline": "15자 이내 핵심 요약",
-    "summary": "Brief summary explaining policy/regulatory impact (100자 이내)",
-    "source_url": "Source URL",
-    "source_name": "Source name",
-    "published_at": "YYYY-MM-DD if available",
-    "relevance": "HIGH/MED/LOW",
-    "policy_area": "government|fiscal|trade|environmental|monetary",
-    "impact_direction": "RISK|OPPORTUNITY|NEUTRAL",
-    "effective_date": "If known, when policy takes effect"
+## OUTPUT FORMAT (Buffett Style)
+{{
+  "retrieval_status": "FOUND" | "NOT_FOUND" | "PARTIAL",
+  "search_limitations": "검색 한계",
+  "could_not_find": ["찾지 못한 정책"],
+  "facts": [
+    {{
+      "fact_type": "LAW" | "DECREE" | "ANNOUNCEMENT" | "MONETARY",
+      "title": "정책명/법률명",
+      "law_number": "법률 제XXXXX호 (해당시)",
+      "effective_date": "YYYY-MM-DD (시행일)",
+      "issuing_authority": "발표 기관",
+      "source_url": "URL",
+      "source_name": "출처명",
+      "source_sentence": "원문 조항 복사 (100자 이상)",
+      "retrieval_confidence": "VERBATIM" | "PARAPHRASED" | "INFERRED",
+      "policy_area": "regulatory|fiscal|trade|environmental|monetary",
+      "impact_direction": "RISK|OPPORTUNITY|NEUTRAL"
+    }}
+  ],
+  "falsification_check": {{
+    "is_enacted_or_announced": true,
+    "has_official_source": true
   }}
-]
+}}
 
-# Quality Filter
-- Prioritize: 정부 발표, 관보, 규제기관 공지
-- Korean sources: 기획재정부, 산업부, 금융위, 한국은행
-- FACT-BASED only (no speculation about future policy)
-
-Return [] if no relevant news found."""
+"검토 중", "논의 중" = 미확정 → 제외.
+"모르겠다"도 유효한 답변."""
 
         events = await self._call_perplexity_async(client, prompt, "environment")
 

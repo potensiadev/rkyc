@@ -38,6 +38,10 @@ from app.services.dart_api import (
     # P2/P3: Extended Profile
     get_extended_fact_profile,
     ExtendedFactProfile,
+    # P4: Executive APIs
+    get_executives,
+    get_executives_by_name,
+    Executive,
 )
 
 logger = logging.getLogger(__name__)
@@ -814,7 +818,7 @@ async def get_major_events_by_name_endpoint(
 
 
 # ============================================================================
-# P2/P3: Extended Fact Profile (통합 조회)
+# P2/P3/P4: Extended Fact Profile (통합 조회)
 # ============================================================================
 
 @router.get("/extended-profile")
@@ -822,9 +826,9 @@ async def get_extended_fact_profile_endpoint(
     corp_name: str = Query(..., description="기업명 (예: 삼성전자, 엠케이전자)"),
 ):
     """
-    P2/P3: 확장된 DART Fact 프로필 통합 조회
+    P2/P3/P4: 확장된 DART Fact 프로필 통합 조회
 
-    기업개황 + 최대주주 + 재무제표(3년) + 주요사항보고서(1년)을
+    기업개황 + 최대주주 + 재무제표(3년) + 주요사항보고서(1년) + 임원현황을
     한 번에 조회하여 100% Fact 기반 데이터를 제공합니다.
 
     Args:
@@ -847,6 +851,7 @@ async def get_extended_fact_profile_endpoint(
         "largest_shareholders": [s.to_dict() for s in profile.largest_shareholders],
         "financial_statements": [f.to_dict() for f in profile.financial_statements],
         "major_events": [e.to_dict() for e in profile.major_events],
+        "executives": [e.to_dict() for e in profile.executives],  # P4
         # 편의용 필드
         "latest_revenue": profile.latest_revenue,
         "latest_net_income": profile.latest_net_income,
@@ -854,8 +859,111 @@ async def get_extended_fact_profile_endpoint(
         "shareholders_count": len(profile.largest_shareholders),
         "financials_count": len(profile.financial_statements),
         "events_count": len(profile.major_events),
+        "executives_count": len(profile.executives),  # P4
         "fetch_timestamp": profile.fetch_timestamp,
         "errors": profile.errors,
+        "source": "DART",
+        "confidence": "HIGH",
+    }
+
+
+# ============================================================================
+# P4: Executive Endpoints (임원현황 - 100% Fact)
+# ============================================================================
+
+class ExecutiveResponse(BaseModel):
+    """임원 정보 응답"""
+    name: str
+    gender: Optional[str] = None
+    birth_ym: Optional[str] = None
+    position: Optional[str] = None
+    is_registered: bool = False
+    is_fulltime: bool = False
+    job: Optional[str] = None
+    career: Optional[str] = None
+    relation_to_largest_shareholder: Optional[str] = None
+    tenure_start: Optional[str] = None
+    tenure_end: Optional[str] = None
+    report_date: Optional[str] = None
+    source: str = "DART"
+    confidence: str = "HIGH"
+
+
+@router.get("/executives/{corp_code}")
+async def get_executives_endpoint(
+    corp_code: str,
+    bsns_year: Optional[str] = Query(None, description="사업연도 (예: 2024)"),
+):
+    """
+    P4: DART 임원현황 조회 (100% Fact)
+
+    사업보고서에 기재된 임원 현황을 조회합니다.
+    대표이사, 이사, 감사 등 임원 정보를 반환합니다.
+
+    Args:
+        corp_code: DART 고유번호 (8자리)
+        bsns_year: 사업연도 (미지정 시 전년도)
+
+    Returns:
+        dict: 임원현황 목록
+    """
+    if len(corp_code) != 8:
+        raise HTTPException(status_code=400, detail="corp_code must be 8 characters")
+
+    executives = await get_executives(corp_code, bsns_year=bsns_year)
+
+    return {
+        "corp_code": corp_code,
+        "bsns_year": bsns_year,
+        "executives": [e.to_dict() for e in executives],
+        "count": len(executives),
+        "registered_count": sum(1 for e in executives if e.rgist_exctv_at == "등기임원"),
+        "fulltime_count": sum(1 for e in executives if e.fte_at == "상근"),
+        "source": "DART",
+        "confidence": "HIGH",
+    }
+
+
+@router.get("/executives-by-name")
+async def get_executives_by_name_endpoint(
+    corp_name: str = Query(..., description="기업명 (예: 삼성전자, 엠케이전자)"),
+):
+    """
+    P4: 기업명으로 DART 임원현황 조회 (100% Fact)
+
+    Args:
+        corp_name: 기업명
+
+    Returns:
+        dict: 임원현황 목록
+    """
+    executives = await get_executives_by_name(corp_name)
+
+    if not executives:
+        corp_code = await get_corp_code(corp_name=corp_name)
+        if not corp_code:
+            return {
+                "corp_name": corp_name,
+                "found": False,
+                "executives": [],
+                "message": f"DART에서 '{corp_name}'을(를) 찾을 수 없습니다.",
+            }
+        else:
+            return {
+                "corp_name": corp_name,
+                "corp_code": corp_code,
+                "found": True,
+                "executives": [],
+                "message": f"'{corp_name}'의 임원현황 정보가 없습니다.",
+            }
+
+    return {
+        "corp_name": corp_name,
+        "found": True,
+        "executives": [e.to_dict() for e in executives],
+        "count": len(executives),
+        "registered_count": sum(1 for e in executives if e.rgist_exctv_at == "등기임원"),
+        "fulltime_count": sum(1 for e in executives if e.fte_at == "상근"),
         "source": "DART",
         "confidence": "HIGH",
     }

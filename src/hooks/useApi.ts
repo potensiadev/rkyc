@@ -39,8 +39,15 @@ import { Corporation, getIndustryName } from '@/data/corporations';
 
 // API 응답 → Frontend 타입 변환 함수
 function mapApiCorporationToFrontend(api: ApiCorporation): Corporation {
-  // founded_date에서 연도 추출
-  const foundedYear = api.founded_date ? parseInt(api.founded_date.split('-')[0]) : 0;
+  // founded_date에서 연도 추출 (DART established_date 우선)
+  let foundedYear = 0;
+  if (api.established_date) {
+    // DART 형식: YYYYMMDD
+    foundedYear = parseInt(api.established_date.substring(0, 4));
+  } else if (api.founded_date) {
+    // 사업자등록증 형식: YYYY-MM-DD
+    foundedYear = parseInt(api.founded_date.split('-')[0]);
+  }
 
   return {
     id: api.corp_id,
@@ -55,8 +62,8 @@ function mapApiCorporationToFrontend(api: ApiCorporation): Corporation {
     executives: [],
     employeeCount: 0,
     foundedYear,
-    // hq_address가 있으면 사용, 없으면 address
-    headquarters: api.hq_address || api.address || '',
+    // DART headquarters 우선, 없으면 hq_address, 없으면 address
+    headquarters: api.headquarters || api.hq_address || api.address || '',
     address: api.address || '',
     bizType: api.biz_type || '',
     isCorporation: api.is_corporation ?? true,
@@ -65,6 +72,15 @@ function mapApiCorporationToFrontend(api: ApiCorporation): Corporation {
     shareholders: [],
     recentSignalTypes: [],
     lastReviewed: api.updated_at.split('T')[0],
+    // DART 공시 기반 정보 (100% Fact)
+    dartCorpCode: api.dart_corp_code,
+    establishedDate: api.established_date,
+    corpClass: api.corp_class,
+    homepageUrl: api.homepage_url,
+    jurirNo: api.jurir_no,
+    corpNameEng: api.corp_name_eng,
+    accMt: api.acc_mt,
+    dartUpdatedAt: api.dart_updated_at,
   };
 }
 

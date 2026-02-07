@@ -37,6 +37,15 @@ class CorporationUpdate(BaseModel):
     biz_type: Optional[str] = Field(None, max_length=100, description="업태")
     biz_item: Optional[str] = Field(None, description="종목")
     is_corporation: Optional[bool] = Field(None, description="법인사업자 여부")
+    # DART 필드 (업데이트 가능)
+    dart_corp_code: Optional[str] = Field(None, max_length=8, description="DART 고유번호")
+    established_date: Optional[str] = Field(None, max_length=8, description="설립일 (YYYYMMDD)")
+    headquarters: Optional[str] = Field(None, description="본사 주소 - DART")
+    corp_class: Optional[str] = Field(None, max_length=1, description="법인 구분 (Y/K/N/E)")
+    homepage_url: Optional[str] = Field(None, description="홈페이지 URL")
+    jurir_no: Optional[str] = Field(None, max_length=20, description="법인등록번호")
+    corp_name_eng: Optional[str] = Field(None, description="영문 회사명")
+    acc_mt: Optional[str] = Field(None, max_length=2, description="결산월 (MM)")
 
 
 class CorporationResponse(CorporationBase):
@@ -49,6 +58,17 @@ class CorporationResponse(CorporationBase):
     biz_type: Optional[str] = None
     biz_item: Optional[str] = None
     is_corporation: Optional[bool] = None
+    # DART 공시 기반 정보 (100% Fact)
+    dart_corp_code: Optional[str] = None
+    established_date: Optional[str] = None
+    headquarters: Optional[str] = None
+    corp_class: Optional[str] = None
+    homepage_url: Optional[str] = None
+    jurir_no: Optional[str] = None
+    corp_name_eng: Optional[str] = None
+    acc_mt: Optional[str] = None
+    dart_updated_at: Optional[datetime] = None
+    # Timestamps
     created_at: datetime
     updated_at: datetime
 
