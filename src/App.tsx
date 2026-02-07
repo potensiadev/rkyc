@@ -17,6 +17,7 @@ import ReportsPage from "./pages/ReportsPage";
 import SettingsPage from "./pages/SettingsPage";
 import DesignShowcasePage from "./pages/DesignShowcasePage";
 import NotFound from "./pages/NotFound";
+import LandingPage from "./pages/LandingPage";
 
 const queryClient = new QueryClient();
 
@@ -28,6 +29,7 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <Routes>
+            <Route path="/landing" element={<LandingPage />} />
             <Route path="/" element={<Index />} />
             <Route path="/corporations" element={<CorporationSearch />} />
             <Route path="/briefing" element={<DailyBriefingPage />} />

@@ -74,11 +74,11 @@ export default function EnvironmentSignalPage() {
             </div>
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Macro Environment</h1>
+                <h1 className="text-3xl font-bold text-slate-900 tracking-tight">환경 시그널</h1>
                 <StatusBadge variant="neutral" className="bg-white/50 backdrop-blur-sm">Global Watch</StatusBadge>
               </div>
-              <p className="text-slate-500 font-medium">
-                Macroeconomic indicators, regulatory changes, and geopolitical events.
+              <p className="text-slate-500 font-medium word-keep-all">
+                거시경제 지표, 규제 변화, 지정학적 이벤트를 분석합니다.
               </p>
             </div>
           </div>
@@ -92,8 +92,8 @@ export default function EnvironmentSignalPage() {
           className="bg-emerald-50/50 backdrop-blur-md rounded-xl border border-emerald-100 px-5 py-4 mb-8 flex items-start gap-3"
         >
           <Info className="w-5 h-5 text-emerald-500 mt-0.5 flex-shrink-0" />
-          <p className="text-sm text-emerald-900 leading-relaxed font-medium">
-            Environment signals cover external factors such as policy shifts, exchange rate volatility, and global market trends. Essential for stress testing and scenario planning.
+          <p className="text-sm text-emerald-900 leading-relaxed font-medium word-keep-all">
+            환경 시그널은 정책 변화, 환율 변동성, 글로벌 시장 동향 등 외부 요인을 다룹니다. 스트레스 테스트 및 시나리오 기획에 필수적입니다.
           </p>
         </motion.div>
 

@@ -72,11 +72,11 @@ export default function IndustrySignalPage() {
             </div>
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Industry Signals</h1>
+                <h1 className="text-3xl font-bold text-slate-900 tracking-tight">산업 시그널</h1>
                 <StatusBadge variant="neutral" className="bg-white/50 backdrop-blur-sm">Sector Watch</StatusBadge>
               </div>
-              <p className="text-slate-500 font-medium">
-                Monitoring broader industry trends and sector-specific risks.
+              <p className="text-slate-500 font-medium word-keep-all">
+                광범위한 산업 동향 및 특정 부문의 리스크를 모니터링합니다.
               </p>
             </div>
           </div>
@@ -90,8 +90,8 @@ export default function IndustrySignalPage() {
           className="bg-cyan-50/50 backdrop-blur-md rounded-xl border border-cyan-100 px-5 py-4 mb-8 flex items-start gap-3"
         >
           <Info className="w-5 h-5 text-cyan-500 mt-0.5 flex-shrink-0" />
-          <p className="text-sm text-cyan-900 leading-relaxed font-medium">
-            Industry signals track market shifts, supply chain disruptions, and competitor movements affecting the sector. Use this for macro-level risk assessment.
+          <p className="text-sm text-cyan-900 leading-relaxed font-medium word-keep-all">
+            산업 시그널은 시장 변화, 공급망 중단, 경쟁사 움직임 등을 추적합니다. 거시적 리스크 평가에 활용하세요.
           </p>
         </motion.div>
 

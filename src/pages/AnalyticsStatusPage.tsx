@@ -60,39 +60,39 @@ export default function AnalyticsStatusPage() {
   const kpiCards = [
     {
       id: "detected-today",
-      title: "Signals Today",
+      title: "금일 시그널",
       value: kpiData.today,
       icon: Radio,
       trendData: MOCK_TRENDS.today,
       color: "brand",
-      trendLabel: "+12% vs yesterday"
+      trendLabel: "전일 대비 +12%"
     },
     {
       id: "pending-review",
-      title: "Pending Review",
+      title: "검토 대기",
       value: kpiData.pending,
       icon: Clock,
       trendData: MOCK_TRENDS.pending,
       color: "warning",
-      trendLabel: "Needs attention"
+      trendLabel: "확인 필요"
     },
     {
       id: "in-review",
-      title: "In Progress",
+      title: "검토중",
       value: kpiData.inReview,
       icon: Activity,
       trendData: MOCK_TRENDS.review,
       color: "info",
-      trendLabel: "Active analysis"
+      trendLabel: "분석 진행중"
     },
     {
       id: "completed",
-      title: "Resolved",
+      title: "완료",
       value: kpiData.completed,
       icon: CheckCircle2,
       trendData: MOCK_TRENDS.completed,
       color: "success",
-      trendLabel: "Completion rate up"
+      trendLabel: "완료율 상승"
     },
   ];
 
@@ -107,27 +107,27 @@ export default function AnalyticsStatusPage() {
   const signalTypeData = [
     {
       id: "direct",
-      label: "Direct",
+      label: "직접",
       count: typeCounts.direct,
       icon: Building2,
       color: "indigo",
-      desc: "Company-specific events"
+      desc: "기업 특정 이벤트"
     },
     {
       id: "industry",
-      label: "Industry",
+      label: "산업",
       count: typeCounts.industry,
       icon: Factory,
       color: "cyan",
-      desc: "Sector-wide trends"
+      desc: "섹터 전반 동향"
     },
     {
       id: "environment",
-      label: "Macro",
+      label: "환경",
       count: typeCounts.environment,
       icon: Globe,
       color: "emerald",
-      desc: "Economic & regulatory"
+      desc: "거시경제 및 규제"
     },
   ];
 
@@ -160,7 +160,7 @@ export default function AnalyticsStatusPage() {
         <DynamicBackground />
         <div className="flex flex-col items-center justify-center min-h-[calc(100vh-100px)]">
           <Loader2 className="w-10 h-10 animate-spin text-indigo-500 mb-4" />
-          <p className="text-slate-500 font-medium animate-pulse">Calculating Analytics...</p>
+          <p className="text-slate-500 font-medium animate-pulse">분석 데이터 계산 중...</p>
         </div>
       </MainLayout>
     );
@@ -182,9 +182,9 @@ export default function AnalyticsStatusPage() {
               <Activity className="w-4 h-4" />
               <span className="text-xs uppercase tracking-widest">System Status</span>
             </div>
-            <h1 className="text-4xl font-bold text-slate-900 tracking-tight">Analytics Dashboard</h1>
-            <p className="text-slate-500 mt-1 max-w-2xl">
-              Real-time overview of signal processing, risk distribution, and system performance.
+            <h1 className="text-4xl font-bold text-slate-900 tracking-tight">분석 대시보드</h1>
+            <p className="text-slate-500 mt-1 max-w-2xl word-keep-all">
+              시그널 처리, 리스크 분포, 시스템 성능에 대한 실시간 개요를 확인합니다.
             </p>
           </div>
 
@@ -196,7 +196,7 @@ export default function AnalyticsStatusPage() {
                 activeTab === 'overview' ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-800"
               )}
             >
-              Overview
+              개요 (Overview)
             </button>
             <button
               onClick={() => setActiveTab('trends')}
@@ -205,7 +205,7 @@ export default function AnalyticsStatusPage() {
                 activeTab === 'trends' ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-800"
               )}
             >
-              Trends
+              트렌드 (Trends)
             </button>
           </div>
         </motion.div>
@@ -252,37 +252,45 @@ export default function AnalyticsStatusPage() {
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.2 }}
-            className="lg:col-span-1 space-y-6"
+            className="lg:col-span-2 space-y-6"
           >
-            {/* Visual Distribution */}
+            {/* Signal Category Distribution */}
             <GlassCard className="p-6">
-              <div className="flex items-center gap-2 mb-6">
-                <PieChart className="w-5 h-5 text-indigo-500" />
-                <h3 className="font-bold text-slate-800">Signal Composition</h3>
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-800">시그널 유형 분포</h3>
+                  <p className="text-sm text-slate-500">카테고리별 탐지된 시그널 현황</p>
+                </div>
+                <BarChart3 className="w-5 h-5 text-indigo-500" />
               </div>
 
-              <div className="space-y-6">
-                {signalTypeData.map((item) => {
-                  const percentage = totalSignals > 0 ? Math.round((item.count / totalSignals) * 100) : 0;
-                  const Icon = item.icon;
+              <div className="space-y-4">
+                {signalTypeData.map((type) => {
+                  const percentage = Math.round((type.count / totalSignals) * 100);
+                  const Icon = type.icon;
                   return (
-                    <div key={item.id} className="group">
+                    <div key={type.id} className="group">
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-3">
-                          <div className={`p-2 rounded-lg bg-${item.color}-50 text-${item.color}-600`}>
+                          <div className={`p-2 rounded-lg bg-${type.color}-50 text-${type.color}-600`}>
                             <Icon className="w-4 h-4" />
                           </div>
                           <div>
-                            <p className="font-bold text-slate-700 text-sm">{item.label}</p>
-                            <p className="text-[10px] text-slate-400">{item.desc}</p>
+                            <p className="text-sm font-bold text-slate-700">{type.label}</p>
+                            <p className="text-xs text-slate-400">{type.desc}</p>
                           </div>
                         </div>
-                        <span className="font-mono font-bold text-slate-600">{percentage}%</span>
+                        <div className="text-right">
+                          <p className="text-sm font-bold text-slate-800">{type.count}</p>
+                          <p className="text-xs text-slate-400">{percentage}%</p>
+                        </div>
                       </div>
-                      <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full bg-${item.color}-500 transition-all duration-1000 ease-out`}
-                          style={{ width: `${percentage}%` }}
+                      <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${percentage}%` }}
+                          transition={{ duration: 1, ease: "easeOut" }}
+                          className={`h-full bg-${type.color}-500 rounded-full`}
                         />
                       </div>
                     </div>
@@ -291,90 +299,77 @@ export default function AnalyticsStatusPage() {
               </div>
             </GlassCard>
 
-            {/* Impact Summary */}
-            <GlassCard className="p-6 bg-gradient-to-b from-white/80 to-slate-50/50">
-              <div className="flex items-center gap-2 mb-5">
-                <Zap className="w-5 h-5 text-amber-500" />
-                <h3 className="font-bold text-slate-800">Impact Analysis</h3>
-              </div>
+            {/* Impact Analysis */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <GlassCard className="p-5 border-l-4 border-l-rose-500 bg-gradient-to-br from-rose-50/50 to-transparent">
+                <div className="flex justify-between items-start mb-4">
+                  <div className="bg-rose-100 p-2 rounded-full">
+                    <AlertCircle className="w-5 h-5 text-rose-600" />
+                  </div>
+                  <StatusBadge variant="danger" className="bg-white">Risk Focus</StatusBadge>
+                </div>
+                <h3 className="text-2xl font-bold text-slate-800 mb-1">{impactCounts.risk}</h3>
+                <p className="text-sm text-slate-500 font-medium">부정적 영향 (Risk)</p>
+                <div className="mt-3 text-xs text-rose-600 font-semibold bg-rose-50 inline-block px-2 py-1 rounded">
+                  즉각적인 조치 필요
+                </div>
+              </GlassCard>
 
-              <div className="grid grid-cols-3 gap-3">
-                <div className="p-4 rounded-2xl bg-rose-50 border border-rose-100 flex flex-col items-center justify-center text-center">
-                  <span className="text-2xl font-bold text-rose-600 mb-1">{impactCounts.risk}</span>
-                  <span className="text-[10px] font-bold text-rose-400 uppercase tracking-wide">Risk</span>
+              <GlassCard className="p-5 border-l-4 border-l-emerald-500 bg-gradient-to-br from-emerald-50/50 to-transparent">
+                <div className="flex justify-between items-start mb-4">
+                  <div className="bg-emerald-100 p-2 rounded-full">
+                    <Zap className="w-5 h-5 text-emerald-600" />
+                  </div>
+                  <StatusBadge variant="success" className="bg-white">Opportunity</StatusBadge>
                 </div>
-                <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-100 flex flex-col items-center justify-center text-center">
-                  <span className="text-2xl font-bold text-emerald-600 mb-1">{impactCounts.opportunity}</span>
-                  <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wide">Oppty</span>
+                <h3 className="text-2xl font-bold text-slate-800 mb-1">{impactCounts.opportunity}</h3>
+                <p className="text-sm text-slate-500 font-medium">긍정적 기회 (Opportunity)</p>
+                <div className="mt-3 text-xs text-emerald-600 font-semibold bg-emerald-50 inline-block px-2 py-1 rounded">
+                  영업 기회 포착
                 </div>
-                <div className="p-4 rounded-2xl bg-slate-100 border border-slate-200 flex flex-col items-center justify-center text-center">
-                  <span className="text-2xl font-bold text-slate-600 mb-1">{impactCounts.neutral}</span>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Neutral</span>
-                </div>
-              </div>
-            </GlassCard>
+              </GlassCard>
+            </div>
+
           </motion.div>
 
-          {/* Right Column: Recent Feed */}
+          {/* Right Column: Recent Activity Log */}
           <motion.div
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.3 }}
-            className="lg:col-span-2"
+            className="lg:col-span-1"
           >
-            <GlassCard className="h-full min-h-[500px] flex flex-col overflow-hidden">
-              <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-white/50 backdrop-blur-sm sticky top-0 z-10">
-                <div className="flex items-center gap-2">
-                  <BarChart3 className="w-5 h-5 text-indigo-500" />
-                  <h3 className="font-bold text-slate-800">Live Activity Feed</h3>
-                </div>
-                <StatusBadge variant="neutral" className="animate-pulse">Live Updating</StatusBadge>
+            <GlassCard className="h-full flex flex-col">
+              <div className="p-6 border-b border-slate-100">
+                <h3 className="text-lg font-bold text-slate-800">실시간 로그</h3>
+                <p className="text-sm text-slate-500">최근 시스템 활동 내역</p>
               </div>
-
-              <div className="flex-1 overflow-y-auto max-h-[600px] p-2 space-y-2">
-                {recentSignals.map((signal) => {
-                  // Determine style based on category/impact
-                  const isDirect = signal.signalCategory === 'direct';
-                  const isRisk = signal.impact === 'risk';
-
-                  return (
-                    <div
-                      key={signal.id}
-                      className="group p-4 rounded-xl hover:bg-white hover:shadow-md transition-all border border-transparent hover:border-slate-100 cursor-pointer flex items-center justify-between"
-                      onClick={() => navigate(`/signals/${signal.id}`)}
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className={cn(
-                          "w-12 h-12 rounded-2xl flex items-center justify-center transition-colors",
-                          isDirect ? "bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100" : "bg-slate-100 text-slate-500 group-hover:bg-slate-200"
-                        )}>
-                          {isDirect ? <Building2 className="w-6 h-6" /> : <Globe className="w-6 h-6" />}
-                        </div>
-                        <div>
-                          <h4 className="font-bold text-slate-700 group-hover:text-indigo-600 transition-colors text-sm mb-0.5 line-clamp-1">{signal.title}</h4>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-semibold text-slate-500">{signal.corporationName}</span>
-                            <span className="text-[9px] text-slate-300">|</span>
-                            <span className="text-xs text-slate-400">{formatRelativeTime(signal.detectedAt)}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-3">
-                        {isRisk ? (
-                          <Tag className="bg-rose-50 text-rose-600 border-rose-100">RISK</Tag>
-                        ) : (
-                          <Tag className="bg-emerald-50 text-emerald-600 border-emerald-100">OPP</Tag>
-                        )}
-                        <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-500 transition-colors" />
-                      </div>
+              <div className="flex-1 overflow-y-auto max-h-[500px] p-4 space-y-4 custom-scrollbar">
+                {recentSignals.map((signal) => (
+                  <div key={signal.id} onClick={() => navigate(`/signals/${signal.id}`)} className="group flex gap-3 p-3 rounded-xl hover:bg-slate-50 cursor-pointer transition-colors border border-transparent hover:border-slate-100">
+                    <div className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${signal.impact === 'risk' ? 'bg-rose-500' :
+                        signal.impact === 'opportunity' ? 'bg-emerald-500' : 'bg-slate-400'
+                      }`} />
+                    <div>
+                      <p className="text-xs font-bold text-slate-700 line-clamp-1 group-hover:text-indigo-600 mb-0.5">{signal.title}</p>
+                      <p className="text-[10px] text-slate-400 mb-1.5">{signal.corporationName}</p>
+                      <span className="text-[10px] text-slate-300 font-mono bg-slate-900 px-1.5 py-0.5 rounded">
+                        {formatRelativeTime(signal.detectedAt)}
+                      </span>
                     </div>
-                  );
-                })}
+                  </div>
+                ))}
+              </div>
+              <div className="p-4 border-t border-slate-100 text-center">
+                <button className="text-xs font-bold text-indigo-500 hover:text-indigo-600 uppercase tracking-wider flex items-center justify-center gap-1 w-full py-2 hover:bg-indigo-50 rounded-lg transition-colors">
+                  View All Logs <ChevronRight className="w-3 h-3" />
+                </button>
               </div>
             </GlassCard>
           </motion.div>
+
         </div>
+
       </div>
     </MainLayout>
   );

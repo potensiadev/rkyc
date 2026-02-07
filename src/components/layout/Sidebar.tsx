@@ -1,32 +1,28 @@
-import { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
   Inbox,
   Building2,
   Settings,
-  Bell,
-  ChevronLeft,
-  ChevronRight,
   ChevronDown,
   BarChart3,
-  FileText,
   Factory,
   Globe,
   Newspaper,
-  // UserPlus,  // 신규 법인 KYC - 비활성화
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface SubMenuItem {
   id: string;
   label: string;
-  icon: React.ElementType;
+  icon: React.ElementType; // Kept for type compatibility but not rendered
   path: string;
 }
 
 interface NavigationItem {
   id: string;
   label: string;
-  icon: React.ElementType;
+  icon: React.ElementType; // Kept for type compatibility but not rendered
   path: string;
   badge?: number;
   subItems?: SubMenuItem[];
@@ -77,13 +73,6 @@ const navigationItems: NavigationItem[] = [
     icon: BarChart3,
     path: "/analytics",
   },
-  // 신규 법인 KYC - 비활성화
-  // {
-  //   id: "new-kyc",
-  //   label: "신규 법인 PRE-KYC",
-  //   icon: UserPlus,
-  //   path: "/new-kyc",
-  // },
 ];
 
 const bottomItems: NavigationItem[] = [
@@ -96,157 +85,129 @@ const bottomItems: NavigationItem[] = [
 ];
 
 export function Sidebar() {
-  const [collapsed, setCollapsed] = useState(false);
   const [expandedItems, setExpandedItems] = useState<string[]>(["briefing"]);
   const location = useLocation();
 
-  const toggleExpanded = (id: string) => {
-    setExpandedItems((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
+  const toggleExpanded = (id: string, e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    setExpandedItems((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
   };
 
+  // Auto-expand active group
+  useEffect(() => {
+    navigationItems.forEach(item => {
+      if (item.subItems && item.subItems.some(sub => sub.path === location.pathname)) {
+        setExpandedItems(prev => prev.includes(item.id) ? prev : [...prev, item.id]);
+      }
+    });
+  }, [location.pathname]);
+
   const isItemActive = (path: string) => location.pathname === path;
-  const isParentActive = (item: NavigationItem) => {
-    if (isItemActive(item.path)) return true;
-    if (item.subItems) {
-      return item.subItems.some((sub) => isItemActive(sub.path));
-    }
-    return false;
-  };
 
   return (
     <aside
-      className={`
-        fixed left-0 top-0 h-screen bg-slate-900/95 backdrop-blur-md border-r border-white/10
-        transition-all duration-300 ease-in-out z-50
-        ${collapsed ? "w-16" : "w-64"}
-      `}
+      className="fixed left-0 top-0 h-screen w-64 bg-[#111827] text-slate-300 transition-all duration-300 ease-in-out z-50 border-r border-slate-800/50 flex flex-col shadow-2xl"
     >
-      <div className="flex flex-col h-full">
-        {/* Logo */}
-        <Link to="/" className="flex items-center h-16 px-4 border-b border-sidebar-border hover:bg-sidebar-accent/50 transition-colors">
-          {!collapsed && (
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-sidebar-primary flex items-center justify-center">
-                <span className="text-sidebar-primary-foreground font-bold text-sm">R</span>
-              </div>
-              <div>
-                <h1 className="text-sidebar-foreground font-semibold text-lg tracking-tight">rKYC</h1>
-                <p className="text-sidebar-foreground/50 text-[10px] -mt-0.5">really Know Your Customer</p>
-              </div>
-            </div>
-          )}
-          {collapsed && (
-            <div className="w-8 h-8 rounded-lg bg-sidebar-primary flex items-center justify-center mx-auto">
-              <span className="text-sidebar-primary-foreground font-bold text-sm">R</span>
-            </div>
-          )}
+      {/* Header / Logo */}
+      <div className="h-20 flex items-center px-6 border-b border-slate-800/50 relative group">
+        <Link to="/" className="flex items-center gap-3 overflow-hidden group px-2">
+          <div className="transition-opacity duration-300 opacity-100">
+            <h1 className="text-white font-bold text-2xl tracking-tight leading-none font-display">rKYC</h1>
+            <p className="text-[10px] text-blue-200/70 font-medium leading-tight mt-1 whitespace-nowrap tracking-wide">really Know Your Customer</p>
+          </div>
         </Link>
+      </div>
 
-        {/* Main navigation */}
-        <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto">
+      {/* Scrollable Content */}
+      <div className="flex-1 overflow-y-auto py-6 px-4 space-y-8 custom-scrollbar">
+
+        {/* Main Navigation */}
+        <nav className="space-y-1">
           {navigationItems.map((item) => {
-            const isActive = isParentActive(item);
-            const isExpanded = expandedItems.includes(item.id);
+            const isActive = isItemActive(item.path);
             const hasSubItems = item.subItems && item.subItems.length > 0;
+            const isExpanded = expandedItems.includes(item.id);
+            const isChildActive = hasSubItems && item.subItems?.some(sub => isItemActive(sub.path));
 
             return (
-              <div key={item.id}>
-                {/* Parent item */}
-                <div className="flex items-center">
-                  <Link
-                    to={item.path}
-                    className={`
-                      nav-item flex-1
-                      ${isActive && !hasSubItems ? "nav-item-active" : ""}
-                      ${isActive && hasSubItems ? "text-sidebar-foreground font-medium" : ""}
-                      ${collapsed ? "justify-center px-2" : ""}
-                    `}
-                    title={collapsed ? item.label : undefined}
-                  >
-                    <item.icon className="w-5 h-5 shrink-0" />
-                    {!collapsed && (
-                      <>
-                        <span className="flex-1">{item.label}</span>
-                        {item.badge && (
-                          <span className="bg-sidebar-primary text-sidebar-primary-foreground text-xs px-2 py-0.5 rounded-full">
-                            {item.badge}
-                          </span>
-                        )}
-                      </>
-                    )}
-                  </Link>
-                  {!collapsed && hasSubItems && (
-                    <button
-                      onClick={() => toggleExpanded(item.id)}
-                      className="p-1.5 rounded-md hover:bg-sidebar-accent text-sidebar-foreground/70 hover:text-sidebar-foreground transition-colors"
-                    >
-                      <ChevronDown className={`w-4 h-4 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
-                    </button>
+              <div key={item.id} className="select-none">
+                {/* Parent Item */}
+                <div
+                  className={cn(
+                    "group flex items-center justify-between px-3 py-2.5 rounded-lg cursor-pointer transition-all duration-200",
+                    (isActive || isChildActive)
+                      ? "text-white bg-slate-800 font-medium"
+                      : "text-slate-400 hover:text-white hover:bg-slate-800/50"
+                  )}
+                  onClick={(e) => hasSubItems ? toggleExpanded(item.id, e) : null}
+                >
+                  {/* Link wrapper for non-subitems */}
+                  {!hasSubItems ? (
+                    <Link to={item.path} className="flex-1">
+                      <span className="text-sm">{item.label}</span>
+                    </Link>
+                  ) : (
+                    <>
+                      <span className="text-sm flex-1">{item.label}</span>
+                      <ChevronDown className={cn("w-4 h-4 transition-transform duration-200 opacity-50", isExpanded && "rotate-180")} />
+                    </>
                   )}
                 </div>
 
-                {/* Sub items */}
-                {!collapsed && hasSubItems && isExpanded && (
-                  <div className="mt-1 ml-4 pl-4 border-l border-sidebar-border space-y-1">
-                    {item.subItems!.map((subItem) => {
-                      const isSubActive = isItemActive(subItem.path);
-                      return (
-                        <Link
-                          key={subItem.id}
-                          to={subItem.path}
-                          className={`
-                            flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors
-                            ${isSubActive
-                              ? "bg-sidebar-accent text-sidebar-foreground font-medium"
-                              : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
-                            }
-                          `}
-                        >
-                          <subItem.icon className="w-4 h-4 shrink-0" />
-                          <span>{subItem.label}</span>
-                        </Link>
-                      );
-                    })}
+                {/* Submenu */}
+                {hasSubItems && (
+                  <div className={cn(
+                    "grid transition-all duration-300 ease-in-out pl-4",
+                    isExpanded ? "grid-rows-[1fr] opacity-100 mt-1" : "grid-rows-[0fr] opacity-0"
+                  )}>
+                    <div className="overflow-hidden border-l border-slate-700/50 space-y-1">
+                      {item.subItems!.map((sub) => {
+                        const isSubActive = isItemActive(sub.path);
+                        return (
+                          <Link
+                            key={sub.id}
+                            to={sub.path}
+                            className={cn(
+                              "block px-4 py-2 ml-1 rounded-md text-sm transition-all relative",
+                              isSubActive
+                                ? "text-blue-400 font-medium bg-blue-500/10"
+                                : "text-slate-500 hover:text-slate-300"
+                            )}
+                          >
+                            <span>{sub.label}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
               </div>
             );
           })}
         </nav>
+      </div>
 
-        {/* Bottom navigation */}
-        <div className="py-4 px-2 border-t border-sidebar-border space-y-1">
-          {bottomItems.map((item) => {
-            const isActive = location.pathname === item.path;
-            return (
-              <Link
-                key={item.id}
-                to={item.path}
-                className={`
-                  nav-item
-                  ${isActive ? "nav-item-active" : ""}
-                  ${collapsed ? "justify-center px-2" : ""}
-                `}
-                title={collapsed ? item.label : undefined}
-              >
-                <item.icon className="w-5 h-5 shrink-0" />
-                {!collapsed && <span>{item.label}</span>}
-              </Link>
-            );
-          })}
-        </div>
-
-        {/* Collapse toggle */}
-        <button
-          onClick={() => setCollapsed(!collapsed)}
-          className="absolute -right-3 top-20 w-6 h-6 bg-card border border-border rounded-full flex items-center justify-center shadow-sm hover:bg-secondary transition-colors"
-        >
-          {collapsed ? (
-            <ChevronRight className="w-3 h-3 text-muted-foreground" />
-          ) : (
-            <ChevronLeft className="w-3 h-3 text-muted-foreground" />
-          )}
-        </button>
+      {/* Footer */}
+      <div className="p-4 border-t border-slate-800 bg-[#0F172A]">
+        {bottomItems.map((item) => (
+          <Link
+            key={item.id}
+            to={item.path}
+            className={cn(
+              "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200",
+              isItemActive(item.path)
+                ? "bg-slate-800 text-white font-medium"
+                : "text-slate-400 hover:text-white hover:bg-slate-800/50"
+            )}
+          >
+            <span className="text-sm">{item.label}</span>
+          </Link>
+        ))}
       </div>
     </aside>
   );

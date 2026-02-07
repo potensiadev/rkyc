@@ -23,9 +23,9 @@ function formatLoanBalance(amountKrw: number | undefined | null): string {
 }
 
 const signalTypeConfig = {
-  direct: { label: "Direct", className: "bg-indigo-50 text-indigo-600 border-indigo-100" },
-  industry: { label: "Industry", className: "bg-cyan-50 text-cyan-600 border-cyan-100" },
-  environment: { label: "Macro", className: "bg-slate-50 text-slate-500 border-slate-100" },
+  direct: { label: "직접", className: "bg-indigo-50 text-indigo-600 border-indigo-100" },
+  industry: { label: "산업", className: "bg-cyan-50 text-cyan-600 border-cyan-100" },
+  environment: { label: "환경", className: "bg-slate-50 text-slate-500 border-slate-100" },
 };
 
 export default function CorporationSearch() {
@@ -90,7 +90,7 @@ export default function CorporationSearch() {
         <DynamicBackground />
         <div className="flex flex-col items-center justify-center min-h-[calc(100vh-100px)]">
           <Loader2 className="w-10 h-10 animate-spin text-indigo-500 mb-4" />
-          <p className="text-slate-500 font-medium animate-pulse">Scanning Corporate Registry...</p>
+          <p className="text-slate-500 font-medium animate-pulse">기업 레지스트리 스캔 중...</p>
         </div>
       </MainLayout>
     );
@@ -103,8 +103,8 @@ export default function CorporationSearch() {
         <div className="max-w-6xl mx-auto pt-20">
           <GlassCard className="p-8 text-center border-rose-200 bg-rose-50/50">
             <AlertCircle className="w-10 h-10 text-rose-500 mx-auto mb-3" />
-            <h3 className="text-lg font-bold text-rose-700">Failed to load data</h3>
-            <p className="text-rose-500">Please try again later.</p>
+            <h3 className="text-lg font-bold text-rose-700">데이터 로드 실패</h3>
+            <p className="text-rose-500">잠시 후 다시 시도해주세요.</p>
           </GlassCard>
         </div>
       </MainLayout>
@@ -121,9 +121,9 @@ export default function CorporationSearch() {
           animate={{ opacity: 1, y: 0 }}
           className="text-center pt-8 pb-4"
         >
-          <h1 className="text-4xl font-bold text-slate-900 tracking-tight mb-3">Corporate Intelligence</h1>
-          <p className="text-slate-500 text-lg max-w-2xl mx-auto">
-            Access comprehensive profiles, real-time risk signals, and financial exposure analysis for {corporations.length} distinct entities.
+          <h1 className="text-4xl font-bold text-slate-900 tracking-tight mb-3">기업 인텔리전스</h1>
+          <p className="text-slate-500 text-lg max-w-2xl mx-auto word-keep-all">
+            {corporations.length}개 기업의 상세 프로필, 실시간 리스크 시그널, 그리고 여신 한도 분석에 접근하세요.
           </p>
         </motion.div>
 
@@ -139,14 +139,14 @@ export default function CorporationSearch() {
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-indigo-400" />
               <Input
                 type="text"
-                placeholder="Search by company name or business ID..."
+                placeholder="기업명 또는 법인등록번호로 검색..."
                 className="pl-12 h-12 text-base border-0 bg-transparent focus-visible:ring-0 placeholder:text-slate-400"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
             <Button className="h-12 px-8 bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/30 rounded-xl transition-all hover:scale-105 active:scale-95">
-              Search
+              검색
             </Button>
           </GlassCard>
         </motion.div>
@@ -188,7 +188,7 @@ export default function CorporationSearch() {
                     {/* Loan Info */}
                     <div className="mb-4 p-3 bg-slate-50 rounded-xl border border-slate-100 group-hover:bg-indigo-50/30 group-hover:border-indigo-100/50 transition-colors">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Exposure</span>
+                        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">총 여신 잔액</span>
                         <span className="font-mono font-bold text-slate-700">{formatLoanBalance(loanBalance)}</span>
                       </div>
                     </div>
@@ -197,17 +197,17 @@ export default function CorporationSearch() {
                     <div className="mt-auto pt-3 border-t border-slate-100 flex items-center justify-between">
                       <div className="flex gap-1.5 flex-wrap">
                         {signalCounts.total === 0 ? (
-                          <span className="text-xs text-slate-400 italic">No Active Signals</span>
+                          <span className="text-xs text-slate-400 italic">활성 시그널 없음</span>
                         ) : (
                           <>
                             {signalCounts.direct > 0 && (
                               <Tag className="text-[10px] py-0.5 h-5 bg-indigo-50 text-indigo-600 border-indigo-100">
-                                Direct {signalCounts.direct}
+                                직접 {signalCounts.direct}
                               </Tag>
                             )}
                             {signalCounts.industry > 0 && (
                               <Tag className="text-[10px] py-0.5 h-5 bg-cyan-50 text-cyan-600 border-cyan-100">
-                                Ind. {signalCounts.industry}
+                                산업 {signalCounts.industry}
                               </Tag>
                             )}
                           </>
@@ -226,7 +226,7 @@ export default function CorporationSearch() {
 
         {filteredCorporations.length === 0 && (
           <div className="text-center py-20">
-            <p className="text-slate-400 text-lg">No corporations found matching "{searchQuery}"</p>
+            <p className="text-slate-400 text-lg">"{searchQuery}"에 해당하는 기업이 없습니다.</p>
           </div>
         )}
 

@@ -74,11 +74,11 @@ export default function DirectSignalPage() {
             </div>
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Direct Signals</h1>
+                <h1 className="text-3xl font-bold text-slate-900 tracking-tight">직접 시그널</h1>
                 <StatusBadge variant="neutral" className="bg-white/50 backdrop-blur-sm">Live</StatusBadge>
               </div>
-              <p className="text-slate-500 font-medium">
-                Analysis based on internal documents, disclosures, and direct transaction events.
+              <p className="text-slate-500 font-medium word-keep-all">
+                내부 문서, 공시 자료, 그리고 직접적인 거래 이벤트를 기반으로 분석된 시그널입니다.
               </p>
             </div>
           </div>
@@ -92,8 +92,8 @@ export default function DirectSignalPage() {
           className="bg-indigo-50/50 backdrop-blur-md rounded-xl border border-indigo-100 px-5 py-4 mb-8 flex items-start gap-3"
         >
           <Info className="w-5 h-5 text-indigo-500 mt-0.5 flex-shrink-0" />
-          <p className="text-sm text-indigo-900 leading-relaxed font-medium">
-            Direct signals are detected directly from primary sources such as electronic disclosures (DART), internal credit reports, and news feeds. High reliability.
+          <p className="text-sm text-indigo-900 leading-relaxed font-medium word-keep-all">
+            직접 시그널은 전자공시(DART), 내부 신용 보고서, 뉴스 피드 등 1차 소스에서 직접 감지됩니다. 가장 높은 신뢰도를 가집니다.
           </p>
         </motion.div>
 
