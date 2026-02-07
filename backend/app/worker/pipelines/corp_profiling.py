@@ -64,6 +64,7 @@ from app.services.dart_api import (
     # P4: Extended Fact Profile (including executives)
     get_extended_fact_profile,
     ExtendedFactProfile,
+    Executive,
 )
 
 logger = logging.getLogger(__name__)
