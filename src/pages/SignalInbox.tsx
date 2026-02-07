@@ -16,6 +16,7 @@ import {
   Sparkline,
   StatusBadge
 } from "@/components/premium";
+import { motion } from "framer-motion";
 
 import { GroupedSignalCard } from "@/components/dashboard/GroupedSignalCard";
 
@@ -98,8 +99,16 @@ export default function SignalInbox() {
         corporationId: corpId,
         corporationName: sigs[0].corporationName,
         signals: sigs,
+        // Calculate max impact order for sorting: Risk High > Risk > Opp > Neutral
+        sortWeight: sigs.reduce((max, s) => {
+          let w = 0;
+          if (s.impact === 'risk') w = 10;
+          if (s.impact === 'risk' && s.impactStrength === 'high') w = 20;
+          if (s.impact === 'opportunity') w = 5;
+          return Math.max(max, w);
+        }, 0)
       }))
-      .sort((a, b) => b.signals.length - a.signals.length);
+      .sort((a, b) => b.sortWeight - a.sortWeight || b.signals.length - a.signals.length); // Sort by risk then count
   }, [filteredSignals]);
 
   const counts = useMemo(() => ({
@@ -160,11 +169,15 @@ export default function SignalInbox() {
 
   return (
     <MainLayout>
-      <div className="max-w-[1600px] mx-auto p-6">
+      <div className="max-w-[1600px] mx-auto p-6 space-y-8">
 
         {/* Demo Mode Banner */}
         {import.meta.env.VITE_DEMO_MODE === 'true' && (
-          <div className="mb-6 bg-gradient-to-r from-purple-500/10 to-blue-500/10 border border-purple-500/30 rounded-lg p-4">
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6 bg-gradient-to-r from-purple-500/10 to-blue-500/10 border border-purple-500/30 rounded-lg p-4"
+          >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center">
@@ -183,19 +196,28 @@ export default function SignalInbox() {
                 분석 실행하기
               </Link>
             </div>
-          </div>
+          </motion.div>
         )}
 
         {/* KPI Cards - Kept as "Satellites" */}
-        <div className="grid grid-cols-4 gap-4 mb-10">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="grid grid-cols-4 gap-4"
+        >
           <KPICard icon={AlertCircle} label="금일 신규 시그널" value={counts.todayNew} trend="오늘" colorClass="text-indigo-500" trendData={[2, 4, 3, 5, 4, 6, counts.todayNew]} sparklineColor="#6366f1" />
           <KPICard icon={TrendingDown} label="위험 시그널 (7일)" value={counts.riskHigh7d} trend="최근 7일" colorClass="text-rose-500" trendData={[5, 6, 8, 7, 9, 8, counts.riskHigh7d]} sparklineColor="#f43f5e" />
           <KPICard icon={TrendingUp} label="기회 시그널 (7일)" value={counts.opportunity7d} trend="최근 7일" colorClass="text-emerald-500" trendData={[2, 3, 2, 4, 3, 5, counts.opportunity7d]} sparklineColor="#10b981" />
           <KPICard icon={Lightbulb} label="여신 거래 법인" value={counts.loanEligible} trend="참고용" colorClass="text-amber-500" />
-        </div>
+        </motion.div>
 
         {/* Filters and Title */}
-        <div className="flex items-center justify-between gap-4 mb-6">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.1 }}
+          className="flex items-center justify-between gap-4"
+        >
           <div className="flex items-center gap-1 bg-secondary/50 backdrop-blur-sm rounded-lg p-1 border border-border/50">
             {statusFilters.map((filter) => (
               <button
@@ -213,22 +235,33 @@ export default function SignalInbox() {
             <option value="impact">영향도순</option>
             <option value="corporation">기업명순</option>
           </select>
-        </div>
+        </motion.div>
 
         {/* 2. Grouped Signal Cards by Corporation */}
-        <div className="space-y-4">
-          {groupedSignals.map((group) => (
-            <GroupedSignalCard
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.2 }}
+          className="space-y-4"
+        >
+          {groupedSignals.map((group, index) => (
+            <motion.div
               key={group.corporationId}
-              corporationId={group.corporationId}
-              corporationName={group.corporationName}
-              signals={group.signals}
-              loanInsight={insightMap.get(group.corporationId)}
-              onSignalClick={handleRowClick}
-              onCorporationClick={(id) => navigate(`/corporates/${id}`)}
-            />
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 + (index * 0.05) }}
+            >
+              <GroupedSignalCard
+                corporationId={group.corporationId}
+                corporationName={group.corporationName}
+                signals={group.signals}
+                loanInsight={insightMap.get(group.corporationId)}
+                onSignalClick={handleRowClick}
+                onCorporationClick={(id) => navigate(`/corporations/${id}`)}
+              />
+            </motion.div>
           ))}
-        </div>
+        </motion.div>
 
         {filteredSignals.length === 0 && (
           <div className="text-center py-32 bg-card/30 rounded-2xl border border-dashed border-border/50">

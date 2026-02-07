@@ -221,8 +221,8 @@ export function useJobStatus(jobId: string, options?: { enabled?: boolean; refet
       // QUEUED 또는 RUNNING 상태일 때만 폴링
       if (data?.status === 'QUEUED' || data?.status === 'RUNNING') {
         // 타임아웃 체크: created_at 기준 2분 경과 시 폴링 중단
-        if (data.created_at) {
-          const createdTime = new Date(data.created_at).getTime();
+        if (data.queued_at) {
+          const createdTime = new Date(data.queued_at).getTime();
           const elapsed = Date.now() - createdTime;
           if (elapsed > JOB_TIMEOUT_MS) {
             options?.onTimeout?.();
@@ -346,7 +346,6 @@ export function useRefreshCorpProfile() {
 // 신규 법인 KYC Hooks - 비활성화
 // ============================================================
 
-/*
 import {
   getNewKycJobStatus,
   getNewKycReport,
@@ -380,7 +379,6 @@ export function useNewKycReport(jobId: string) {
     staleTime: 5 * 60 * 1000, // 5분
   });
 }
-*/
 
 // ============================================================
 // Session 16: Signal Enriched Detail Hooks (풍부한 시그널 상세)
@@ -575,8 +573,8 @@ export type {
   SignalStatusType,
   ApiCorpProfileResponse,
   ApiCorpProfileDetailResponse,
-  // NewKycJobStatusResponse,  // 신규 법인 KYC - 비활성화
-  // NewKycReportResponse,     // 신규 법인 KYC - 비활성화
+  NewKycJobStatusResponse,
+  NewKycReportResponse,
   // Session 16: Enriched types
   ApiSignalEnrichedDetail,
   ApiSimilarCase,

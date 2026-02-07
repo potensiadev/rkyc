@@ -217,7 +217,7 @@ export default function SignalDetailPage() {
 
             <div className="flex items-center gap-2 text-sm text-slate-500 pt-2">
               <Building2 className="w-4 h-4 text-slate-400" />
-              <Link to={`/corporates/${signal.corp_id}`} className="font-semibold hover:text-indigo-600 transition-colors underline decoration-slate-200 underline-offset-4">
+              <Link to={`/corporations/${signal.corp_id}`} className="font-semibold hover:text-indigo-600 transition-colors underline decoration-slate-200 underline-offset-4">
                 {signal.corp_name}
               </Link>
               <span>·</span>
@@ -364,7 +364,7 @@ export default function SignalDetailPage() {
                     <Building2 className="w-4 h-4 text-slate-500" />
                     Corporate Profile
                   </h3>
-                  <Link to={`/corporates/${signal.corp_id}`} className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 transition-colors flex items-center gap-1 group">
+                  <Link to={`/corporations/${signal.corp_id}`} className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 transition-colors flex items-center gap-1 group">
                     Details <ChevronRight className="w-3 h-3 transition-transform group-hover:translate-x-0.5" />
                   </Link>
                 </div>

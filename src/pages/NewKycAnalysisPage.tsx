@@ -1,12 +1,14 @@
-/**
- * 신규 법인 KYC 분석 - 분석 진행 상태 페이지
- */
-
 import { useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useNewKycJobStatus } from "@/hooks/useApi";
 import { Loader2, Check, Clock, AlertCircle, FileText, Search, Brain, FileCheck } from "lucide-react";
+import {
+  DynamicBackground,
+  GlassCard,
+  StatusBadge
+} from "@/components/premium";
+import { motion } from "framer-motion";
 
 // 분석 단계 정의
 const ANALYSIS_STEPS = [
@@ -48,32 +50,38 @@ export default function NewKycAnalysisPage() {
   if (error || jobStatus?.status === 'FAILED') {
     return (
       <MainLayout>
-        <div className="max-w-2xl mx-auto text-center py-16">
-          <div className="w-16 h-16 rounded-full bg-red-100 dark:bg-red-950/30 flex items-center justify-center mx-auto mb-4">
-            <AlertCircle className="w-8 h-8 text-red-500" />
-          </div>
-          <h1 className="text-xl font-bold text-foreground mb-2">분석 실패</h1>
-          <p className="text-muted-foreground mb-6">
-            {jobStatus?.error?.message || "분석 중 오류가 발생했습니다."}
-          </p>
-          <button
-            onClick={() => navigate('/new-kyc')}
-            className="text-primary hover:underline"
-          >
-            다시 시도하기
-          </button>
+        <DynamicBackground />
+        <div className="h-[calc(100vh-100px)] flex items-center justify-center relative z-10">
+          <GlassCard className="max-w-md w-full p-8 text-center flex flex-col items-center">
+            <div className="w-16 h-16 rounded-full bg-rose-50 flex items-center justify-center mb-4 ring-8 ring-rose-50/50">
+              <AlertCircle className="w-8 h-8 text-rose-500" />
+            </div>
+            <h1 className="text-xl font-bold text-slate-800 mb-2">Analysis Failed</h1>
+            <p className="text-slate-500 mb-6 leading-relaxed">
+              {jobStatus?.error?.message || "An error occurred during the analysis process."}
+            </p>
+            <button
+              onClick={() => navigate('/new-kyc')}
+              className="text-indigo-600 hover:text-indigo-700 font-medium hover:underline transition-all"
+            >
+              Try Again
+            </button>
+          </GlassCard>
         </div>
       </MainLayout>
     );
   }
 
-  // 로딩 상태
+  // 로딩 상태 (초기)
   if (isLoading && !jobStatus) {
     return (
       <MainLayout>
-        <div className="max-w-2xl mx-auto text-center py-16">
-          <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-4" />
-          <p className="text-muted-foreground">분석 상태를 불러오는 중...</p>
+        <DynamicBackground />
+        <div className="h-[calc(100vh-100px)] flex items-center justify-center relative z-10">
+          <div className="flex flex-col items-center gap-4">
+            <Loader2 className="w-10 h-10 animate-spin text-indigo-500" />
+            <p className="text-slate-500 font-medium animate-pulse">Initializing Analysis...</p>
+          </div>
         </div>
       </MainLayout>
     );
@@ -81,119 +89,151 @@ export default function NewKycAnalysisPage() {
 
   return (
     <MainLayout>
-      <div className="max-w-2xl mx-auto">
+      <DynamicBackground />
+      <div className="max-w-2xl mx-auto py-12 relative z-10 px-6">
         {/* 헤더 */}
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-center mb-10"
+        >
+          <div className="w-20 h-20 rounded-full bg-white/50 backdrop-blur-sm shadow-sm flex items-center justify-center mx-auto mb-6 ring-4 ring-white/30">
             {jobStatus?.status === 'DONE' ? (
-              <Check className="w-8 h-8 text-green-500" />
+              <Check className="w-10 h-10 text-emerald-500" />
             ) : (
-              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+              <Loader2 className="w-10 h-10 animate-spin text-indigo-500" />
             )}
           </div>
-          <h1 className="text-2xl font-bold text-foreground mb-2">
-            {jobStatus?.status === 'DONE' ? 'AI 분석 완료' : 'AI 분석 진행 중'}
+          <h1 className="text-3xl font-bold text-slate-900 mb-2 tracking-tight">
+            {jobStatus?.status === 'DONE' ? 'Analysis Complete' : 'AI Analysis In Progress'}
           </h1>
-          {jobStatus?.corp_name && (
-            <p className="text-lg text-foreground">{jobStatus.corp_name}</p>
-          )}
-        </div>
+          <p className="text-lg text-slate-600 font-medium">
+            {jobStatus?.corp_name && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(jobStatus.corp_name)
+              ? jobStatus.corp_name
+              : "Target Corporation"}
+          </p>
+        </motion.div>
 
         {/* 진행률 바 */}
-        <div className="bg-card rounded-lg border p-6 mb-6">
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-sm text-muted-foreground">분석 단계</span>
-            <span className="text-sm font-medium">{Math.round(progressPercent)}%</span>
-          </div>
-          <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-            <div
-              className="h-full bg-primary transition-all duration-500 ease-out"
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
-        </div>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="mb-8"
+        >
+          <GlassCard className="p-6">
+            <div className="flex justify-between items-center mb-3">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Overall Progress</span>
+              <span className="text-lg font-bold text-indigo-600">{Math.round(progressPercent)}%</span>
+            </div>
+            <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden shadow-inner">
+              <motion.div
+                className="h-full bg-gradient-to-r from-indigo-500 to-purple-500"
+                initial={{ width: 0 }}
+                animate={{ width: `${progressPercent}%` }}
+                transition={{ duration: 0.5, ease: "easeOut" }}
+              />
+            </div>
+          </GlassCard>
+        </motion.div>
 
         {/* 단계별 상태 */}
-        <div className="bg-card rounded-lg border p-6">
-          <div className="space-y-4">
-            {ANALYSIS_STEPS.map((step, index) => {
-              const isCompleted = index < currentStepIndex || jobStatus?.status === 'DONE';
-              const isCurrent = index === currentStepIndex && jobStatus?.status !== 'DONE';
-              const isPending = index > currentStepIndex && jobStatus?.status !== 'DONE';
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+        >
+          <GlassCard className="p-2">
+            <div className="space-y-1">
+              {ANALYSIS_STEPS.map((step, index) => {
+                const isCompleted = index < currentStepIndex || jobStatus?.status === 'DONE';
+                const isCurrent = index === currentStepIndex && jobStatus?.status !== 'DONE';
+                const isPending = index > currentStepIndex && jobStatus?.status !== 'DONE';
 
-              return (
-                <div
-                  key={step.key}
-                  className={`
-                    flex items-center gap-4 p-3 rounded-lg transition-colors
-                    ${isCurrent ? 'bg-primary/5' : ''}
-                  `}
-                >
-                  {/* 아이콘 */}
-                  <div className={`
-                    w-10 h-10 rounded-full flex items-center justify-center shrink-0
-                    ${isCompleted
-                      ? 'bg-green-500 text-white'
-                      : isCurrent
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted text-muted-foreground'
-                    }
-                  `}>
-                    {isCompleted ? (
-                      <Check className="w-5 h-5" />
-                    ) : isCurrent ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                    ) : (
-                      <Clock className="w-5 h-5" />
-                    )}
-                  </div>
-
-                  {/* 텍스트 */}
-                  <div className="flex-1 min-w-0">
+                return (
+                  <motion.div
+                    key={step.key}
+                    initial={false}
+                    animate={{
+                      backgroundColor: isCurrent ? "rgba(79, 70, 229, 0.05)" : "rgba(255, 255, 255, 0)",
+                    }}
+                    className={`
+                      flex items-center gap-4 p-4 rounded-xl transition-all
+                      ${isCurrent ? 'border border-indigo-100 shadow-sm' : 'border border-transparent'}
+                    `}
+                  >
+                    {/* 아이콘 */}
                     <div className={`
-                      font-medium
+                      w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-colors duration-300
                       ${isCompleted
-                        ? 'text-green-600 dark:text-green-400'
+                        ? 'bg-emerald-500 text-white shadow-md shadow-emerald-200'
                         : isCurrent
-                          ? 'text-foreground'
-                          : 'text-muted-foreground'
+                          ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200'
+                          : 'bg-slate-100 text-slate-400'
                       }
                     `}>
-                      {isCompleted ? `${step.label} 완료` : isCurrent ? `${step.label} 중...` : step.label}
+                      {isCompleted ? (
+                        <Check className="w-5 h-5" />
+                      ) : isCurrent ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <step.icon className="w-5 h-5" />
+                      )}
                     </div>
-                    <div className="text-sm text-muted-foreground">
-                      {step.description}
-                    </div>
-                  </div>
 
-                  {/* 상태 표시 */}
-                  {isCompleted && (
-                    <span className="text-xs text-green-600 dark:text-green-400">완료</span>
-                  )}
-                  {isCurrent && (
-                    <span className="text-xs text-primary">진행중</span>
-                  )}
-                  {isPending && (
-                    <span className="text-xs text-muted-foreground">대기</span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
+                    {/* 텍스트 */}
+                    <div className="flex-1 min-w-0">
+                      <div className={`
+                        font-semibold text-sm mb-0.5
+                        ${isCompleted
+                          ? 'text-foreground'
+                          : isCurrent
+                            ? 'text-indigo-900'
+                            : 'text-slate-400'
+                        }
+                      `}>
+                        {step.label}
+                      </div>
+                      <div className="text-xs text-slate-500">
+                        {step.description}
+                      </div>
+                    </div>
+
+                    {/* 상태 표시 */}
+                    {isCompleted && (
+                      <StatusBadge variant="success" className="h-6 text-xs">Completed</StatusBadge>
+                    )}
+                    {isCurrent && (
+                      <StatusBadge variant="brand" className="h-6 text-xs animate-pulse">Processing</StatusBadge>
+                    )}
+                    {isPending && (
+                      <span className="text-xs text-slate-300 font-medium px-2">Pending</span>
+                    )}
+                  </motion.div>
+                );
+              })}
+            </div>
+          </GlassCard>
+        </motion.div>
 
         {/* 안내 메시지 */}
-        <div className="text-center mt-6">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.5 }}
+          className="text-center mt-8"
+        >
           {jobStatus?.status === 'DONE' ? (
-            <p className="text-sm text-green-600 dark:text-green-400">
-              분석이 완료되었습니다. 리포트 페이지로 이동합니다...
+            <p className="text-sm font-medium text-emerald-600 flex items-center justify-center gap-2">
+              <Check className="w-4 h-4" />
+              Analysis complete. Redirecting to report...
             </p>
           ) : (
-            <p className="text-sm text-muted-foreground">
-              분석이 완료되면 자동으로 리포트 페이지로 이동합니다.
+            <p className="text-sm text-slate-400">
+              You will be automatically redirected once the analysis is complete.
             </p>
           )}
-        </div>
+        </motion.div>
       </div>
     </MainLayout>
   );

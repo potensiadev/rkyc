@@ -3,8 +3,13 @@ import { useNavigate } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { SignalCard } from "@/components/signals/SignalCard";
 import { Signal, SignalStatus } from "@/types/signal";
-import { Building2, Loader2 } from "lucide-react";
+import { Building2, Loader2, Info } from "lucide-react";
 import { useSignals } from "@/hooks/useApi";
+import {
+  DynamicBackground,
+  StatusBadge
+} from "@/components/premium";
+import { motion } from "framer-motion";
 
 export default function DirectSignalPage() {
   const navigate = useNavigate();
@@ -42,81 +47,120 @@ export default function DirectSignalPage() {
     { id: "resolved", label: "완료", count: counts.resolved },
   ];
 
+  if (isLoading) {
+    return (
+      <MainLayout>
+        <DynamicBackground />
+        <div className="flex justify-center items-center h-[calc(100vh-100px)]">
+          <Loader2 className="w-10 h-10 animate-spin text-indigo-500" />
+        </div>
+      </MainLayout>
+    );
+  }
+
   return (
     <MainLayout>
-      <div className="max-w-6xl">
+      <DynamicBackground />
+      <div className="max-w-6xl mx-auto pb-20 relative z-10">
         {/* Page header */}
-        <div className="mb-6">
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-8 pt-8"
+        >
           <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-lg bg-signal-direct/10 flex items-center justify-center">
-              <Building2 className="w-5 h-5 text-signal-direct" />
+            <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center shadow-sm">
+              <Building2 className="w-6 h-6 text-indigo-600" />
             </div>
             <div>
-              <h1 className="text-2xl font-semibold text-foreground">직접 시그널</h1>
-              <p className="text-muted-foreground text-sm">
-                특정 법인과 직접적으로 관련된 시그널을 검토합니다.
+              <div className="flex items-center gap-2 mb-1">
+                <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Direct Signals</h1>
+                <StatusBadge variant="neutral" className="bg-white/50 backdrop-blur-sm">Live</StatusBadge>
+              </div>
+              <p className="text-slate-500 font-medium">
+                Analysis based on internal documents, disclosures, and direct transaction events.
               </p>
             </div>
           </div>
-        </div>
+        </motion.div>
 
-        {/* Signal type explanation banner */}
-        <div className="bg-muted/50 rounded-lg border border-border px-4 py-3 mb-6">
-          <p className="text-sm text-muted-foreground">
-            기업 내부 문서, 공시, 거래 등 직접 관련 이벤트 기준 시그널입니다.
+        {/* Info Banner */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="bg-indigo-50/50 backdrop-blur-md rounded-xl border border-indigo-100 px-5 py-4 mb-8 flex items-start gap-3"
+        >
+          <Info className="w-5 h-5 text-indigo-500 mt-0.5 flex-shrink-0" />
+          <p className="text-sm text-indigo-900 leading-relaxed font-medium">
+            Direct signals are detected directly from primary sources such as electronic disclosures (DART), internal credit reports, and news feeds. High reliability.
           </p>
-        </div>
+        </motion.div>
 
         {/* Status filters */}
-        <div className="flex items-center justify-between gap-4 mb-6">
-          <div className="flex items-center gap-1 bg-secondary rounded-lg p-1">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.2 }}
+          className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6"
+        >
+          <div className="flex items-center gap-1 bg-white/50 backdrop-blur-sm rounded-lg p-1.5 border border-slate-200/60 shadow-sm w-full sm:w-auto overflow-x-auto">
             {statusFilters.map((filter) => (
               <button
                 key={filter.id}
                 onClick={() => setActiveStatus(filter.id as SignalStatus | "all")}
                 className={`
-                  px-4 py-2 rounded-md text-sm font-medium transition-colors
+                  px-4 py-2 rounded-md text-sm font-bold transition-all whitespace-nowrap
                   ${activeStatus === filter.id
-                    ? "bg-card text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
+                    ? "bg-white text-indigo-600 shadow-md ring-1 ring-slate-100"
+                    : "text-slate-400 hover:text-slate-600 hover:bg-slate-50"
                   }
                 `}
               >
                 {filter.label}
-                <span className={`ml-2 ${activeStatus === filter.id ? "text-signal-direct" : "text-muted-foreground"}`}>
+                <span className={`ml-2 text-xs opacity-80 ${activeStatus === filter.id ? "text-indigo-400" : "text-slate-400"}`}>
                   {filter.count}
                 </span>
               </button>
             ))}
           </div>
 
-          <select className="text-sm border border-input rounded-md px-3 py-2 bg-card text-foreground focus:outline-none focus:ring-1 focus:ring-ring">
-            <option value="recent">최신순</option>
-            <option value="corporation">기업명순</option>
+          <select className="text-sm border border-slate-200 rounded-lg px-4 py-2.5 bg-white/80 text-slate-700 font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none w-full sm:w-auto cursor-pointer">
+            <option value="recent">Sort by: Recent</option>
+            <option value="corporation">Sort by: Company</option>
           </select>
-        </div>
+        </motion.div>
 
         {/* Signal list */}
-        {isLoading ? (
-          <div className="flex justify-center items-center py-20">
-            <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {filteredSignals.map((signal) => (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.3 }}
+          className="space-y-3"
+        >
+          {filteredSignals.map((signal, index) => (
+            <motion.div
+              key={signal.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 + (index * 0.05) }}
+            >
               <SignalCard
-                key={signal.id}
                 signal={signal}
                 onViewDetail={handleViewDetail}
               />
-            ))}
-          </div>
-        )}
+            </motion.div>
+          ))}
+        </motion.div>
 
         {/* Empty state */}
-        {!isLoading && filteredSignals.length === 0 && (
-          <div className="text-center py-16 bg-card rounded-lg border border-border">
-            <p className="text-muted-foreground">선택한 조건에 해당하는 직접 시그널이 없습니다.</p>
+        {filteredSignals.length === 0 && (
+          <div className="text-center py-20">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-slate-50 mb-4">
+              <Building2 className="w-8 h-8 text-slate-300" />
+            </div>
+            <h3 className="text-lg font-bold text-slate-700 mb-1">No Direct Signals Found</h3>
+            <p className="text-slate-400">There are no signals matching your current filters.</p>
           </div>
         )}
       </div>

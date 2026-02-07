@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
-import { Search, Building2, ChevronRight, AlertCircle } from "lucide-react";
+import { Search, Building2, ChevronRight, AlertCircle, Loader2, BarChart3, TrendingUp } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
@@ -8,6 +8,8 @@ import { useQueries } from "@tanstack/react-query";
 import { useCorporations, useSignals } from "@/hooks/useApi";
 import { getCorporationSnapshot, ApiSnapshot } from "@/lib/api";
 import { buildSignalCountsByCorpId, getCorpSignalCountsFromMap } from "@/data/signals";
+import { DynamicBackground, GlassCard, StatusBadge, Tag } from "@/components/premium";
+import { motion } from "framer-motion";
 
 // 금액 포맷팅 함수 (억원 단위)
 function formatLoanBalance(amountKrw: number | undefined | null): string {
@@ -21,9 +23,9 @@ function formatLoanBalance(amountKrw: number | undefined | null): string {
 }
 
 const signalTypeConfig = {
-  direct: { label: "직접", className: "bg-primary/10 text-primary" },
-  industry: { label: "산업", className: "bg-accent text-accent-foreground" },
-  environment: { label: "환경", className: "bg-muted text-muted-foreground" },
+  direct: { label: "Direct", className: "bg-indigo-50 text-indigo-600 border-indigo-100" },
+  industry: { label: "Industry", className: "bg-cyan-50 text-cyan-600 border-cyan-100" },
+  environment: { label: "Macro", className: "bg-slate-50 text-slate-500 border-slate-100" },
 };
 
 export default function CorporationSearch() {
@@ -40,8 +42,8 @@ export default function CorporationSearch() {
       queryKey: ["snapshot", corp.id],
       queryFn: () => getCorporationSnapshot(corp.id),
       enabled: corporations.length > 0,
-      staleTime: 5 * 60 * 1000, // 5분
-      retry: false, // 스냅샷 없는 경우 재시도 안함
+      staleTime: 5 * 60 * 1000,
+      retry: false,
     })),
   });
 
@@ -60,7 +62,7 @@ export default function CorporationSearch() {
     return map;
   }, [snapshotQueries, corporations]);
 
-  // Precompute signal counts map once when signals change - O(n) build, O(1) lookup
+  // Precompute signal counts map once when signals change
   const signalCountsMap = useMemo(
     () => buildSignalCountsByCorpId(signals),
     [signals]
@@ -72,26 +74,23 @@ export default function CorporationSearch() {
     const query = searchQuery.toLowerCase();
     return corporations.filter(
       c => c.name.toLowerCase().includes(query) ||
-           c.businessNumber.includes(query)
+        c.businessNumber.includes(query)
     );
   }, [corporations, searchQuery]);
 
   // Click company -> go directly to report
   const handleCorporationClick = (corporateId: string) => {
-    navigate(`/corporates/${corporateId}`);
+    navigate(`/corporations/${corporateId}`);
   };
 
   // 로딩 상태
   if (isLoading) {
     return (
       <MainLayout>
-        <div className="max-w-6xl">
-          <div className="flex items-center justify-center py-20">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-              <p className="text-muted-foreground">기업 데이터를 불러오는 중...</p>
-            </div>
-          </div>
+        <DynamicBackground />
+        <div className="flex flex-col items-center justify-center min-h-[calc(100vh-100px)]">
+          <Loader2 className="w-10 h-10 animate-spin text-indigo-500 mb-4" />
+          <p className="text-slate-500 font-medium animate-pulse">Scanning Corporate Registry...</p>
         </div>
       </MainLayout>
     );
@@ -101,11 +100,12 @@ export default function CorporationSearch() {
   if (error) {
     return (
       <MainLayout>
-        <div className="max-w-6xl">
-          <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-6 text-center">
-            <AlertCircle className="w-8 h-8 text-destructive mx-auto mb-2" />
-            <p className="text-destructive font-medium">데이터 로드 중 오류가 발생했습니다</p>
-          </div>
+        <div className="max-w-6xl mx-auto pt-20">
+          <GlassCard className="p-8 text-center border-rose-200 bg-rose-50/50">
+            <AlertCircle className="w-10 h-10 text-rose-500 mx-auto mb-3" />
+            <h3 className="text-lg font-bold text-rose-700">Failed to load data</h3>
+            <p className="text-rose-500">Please try again later.</p>
+          </GlassCard>
         </div>
       </MainLayout>
     );
@@ -113,110 +113,123 @@ export default function CorporationSearch() {
 
   return (
     <MainLayout>
-      <div className="max-w-6xl">
-        <div className="mb-6">
-          <h1 className="text-2xl font-semibold text-foreground">기업 검색</h1>
-          <p className="text-muted-foreground mt-1">
-            기업명 또는 사업자등록번호로 기업을 검색하여 보고서를 확인할 수 있습니다.
+      <DynamicBackground />
+      <div className="max-w-6xl mx-auto pb-20 relative z-10 space-y-8">
+        {/* Header */}
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-center pt-8 pb-4"
+        >
+          <h1 className="text-4xl font-bold text-slate-900 tracking-tight mb-3">Corporate Intelligence</h1>
+          <p className="text-slate-500 text-lg max-w-2xl mx-auto">
+            Access comprehensive profiles, real-time risk signals, and financial exposure analysis for {corporations.length} distinct entities.
           </p>
-        </div>
+        </motion.div>
 
-        <div className="bg-card rounded-lg border border-border p-6 mb-6">
-          <div className="flex gap-4">
+        {/* Search Bar */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="sticky top-4 z-20"
+        >
+          <GlassCard className="p-2 flex gap-2 shadow-2xl shadow-indigo-500/10 ring-1 ring-indigo-500/20 backdrop-blur-xl bg-white/80">
             <div className="relative flex-1">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-indigo-400" />
               <Input
                 type="text"
-                placeholder="기업명 또는 사업자등록번호를 입력하세요"
-                className="pl-12 h-12 text-base"
+                placeholder="Search by company name or business ID..."
+                className="pl-12 h-12 text-base border-0 bg-transparent focus-visible:ring-0 placeholder:text-slate-400"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
-            <Button className="h-12 px-8">검색</Button>
-          </div>
-        </div>
+            <Button className="h-12 px-8 bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/30 rounded-xl transition-all hover:scale-105 active:scale-95">
+              Search
+            </Button>
+          </GlassCard>
+        </motion.div>
 
-        <div className="bg-card rounded-lg border border-border overflow-hidden">
-          <div className="px-6 py-4 border-b border-border">
-            <h2 className="font-medium text-foreground">분석 대상 기업 목록</h2>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              시그널이 감지된 기업 {filteredCorporations.length}개
-            </p>
-          </div>
+        {/* Grid List */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.2 }}
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"
+        >
+          {filteredCorporations.map((corp, idx) => {
+            const signalCounts = getCorpSignalCountsFromMap(signalCountsMap, corp.id);
+            const loanBalance = loanBalanceMap.get(corp.id);
 
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border bg-muted/30">
-                <th className="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">기업명</th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">업종</th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">최근 시그널</th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">시그널 유형</th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">여신 잔액</th>
-                <th className="w-12"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredCorporations.map((corp) => {
-                const signalCounts = getCorpSignalCountsFromMap(signalCountsMap, corp.id);
-                return (
-                  <tr
-                    key={corp.id}
-                    onClick={() => handleCorporationClick(corp.id)}
-                    className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors cursor-pointer group"
-                  >
-                    <td className="px-6 py-4">
+            return (
+              <motion.div
+                key={corp.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 + (idx * 0.05) }}
+                onClick={() => handleCorporationClick(corp.id)}
+              >
+                <GlassCard className="h-full cursor-pointer hover:bg-white transition-all duration-300 hover:shadow-xl hover:shadow-indigo-500/10 group border-l-4 border-l-transparent hover:border-l-indigo-500">
+                  <div className="p-5 flex flex-col h-full">
+                    {/* Header */}
+                    <div className="flex justify-between items-start mb-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center">
-                          <Building2 className="w-4 h-4 text-primary" />
+                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-slate-50 to-slate-100 border border-slate-200 flex items-center justify-center shadow-inner group-hover:from-indigo-50 group-hover:to-white group-hover:border-indigo-100 transition-colors">
+                          <Building2 className="w-6 h-6 text-slate-400 group-hover:text-indigo-500 transition-colors" />
                         </div>
-                        <span className="font-medium text-foreground group-hover:text-primary">{corp.name}</span>
+                        <div>
+                          <h3 className="font-bold text-slate-800 text-lg leading-tight group-hover:text-indigo-700 transition-colors">{corp.name}</h3>
+                          <p className="text-xs text-slate-400 mt-0.5">{corp.industry}</p>
+                        </div>
                       </div>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-muted-foreground">{corp.industry}</td>
-                    <td className="px-6 py-4">
-                      {signalCounts.total > 0 && (
-                        <span className="inline-flex items-center justify-center min-w-[24px] h-6 px-2 rounded-full bg-signal-new/10 text-signal-new text-xs font-medium">
-                          {signalCounts.total}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-1.5">
-                        {/* 시그널 카운트에서 signal types 계산 */}
-                        {signalCounts.direct > 0 && (
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${signalTypeConfig.direct.className}`}>
-                            {signalTypeConfig.direct.label}
-                          </span>
-                        )}
-                        {signalCounts.industry > 0 && (
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${signalTypeConfig.industry.className}`}>
-                            {signalTypeConfig.industry.label}
-                          </span>
-                        )}
-                        {signalCounts.environment > 0 && (
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${signalTypeConfig.environment.className}`}>
-                            {signalTypeConfig.environment.label}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-muted-foreground">
-                      {formatLoanBalance(loanBalanceMap.get(corp.id))}
-                    </td>
-                    <td className="px-6 py-4">
-                      <ChevronRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                    </div>
 
-        <p className="text-xs text-muted-foreground mt-4 text-center">
-          기업 클릭 시 해당 기업의 시그널 분석 보고서를 확인할 수 있습니다.
-        </p>
+                    {/* Loan Info */}
+                    <div className="mb-4 p-3 bg-slate-50 rounded-xl border border-slate-100 group-hover:bg-indigo-50/30 group-hover:border-indigo-100/50 transition-colors">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Exposure</span>
+                        <span className="font-mono font-bold text-slate-700">{formatLoanBalance(loanBalance)}</span>
+                      </div>
+                    </div>
+
+                    {/* Footer (Signals) */}
+                    <div className="mt-auto pt-3 border-t border-slate-100 flex items-center justify-between">
+                      <div className="flex gap-1.5 flex-wrap">
+                        {signalCounts.total === 0 ? (
+                          <span className="text-xs text-slate-400 italic">No Active Signals</span>
+                        ) : (
+                          <>
+                            {signalCounts.direct > 0 && (
+                              <Tag className="text-[10px] py-0.5 h-5 bg-indigo-50 text-indigo-600 border-indigo-100">
+                                Direct {signalCounts.direct}
+                              </Tag>
+                            )}
+                            {signalCounts.industry > 0 && (
+                              <Tag className="text-[10px] py-0.5 h-5 bg-cyan-50 text-cyan-600 border-cyan-100">
+                                Ind. {signalCounts.industry}
+                              </Tag>
+                            )}
+                          </>
+                        )}
+                      </div>
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-slate-300 group-hover:text-indigo-500 group-hover:bg-indigo-50 transition-all">
+                        <ChevronRight className="w-5 h-5" />
+                      </div>
+                    </div>
+                  </div>
+                </GlassCard>
+              </motion.div>
+            );
+          })}
+        </motion.div>
+
+        {filteredCorporations.length === 0 && (
+          <div className="text-center py-20">
+            <p className="text-slate-400 text-lg">No corporations found matching "{searchQuery}"</p>
+          </div>
+        )}
+
       </div>
     </MainLayout>
   );
