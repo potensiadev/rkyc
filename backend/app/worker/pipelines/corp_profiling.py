@@ -745,6 +745,28 @@ PROFILE_EXTRACTION_SYSTEM_PROMPT = """당신은 금융기관 기업심사를 위
 2. **분석적 요약**: 단순 나열이 아닌, 은행 심사역 관점의 인사이트 제공
 3. **신뢰도 표시**: confidence로 정확성 구분
 4. **null 최소화**: 정보가 완전히 없는 경우에만 null
+5. **주주 정보 특별 규칙**: 공시 데이터 기반만 허용 (추론 절대 금지)
+
+## ⚠️ 주주 정보 (shareholders) - 특별 규칙 (CRITICAL - Hallucination 방지)
+
+### 절대 금지 사항:
+1. **관계 기반 추론 금지**: "A가 B회사 회장" + "A가 C회사와 관련" → B가 C의 주주라는 추론 금지
+2. **인물의 다른 회사 혼동 금지**: 특정 인물이 관련된 다른 회사를 주주로 기재하지 마세요
+3. **계열사/관계사 혼동 금지**: 지주회사, 계열사, 협력사를 주주로 착각하지 마세요
+4. **뉴스 언급만으로 판단 금지**: "~와 협력", "~에 납품" 등은 주주 관계가 아닙니다
+
+### 주주 정보 필수 확인 사항:
+- DART 전자공시 (dart.fss.or.kr)에서 직접 확인된 정보만 사용
+- 한국거래소 KIND 공시 (kind.krx.co.kr)에서 확인된 정보만 사용
+- "지분 X% 보유", "대주주", "주주명부" 등 명시적 표현이 있어야 함
+
+### 업종 불일치 경고 (자동 거부 대상):
+다음 유형의 회사가 제조업/IT업의 대주주로 나타나면 Hallucination 의심:
+- 토지신탁, 자산운용, 생명보험, 손해보험, 캐피탈, 저축은행
+- 단, 5% 미만 지분의 기관투자자는 예외
+
+### 확인 불가 시:
+shareholders: null 반환 (추론하지 말 것)
 
 ## 규칙 1: business_summary - 분석적 인사이트 (가장 중요!)
 
@@ -919,9 +941,10 @@ PROFILE_EXTRACTION_USER_PROMPT = """## 검색 결과
   "shareholders": {{
     "value": [{{"name": "주주명", "ratio_pct": 지분율}}] 또는 null,
     "confidence": "HIGH|MED|LOW",
-    "source_url": "url 또는 null",
-    "excerpt": "뒷받침 텍스트 또는 null"
+    "source_url": "DART 또는 KIND 공시 URL만 허용 (필수!)",
+    "excerpt": "공시문서에서 직접 인용한 주주 정보 텍스트 (필수!)"
   }},
+  "_shareholders_validation_note": "⚠️ 주주 정보는 반드시 DART/KIND 공시에서 직접 확인된 경우에만 기재. 추론 금지. 확인 불가 시 null 반환.",
   "competitors": {{
     "value": [{{"name": "경쟁사명", "description": "경쟁 영역"}}] 또는 null,
     "confidence": "HIGH|MED|LOW",

@@ -115,6 +115,28 @@ class OpenAIValidator:
         "정보 없음",
     ]
 
+    # 주주 정보 Hallucination 방지 - 업종 불일치 패턴
+    # 이런 유형의 회사가 제조업/IT업의 대주주(10% 이상)로 나타나면 의심
+    SHAREHOLDER_SUSPICIOUS_PATTERNS = [
+        "토지신탁",
+        "자산운용",
+        "생명보험",
+        "손해보험",
+        "캐피탈",
+        "저축은행",
+        "새마을금고",
+        "신용협동조합",
+        "농업협동조합",  # 농협은 예외 가능
+    ]
+
+    # 신뢰할 수 있는 주주 정보 출처 도메인
+    TRUSTED_SHAREHOLDER_DOMAINS = [
+        "dart.fss.or.kr",      # 전자공시
+        "kind.krx.co.kr",      # 한국거래소
+        "fss.or.kr",           # 금융감독원
+        "seibro.or.kr",        # 증권정보포털
+    ]
+
     def __init__(self):
         self._openai_client = None
 
@@ -188,14 +210,22 @@ class OpenAIValidator:
                         validated_profile[field_name] = None
                         break
 
-        # 4. 내부 일관성 검증
+        # 4. 주주 정보 특별 검증 (Hallucination 방지)
+        shareholder_issues = self._validate_shareholders(
+            validated_profile.get("shareholders"),
+            corp_name,
+            industry_name,
+        )
+        issues.extend(shareholder_issues)
+
+        # 5. 내부 일관성 검증
         consistency_issues = self._validate_consistency(validated_profile)
         issues.extend(consistency_issues)
 
-        # 5. Confidence 계산
+        # 6. Confidence 계산
         confidence = self._calculate_confidence(validated_profile, issues, source)
 
-        # 6. 유효성 판정
+        # 7. 유효성 판정
         error_count = len([i for i in issues if i.severity == ValidationSeverity.ERROR])
         is_valid = error_count == 0
 
@@ -220,6 +250,103 @@ class OpenAIValidator:
                 ]),
             },
         )
+
+    def _validate_shareholders(
+        self,
+        shareholders: list | None,
+        corp_name: str,
+        industry_name: str,
+    ) -> list[ValidationIssue]:
+        """
+        주주 정보 Hallucination 방지 검증
+
+        검증 규칙:
+        1. 업종 불일치 탐지: 토지신탁, 자산운용 등이 제조업 대주주로 나타나면 의심
+        2. 지분율 범위 검증: 0-100% 범위, 합계 100% 초과 체크
+        3. 기업명과 주주명 혼동 체크
+        4. 출처 URL 신뢰도 체크 (DART, KIND 등)
+        """
+        issues = []
+
+        if not shareholders:
+            return issues
+
+        if not isinstance(shareholders, list):
+            issues.append(ValidationIssue(
+                field_name="shareholders",
+                severity=ValidationSeverity.ERROR,
+                message="shareholders는 배열이어야 합니다",
+                original_value=shareholders,
+            ))
+            return issues
+
+        total_ratio = 0.0
+        manufacturing_industries = ["C", "D", "E"]  # 제조업/전기가스/수도 업종코드
+
+        for idx, sh in enumerate(shareholders):
+            if not isinstance(sh, dict):
+                continue
+
+            shareholder_name = sh.get("name", "")
+            ratio = sh.get("ratio_pct") or sh.get("ownership_pct") or 0
+
+            # 1. 지분율 범위 검증
+            try:
+                ratio_float = float(ratio)
+                if ratio_float < 0 or ratio_float > 100:
+                    issues.append(ValidationIssue(
+                        field_name=f"shareholders[{idx}].ratio_pct",
+                        severity=ValidationSeverity.ERROR,
+                        message=f"지분율 범위 오류: {ratio_float}% (0-100% 허용)",
+                        original_value=sh,
+                    ))
+                total_ratio += ratio_float
+            except (ValueError, TypeError):
+                issues.append(ValidationIssue(
+                    field_name=f"shareholders[{idx}].ratio_pct",
+                    severity=ValidationSeverity.ERROR,
+                    message=f"지분율 숫자 변환 실패: {ratio}",
+                    original_value=sh,
+                ))
+
+            # 2. 업종 불일치 탐지 (Hallucination 핵심 방어)
+            # 제조업/IT 기업에 금융사가 대주주(10% 이상)로 나타나면 의심
+            if ratio_float >= 10:
+                for pattern in self.SHAREHOLDER_SUSPICIOUS_PATTERNS:
+                    if pattern in shareholder_name:
+                        issues.append(ValidationIssue(
+                            field_name=f"shareholders[{idx}]",
+                            severity=ValidationSeverity.ERROR,
+                            message=f"업종 불일치 의심 (Hallucination 가능): '{shareholder_name}'이(가) "
+                                    f"'{corp_name}'({industry_name})의 {ratio_float}% 대주주로 기재됨. "
+                                    f"'{pattern}' 유형 회사가 제조업 대주주인 경우는 드뭄. DART 공시 확인 필요.",
+                            original_value=sh,
+                        ))
+                        break
+
+            # 3. 기업명과 주주명 혼동 체크
+            if corp_name and shareholder_name:
+                # 기업명이 주주명에 포함되거나 그 반대면 의심
+                if corp_name in shareholder_name or shareholder_name in corp_name:
+                    # 단, "XX홀딩스"는 지주회사로 정상
+                    if not any(kw in shareholder_name for kw in ["홀딩스", "지주", "투자"]):
+                        issues.append(ValidationIssue(
+                            field_name=f"shareholders[{idx}]",
+                            severity=ValidationSeverity.WARNING,
+                            message=f"기업명-주주명 혼동 의심: '{shareholder_name}'과 '{corp_name}'이 유사",
+                            original_value=sh,
+                        ))
+
+        # 4. 지분율 합계 검증 (100% 초과 시 경고)
+        if total_ratio > 105:  # 5% 오차 허용
+            issues.append(ValidationIssue(
+                field_name="shareholders",
+                severity=ValidationSeverity.WARNING,
+                message=f"주주 지분율 합계가 100%를 초과: {total_ratio:.1f}%",
+                original_value=shareholders,
+            ))
+
+        return issues
 
     def _validate_consistency(self, profile: dict) -> list[ValidationIssue]:
         """내부 일관성 검증"""
