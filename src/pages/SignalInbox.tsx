@@ -257,7 +257,7 @@ export default function SignalInbox() {
                 signals={group.signals}
                 loanInsight={insightMap.get(group.corporationId)}
                 onSignalClick={handleRowClick}
-                onCorporationClick={(id) => navigate(`/corporations/${id}`)}
+                onCorporationClick={(id) => navigate(`/corporations/${id}`, { state: { corpName: group.corporationName } })}
               />
             </motion.div>
           ))}

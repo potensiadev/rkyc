@@ -1,4 +1,4 @@
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { DynamicBackground, GlassCard, StatusBadge, Tag, Sparkline } from "@/components/premium";
 import { MainLayout } from "@/components/layout/MainLayout";
 // Mock data imports removed
@@ -37,7 +37,10 @@ import {
   Share2,
   Download,
   CornerDownRight,
-  ChevronRight
+  ChevronRight,
+  Brain,
+  CheckCircle2,
+  BrainCircuit
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -225,6 +228,15 @@ const TOC_ITEMS = [
 export default function CorporateDetailPage() {
   const { corpId } = useParams();
   const navigate = useNavigate();
+  // Navigation state로부터 이름 전달받기 (목록 페이지 등에서 넘겨줌)
+  const location = useLocation();
+  const stateCorpName = location.state?.corpName;
+  const searchParams = new URLSearchParams(location.search);
+  const paramCorpName = searchParams.get("name");
+
+  // 로딩 중 표시할 이름 (없으면 ID)
+  const displayCorpName = stateCorpName || paramCorpName || corpId;
+
   const queryClient = useQueryClient();
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [refreshJobId, setRefreshJobId] = useState<string | null>(null);
@@ -239,7 +251,8 @@ export default function CorporateDetailPage() {
   // P1-3 Fix: Add error handling for profileDetail
   const { data: profileDetail, error: profileDetailError, refetch: refetchProfileDetail } = useCorpProfileDetail(corpId || "");
   // Loan Insight (사전 생성된 AI 분석)
-  const { data: loanInsight, isLoading: isLoadingLoanInsight, error: loanInsightError } = useLoanInsight(corpId || "");
+  const { data: loanInsightData, isLoading: isLoadingLoanInsight, error: loanInsightError } = useLoanInsight(corpId || "");
+  const loanInsight = loanInsightData?.insight || null;
   const refreshProfile = useRefreshCorpProfile();
   const [showDetailedView, setShowDetailedView] = useState(false);
 
@@ -356,9 +369,9 @@ export default function CorporateDetailPage() {
                 </div>
               </div>
               <div className="space-y-2">
-                <h2 className="text-3xl font-bold text-slate-900 tracking-tight">AI 분석 진행 중</h2>
+                <h2 className="text-3xl font-bold text-slate-900 tracking-tight">rKYC 엔진 분석중</h2>
                 <p className="text-slate-500 text-lg font-medium">
-                  <span className="font-semibold text-indigo-600">{corpId}</span>의 데이터를 종합 분석하고 있습니다.
+                  <span className="font-semibold text-indigo-600">{displayCorpName}</span>의 데이터를 심층 분석하고 있습니다.
                 </p>
               </div>
             </div>
@@ -457,7 +470,7 @@ export default function CorporateDetailPage() {
               <RefreshCw className={`w-3.5 h-3.5 ${(refreshProfile.isPending || refreshStatus === 'running') ? 'animate-spin' : ''}`} />
             </Button>
 
-            <Button variant="outline" size="sm" className="h-8 w-8 p-0 rounded-full border-slate-200 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50"><Share2 className="w-3.5 h-3.5" /></Button>
+
             <Button variant="outline" size="sm"
               className="h-8 w-8 p-0 rounded-full border-slate-200 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50"
               onClick={() => setShowPreviewModal(true)}
@@ -465,9 +478,6 @@ export default function CorporateDetailPage() {
               onFocus={prefetchReport}
             >
               <Download className="w-3.5 h-3.5" />
-            </Button>
-            <Button size="sm" className="h-8 text-xs bg-slate-900 hover:bg-slate-800 text-white shadow-lg shadow-slate-200 rounded-full px-4 ml-2">
-              Review
             </Button>
           </div>
         </div>
@@ -484,20 +494,20 @@ export default function CorporateDetailPage() {
               <GlassCard className="md:col-span-2 p-8" id="summary-card">
                 <div className="flex justify-between items-start mb-6">
                   <h3 className="text-lg font-bold text-slate-900">Executive Summary</h3>
-                  {loanInsight?.insight && (
+                  {loanInsight && (
                     <StatusBadge variant={
-                      loanInsight.insight.stance.level === 'CAUTION' ? 'danger' :
-                        loanInsight.insight.stance.level === 'MONITORING' ? 'brand' :
-                          loanInsight.insight.stance.level === 'STABLE' ? 'success' :
-                            loanInsight.insight.stance.level === 'POSITIVE' ? 'success' : 'neutral'
+                      loanInsight.stance.level === 'CAUTION' ? 'danger' :
+                        loanInsight.stance.level === 'MONITORING' ? 'brand' :
+                          loanInsight.stance.level === 'STABLE' ? 'success' :
+                            loanInsight.stance.level === 'POSITIVE' ? 'success' : 'neutral'
                     }>
-                      {loanInsight.insight.stance.label} Outlook
+                      {loanInsight.stance.label} Outlook
                     </StatusBadge>
                   )}
                 </div>
                 <div className="text-[14px] leading-relaxed text-slate-600 mb-6 bg-slate-50/50 p-4 rounded-xl border border-slate-100">
-                  {loanInsight?.insight?.executive_summary ? (
-                    <p>{loanInsight.insight.executive_summary}</p>
+                  {loanInsight?.executive_summary ? (
+                    <p>{loanInsight.executive_summary}</p>
                   ) : (
                     <p>
                       <strong className="text-slate-900 font-semibold text-foreground">{corporation.name}</strong>은(는) {corporation.industry} 분야에서
@@ -530,12 +540,39 @@ export default function CorporateDetailPage() {
                 <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-400 via-amber-400 to-rose-400 opacity-20" />
                 <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">AI Risk Score</h3>
                 <div className="relative mb-2">
-                  <ResponsiveContainer width={160} height={80}>
+                  <ResponsiveContainer width={200} height={100}>
                     <PieChart>
-                      <Pie data={[{ value: 1 }]} cx="50%" cy="100%" startAngle={180} endAngle={0} innerRadius={60} outerRadius={80} dataKey="value" stroke="none" isAnimationActive={false}>
+                      <Pie
+                        data={[{ value: 1 }]}
+                        cx="50%"
+                        cy="100%"
+                        startAngle={180}
+                        endAngle={0}
+                        innerRadius={62}
+                        outerRadius={78}
+                        dataKey="value"
+                        stroke="none"
+                        isAnimationActive={false}
+                        cornerRadius={10}
+                      >
                         <Cell fill="#f1f5f9" />
                       </Pie>
-                      <Pie data={[{ value: riskScore }, { value: 100 - riskScore }]} cx="50%" cy="100%" startAngle={180} endAngle={0} innerRadius={60} outerRadius={80} dataKey="value" cornerRadius={12} stroke="none">
+                      <Pie
+                        data={[{ value: riskScore }, { value: 100 - riskScore }]}
+                        cx="50%"
+                        cy="100%"
+                        startAngle={180}
+                        endAngle={0}
+                        innerRadius={60}
+                        outerRadius={80}
+                        dataKey="value"
+                        cornerRadius={12}
+                        stroke="none"
+                        isAnimationActive={true}
+                        animationDuration={1500}
+                        animationEasing="ease-out"
+                        animationBegin={300}
+                      >
                         <Cell fill={riskScore > 70 ? "#F43F5E" : riskScore > 40 ? "#f59e0b" : "#10b981"} />
                         <Cell fill="transparent" />
                       </Pie>
@@ -713,81 +750,228 @@ export default function CorporateDetailPage() {
                   </div>
                 </div>
 
-                {/* Deep Analysis Grid (Macro, Competitors, Shareholders) */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-8 mt-6">
+                  {/* AI Risk Opinion (Loan Insight) - Full Width */}
+                  <GlassCard id="loan-insight" className="overflow-hidden border-indigo-100 shadow-xl shadow-indigo-50/40">
+                    {/* Header Section */}
+                    <div className="px-8 py-6 border-b border-slate-100 bg-white/60 backdrop-blur-sm flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-slate-50 text-slate-700 border border-slate-100">
+                          <Brain className="w-4 h-4" />
+                        </div>
+                        <h2 className="text-lg font-bold text-slate-900 tracking-tight">AI Analysis</h2>
+                        <div className="flex items-center gap-2">
+                          <span className="w-1 h-1 rounded-full bg-slate-300" />
+                          <span className="text-xs text-slate-400 font-medium">Risk/Opportunity</span>
+                        </div>
+                      </div>
+                      {loanInsight && (
+                        <div className={`px-4 py-2 rounded-xl border flex flex-col items-center justify-center min-w-[100px] ${loanInsight.stance.level === 'CAUTION' ? 'bg-rose-50 border-rose-100' :
+                          loanInsight.stance.level === 'MONITORING' ? 'bg-amber-50 border-amber-100' :
+                            loanInsight.stance.level === 'POSITIVE' ? 'bg-emerald-50 border-emerald-100' :
+                              'bg-slate-50 border-slate-100'
+                          }`}>
+                          <span className={`text-[10px] uppercase font-bold tracking-wider mb-0.5 ${loanInsight.stance.level === 'CAUTION' ? 'text-rose-400' :
+                            loanInsight.stance.level === 'MONITORING' ? 'text-amber-400' :
+                              loanInsight.stance.level === 'POSITIVE' ? 'text-emerald-400' :
+                                'text-slate-400'
+                            }`}>Outlook</span>
+                          <span className={`text-sm font-bold ${loanInsight.stance.level === 'CAUTION' ? 'text-rose-700' :
+                            loanInsight.stance.level === 'MONITORING' ? 'text-amber-700' :
+                              loanInsight.stance.level === 'POSITIVE' ? 'text-emerald-700' :
+                                'text-slate-700'
+                            }`}>{loanInsight.stance.label}</span>
+                        </div>
+                      )}
+                    </div>
 
-                  {/* Competitors & Macro */}
-                  <div className="space-y-6">
-                    <div className="bg-slate-50/50 rounded-2xl p-6 border border-slate-100">
-                      <h5 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">Competitors</h5>
-                      <div className="space-y-3">
-                        {profile?.competitors?.slice(0, 3).map(c => (
-                          <div key={c.name} className="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
-                            <div>
-                              <div className="text-xs font-bold text-slate-800">{c.name}</div>
-                            </div>
+                    <div className="p-8 space-y-8 bg-white/40">
+
+                      {/* Main Analysis Container */}
+                      <div className="bg-slate-50 rounded-2xl border border-slate-200 p-6 space-y-8">
+                        {/* Risk & Opportunity Grid */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 relative">
+                          {/* Vertical Divider for Desktop */}
+                          <div className="hidden md:block absolute top-0 bottom-0 left-1/2 w-px bg-slate-200 -ml-px"></div>
+
+                          {/* Risks */}
+                          <div className="bg-rose-50/0 rounded-xl relative">
+                            <h4 className="flex items-center gap-2.5 text-base font-bold text-rose-700 mb-5">
+                              <div className="p-1.5 bg-rose-100 rounded-lg">
+                                <AlertTriangle className="w-4 h-4 text-rose-600" />
+                              </div>
+                              핵심 리스크 요인
+                            </h4>
+                            <ul className="space-y-4">
+                              {loanInsight?.key_risks?.map((risk: string, i: number) => (
+                                <li key={i} className="flex gap-3 text-[14px] text-slate-700 leading-relaxed group">
+                                  <span className="mt-2 w-1.5 h-1.5 rounded-full bg-rose-500 shadow-sm shadow-rose-200 shrink-0 group-hover:scale-125 transition-transform" />
+                                  <span className="group-hover:text-slate-900 transition-colors">{risk}</span>
+                                </li>
+                              )) || <li className="text-sm text-slate-400 italic pl-4">식별된 주요 리스크가 없습니다.</li>}
+                            </ul>
                           </div>
-                        ))}
-                        {(!profile?.competitors || profile.competitors.length === 0) && (
-                          <div className="text-xs text-slate-400 italic">No Data</div>
+
+                          {/* Opportunities */}
+                          <div className="bg-emerald-50/0 rounded-xl">
+                            <h4 className="flex items-center gap-2.5 text-base font-bold text-emerald-700 mb-5">
+                              <div className="p-1.5 bg-emerald-100 rounded-lg">
+                                <TrendingUp className="w-4 h-4 text-emerald-600" />
+                              </div>
+                              핵심 기회 요인
+                            </h4>
+                            <ul className="space-y-4">
+                              {loanInsight?.key_opportunities?.map((opp: string, i: number) => (
+                                <li key={i} className="flex gap-3 text-[14px] text-slate-700 leading-relaxed group">
+                                  <span className="mt-2 w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-200 shrink-0 group-hover:scale-125 transition-transform" />
+                                  <span className="group-hover:text-slate-900 transition-colors">{opp}</span>
+                                </li>
+                              )) || <li className="text-sm text-slate-400 italic pl-4">식별된 주요 기회 요인이 없습니다.</li>}
+                            </ul>
+                          </div>
+                        </div>
+
+                        {/* Mitigating Factors (if any) */}
+                        {loanInsight?.mitigating_factors && loanInsight.mitigating_factors.length > 0 && (
+                          <div>
+                            <div className="h-px bg-slate-200 w-full mb-6"></div>
+                            <h4 className="flex items-center gap-2.5 text-sm font-bold text-blue-700 mb-4">
+                              <div className="p-1 bg-blue-100 rounded-md">
+                                <CheckCircle2 className="w-3.5 h-3.5 text-blue-600" />
+                              </div>
+                              리스크 상쇄 요인
+                            </h4>
+                            <ul className="grid grid-cols-1 gap-3">
+                              {loanInsight.mitigating_factors.map((factor: string, i: number) => (
+                                <li key={i} className="flex items-start gap-3 text-[14px] text-slate-600 bg-white border border-slate-200/60 rounded-lg p-3 shadow-sm">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-1.5 shrink-0" />
+                                  {factor}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
                         )}
                       </div>
-                    </div>
 
-                    <div className="bg-slate-50/50 rounded-2xl p-6 border border-slate-100">
-                      <h5 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">Macro Factors</h5>
-                      <div className="flex flex-wrap gap-2">
-                        {profile?.macro_factors?.map(f => (
-                          <StatusBadge
-                            key={f.factor}
-                            variant={f.impact === 'POSITIVE' ? 'success' : f.impact === 'NEGATIVE' ? 'danger' : 'neutral'}
-                            className="bg-white border-opacity-50"
-                          >
-                            {f.factor}
-                          </StatusBadge>
-                        ))}
-                        {(!profile?.macro_factors || profile.macro_factors.length === 0) && (
-                          <div className="text-xs text-slate-400 italic">No Data</div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Shareholders & Global Sites */}
-                  <div className="space-y-6">
-                    <div className="bg-slate-50/50 rounded-2xl p-6 border border-slate-100 h-full">
-                      <h5 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">Shareholders</h5>
-                      <table className="w-full text-xs text-left">
-                        <tbody>
-                          {profile?.shareholders?.slice(0, 5).map((s, i) => (
-                            <tr key={s.name} className="border-b border-slate-100 last:border-0 hover:bg-white/50 transition-colors">
-                              <td className="py-2 text-slate-600 font-medium pl-2">{s.name}</td>
-                              <td className="py-2 text-slate-800 font-mono text-right pr-2">{s.ownership_pct}%</td>
-                            </tr>
-                          ))}
-                          {(!profile?.shareholders || profile.shareholders.length === 0) && (
-                            <tr><td colSpan={2} className="text-xs text-slate-400 italic py-2 text-center">No Data</td></tr>
+                      {/* Action Items / Checklist */}
+                      <div>
+                        <h4 className="flex items-center gap-2 text-sm font-bold text-slate-800 mb-4 uppercase tracking-wider pl-1">
+                          <Search className="w-4 h-4 text-slate-400" />
+                          심사역 확인 체크리스트
+                        </h4>
+                        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                          {loanInsight?.action_items?.length && loanInsight.action_items.length > 0 ? (
+                            <div className="divide-y divide-slate-100">
+                              {loanInsight.action_items.map((item: string, i: number) => (
+                                <div key={i} className="flex items-start gap-4 p-4 hover:bg-slate-50 transition-all cursor-default group">
+                                  <div className="mt-0.5 w-5 h-5 rounded border-2 border-slate-300 group-hover:border-indigo-500 bg-white flex items-center justify-center shrink-0 transition-colors">
+                                    {/* Checkbox Placeholder */}
+                                  </div>
+                                  <span className="text-sm text-slate-600 group-hover:text-slate-900 font-medium leading-normal pt-0.5 transition-colors">
+                                    {item}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="p-6 text-center text-slate-400 italic text-sm">추가 확인이 필요한 항목이 없습니다.</div>
                           )}
-                        </tbody>
-                      </table>
+                        </div>
+                      </div>
 
-                      <div className="mt-8 pt-6 border-t border-slate-200">
-                        <h5 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Global Sites</h5>
-                        <div className="flex flex-wrap gap-2">
-                          {profile?.overseas_business?.subsidiaries?.slice(0, 3).map(s => (
-                            <div key={s.name} className="flex items-center gap-1.5 px-2 py-1 bg-white border border-slate-200 rounded-md shadow-sm">
-                              <Globe className="w-3 h-3 text-indigo-400" />
-                              <span className="text-[10px] font-medium text-slate-700">{s.name} ({s.country})</span>
+                      {/* Metadata Footer */}
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pt-6 text-[11px] text-slate-400 font-medium border-t border-slate-100">
+                        <div className="flex flex-wrap gap-x-4 gap-y-1">
+                          <span className="flex items-center gap-1.5">
+                            <BrainCircuit className="w-3 h-3 text-slate-300" />
+                            Model: <span className="text-slate-600 font-mono">{loanInsight?.generation_model || 'RKYC-Standard-v2'}</span>
+                          </span>
+                          <span>Generated: {loanInsight?.generated_at ? new Date(loanInsight.generated_at).toLocaleDateString() : '-'}</span>
+                        </div>
+                        <div className="text-right">
+                          * 본 분석은 AI 모델이 생성한 참고 자료이며, 은행의 공식 심사 의견을 대체하지 않습니다.
+                        </div>
+                      </div>
+
+                    </div>
+                  </GlassCard>
+
+                  {/* Detail Grid: Competitors, Macro, Shareholders */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+                    {/* Left: Competitors & Macro */}
+                    <div className="space-y-6">
+                      <div className="bg-slate-50/50 rounded-2xl p-6 border border-slate-100">
+                        <h5 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">Competitors</h5>
+                        <div className="space-y-3">
+                          {profile?.competitors?.slice(0, 3).map(c => (
+                            <div key={c.name} className="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
+                              <div>
+                                <div className="text-xs font-bold text-slate-800">{c.name}</div>
+                              </div>
                             </div>
                           ))}
-                          {(!profile?.overseas_business?.subsidiaries || profile.overseas_business.subsidiaries.length === 0) && (
+                          {(!profile?.competitors || profile.competitors.length === 0) && (
+                            <div className="text-xs text-slate-400 italic">No Data</div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-50/50 rounded-2xl p-6 border border-slate-100">
+                        <h5 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">Macro Factors</h5>
+                        <div className="flex flex-wrap gap-2">
+                          {profile?.macro_factors?.map(f => (
+                            <StatusBadge
+                              key={f.factor}
+                              variant={f.impact === 'POSITIVE' ? 'success' : f.impact === 'NEGATIVE' ? 'danger' : 'neutral'}
+                              className="bg-white border-opacity-50"
+                            >
+                              {f.factor}
+                            </StatusBadge>
+                          ))}
+                          {(!profile?.macro_factors || profile.macro_factors.length === 0) && (
                             <div className="text-xs text-slate-400 italic">No Data</div>
                           )}
                         </div>
                       </div>
                     </div>
-                  </div>
 
+                    {/* Right: Shareholders & Global Sites */}
+                    <div className="space-y-6">
+                      <div className="bg-slate-50/50 rounded-2xl p-6 border border-slate-100 h-full">
+                        <h5 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">Shareholders</h5>
+                        <table className="w-full text-xs text-left">
+                          <tbody>
+                            {profile?.shareholders?.slice(0, 5).map((s, i) => (
+                              <tr key={s.name} className="border-b border-slate-100 last:border-0 hover:bg-white/50 transition-colors">
+                                <td className="py-2 text-slate-600 font-medium pl-2">{s.name}</td>
+                                <td className="py-2 text-slate-800 font-mono text-right pr-2">{s.ownership_pct}%</td>
+                              </tr>
+                            ))}
+                            {(!profile?.shareholders || profile.shareholders.length === 0) && (
+                              <tr><td colSpan={2} className="text-xs text-slate-400 italic py-2 text-center">No Data</td></tr>
+                            )}
+                          </tbody>
+                        </table>
+
+                        <div className="mt-8 pt-6 border-t border-slate-200">
+                          <h5 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Global Sites</h5>
+                          <div className="flex flex-wrap gap-2">
+                            {profile?.overseas_business?.subsidiaries?.slice(0, 3).map(s => (
+                              <div key={s.name} className="flex items-center gap-1.5 px-2 py-1 bg-white border border-slate-200 rounded-md shadow-sm">
+                                <Globe className="w-3 h-3 text-indigo-400" />
+                                <span className="text-[10px] font-medium text-slate-700">{s.name} ({s.country})</span>
+                              </div>
+                            ))}
+                            {(!profile?.overseas_business?.subsidiaries || profile.overseas_business.subsidiaries.length === 0) && (
+                              <div className="text-xs text-slate-400 italic">No Data</div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                  </div>
                 </div>
               </GlassCard>
             </div>
@@ -798,21 +982,6 @@ export default function CorporateDetailPage() {
           <div className="hidden lg:block lg:col-span-3">
             <div className="sticky top-24 space-y-8">
               <TOC items={TOC_ITEMS} activeId={activeSection} />
-
-              {/* Ask AI Mini Widget */}
-              <div className="bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-2xl p-6 text-white shadow-xl shadow-indigo-200">
-                <div className="flex items-center gap-2 mb-3">
-                  <Sparkles className="w-4 h-4 text-indigo-200" />
-                  <span className="text-xs font-bold uppercase tracking-wider text-indigo-100">AI Assistant</span>
-                </div>
-                <p className="text-sm font-medium leading-snug mb-4 text-indigo-50">
-                  Ask about the risks associated with {corporation.name} or generate a custom report.
-                </p>
-                <div className="relative">
-                  <input type="text" placeholder="Ask a question..." className="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-xs text-white placeholder:text-indigo-200/70 focus:outline-none focus:bg-white/20 transition-all" />
-                  <CornerDownRight className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-indigo-200" />
-                </div>
-              </div>
             </div>
           </div>
 

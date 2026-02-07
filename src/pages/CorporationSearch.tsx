@@ -79,8 +79,8 @@ export default function CorporationSearch() {
   }, [corporations, searchQuery]);
 
   // Click company -> go directly to report
-  const handleCorporationClick = (corporateId: string) => {
-    navigate(`/corporations/${corporateId}`);
+  const handleCorporationClick = (corporateId: string, corporateName: string) => {
+    navigate(`/corporations/${corporateId}`, { state: { corpName: corporateName } });
   };
 
   // 로딩 상태
@@ -168,7 +168,7 @@ export default function CorporationSearch() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.1 + (idx * 0.05) }}
-                onClick={() => handleCorporationClick(corp.id)}
+                onClick={() => handleCorporationClick(corp.id, corp.name)}
               >
                 <GlassCard className="h-full cursor-pointer hover:bg-white transition-all duration-300 hover:shadow-xl hover:shadow-indigo-500/10 group border-l-4 border-l-transparent hover:border-l-indigo-500">
                   <div className="p-5 flex flex-col h-full">
