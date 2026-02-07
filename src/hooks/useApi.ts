@@ -209,8 +209,6 @@ export function useAnalyzeJob() {
   });
 }
 
-const JOB_TIMEOUT_MS = 2 * 60 * 1000; // 2분 타임아웃
-
 export function useJobStatus(jobId: string, options?: { enabled?: boolean; refetchInterval?: number; onTimeout?: () => void }) {
   return useQuery({
     queryKey: ['job', jobId],
@@ -218,17 +216,8 @@ export function useJobStatus(jobId: string, options?: { enabled?: boolean; refet
     enabled: options?.enabled ?? !!jobId,
     refetchInterval: (query) => {
       const data = query.state.data as JobStatusResponse | undefined;
-      // QUEUED 또는 RUNNING 상태일 때만 폴링
+      // QUEUED 또는 RUNNING 상태일 때만 폴링 (타임아웃 없음)
       if (data?.status === 'QUEUED' || data?.status === 'RUNNING') {
-        // 타임아웃 체크: created_at 기준 2분 경과 시 폴링 중단
-        if (data.queued_at) {
-          const createdTime = new Date(data.queued_at).getTime();
-          const elapsed = Date.now() - createdTime;
-          if (elapsed > JOB_TIMEOUT_MS) {
-            options?.onTimeout?.();
-            return false; // 폴링 중단
-          }
-        }
         return options?.refetchInterval ?? 2000;
       }
       return false;

@@ -4,7 +4,7 @@
  * 8단계 파이프라인 시각화 포함
  */
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { useAnalyzeJob, useJobStatus, useCorporations } from '@/hooks/useApi';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
@@ -131,22 +131,13 @@ function PipelineStep({ step, status, isLast }: PipelineStepProps) {
 export function DemoPanel() {
   const [selectedCorpId, setSelectedCorpId] = useState<string>('');
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
-  const [isTimedOut, setIsTimedOut] = useState(false);
 
   const queryClient = useQueryClient();
   const { data: corporations = [] } = useCorporations();
   const analyzeJob = useAnalyzeJob();
 
-  const handleTimeout = useCallback(() => {
-    setIsTimedOut(true);
-    toast.error('작업 시간 초과', {
-      description: '분석 작업이 2분을 초과했습니다. Worker 상태를 확인하세요.',
-    });
-  }, []);
-
   const { data: jobStatus } = useJobStatus(currentJobId || '', {
-    enabled: !!currentJobId && !isTimedOut,
-    onTimeout: handleTimeout,
+    enabled: !!currentJobId,
   });
 
   const isDemoMode = import.meta.env.VITE_DEMO_MODE?.toLowerCase() === 'true';
@@ -195,7 +186,6 @@ export function DemoPanel() {
     try {
       const result = await analyzeJob.mutateAsync(selectedCorpId);
       setCurrentJobId(result.job_id);
-      setIsTimedOut(false);
     } catch (error) {
       console.error('Job trigger failed:', error);
     }
@@ -205,18 +195,9 @@ export function DemoPanel() {
     queryClient.invalidateQueries({ queryKey: ['signals'] });
     queryClient.invalidateQueries({ queryKey: ['signalStats'] });
     setCurrentJobId(null);
-    setIsTimedOut(false);
   };
 
   const getStatusBadge = () => {
-    if (isTimedOut) {
-      return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-700">
-          <Clock className="w-3 h-3" />
-          시간 초과
-        </span>
-      );
-    }
     if (!jobStatus) return null;
 
     switch (jobStatus.status) {
@@ -340,15 +321,6 @@ export function DemoPanel() {
                 <AlertCircle className="w-4 h-4" />
                 <span className="text-sm font-medium">
                   분석 실패: {jobStatus.error?.message || '알 수 없는 오류가 발생했습니다.'}
-                </span>
-              </div>
-            )}
-
-            {isTimedOut && (
-              <div className="flex items-center gap-2 text-orange-700 bg-orange-50 px-3 py-2 rounded-lg">
-                <Clock className="w-4 h-4" />
-                <span className="text-sm font-medium">
-                  작업 시간 초과 (2분). Worker 상태를 확인하거나 다시 시도하세요.
                 </span>
               </div>
             )}
