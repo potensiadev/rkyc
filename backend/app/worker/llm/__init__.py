@@ -246,6 +246,15 @@ from app.worker.llm.validator import (
     reset_validator,
 )
 
+# P0 - Gemini Grounding Fact-Checker (2026-02-08)
+from app.worker.llm.fact_checker import (
+    GeminiFactChecker,
+    FactCheckResult,
+    FactCheckResponse,
+    get_fact_checker,
+    reset_fact_checker,
+)
+
 # v2.0 - 4-Layer Analysis Architecture
 from app.worker.llm.layer_architecture import (
     # Enums and Constants
@@ -525,4 +534,10 @@ __all__ = [
     "format_insight_prompt_v2",
     "get_industry_context",
     "INDUSTRY_CONTEXT",
+    # P0 - Gemini Grounding Fact-Checker (2026-02-08)
+    "GeminiFactChecker",
+    "FactCheckResult",
+    "FactCheckResponse",
+    "get_fact_checker",
+    "reset_fact_checker",
 ]

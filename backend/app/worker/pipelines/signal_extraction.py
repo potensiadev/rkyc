@@ -81,6 +81,14 @@ from app.worker.pipelines.hackathon_config import (
     validate_demo_scenario,
 )
 
+# P0: Gemini Grounding Fact-Checker (2026-02-08)
+from app.worker.llm.fact_checker import (
+    GeminiFactChecker,
+    FactCheckResult,
+    FactCheckResponse,
+    get_fact_checker,
+)
+
 logger = logging.getLogger(__name__)
 
 # =============================================================================
@@ -270,8 +278,10 @@ class SignalExtractionPipeline:
                 - corp_id: Corporation ID
                 - snapshot_version: Snapshot version
                 - event_signature: SHA256 hash for deduplication
+                - fact_check: FactCheckResponse (P0 2026-02-08)
         """
         corp_id = context.get("corp_id", "")
+        corp_name = context.get("corp_name", "")
 
         # Sprint 2: Use Multi-Agent mode if enabled
         if self.use_multi_agent and self._orchestrator:
@@ -279,13 +289,28 @@ class SignalExtractionPipeline:
                 f"SIGNAL stage starting for corp_id={corp_id} "
                 f"[Multi-Agent Mode: 3-Agent Parallel]"
             )
-            return self._execute_multi_agent(context)
+            signals = self._execute_multi_agent(context)
         else:
             logger.info(
                 f"SIGNAL stage starting for corp_id={corp_id} "
                 f"[Legacy Mode: Single LLM]"
             )
-            return self._execute_legacy(context)
+            signals = self._execute_legacy(context)
+
+        # =====================================================================
+        # P0: Gemini Grounding Fact-Check (모든 시그널 저장 전 검증)
+        # 2026-02-08 구현
+        # =====================================================================
+        verified_signals = self._fact_check_signals(signals, corp_name)
+
+        logger.info(
+            f"SIGNAL stage completed: "
+            f"extracted={len(signals)}, "
+            f"fact_checked={len(verified_signals)}, "
+            f"rejected={len(signals) - len(verified_signals)}"
+        )
+
+        return verified_signals
 
     def _execute_multi_agent(self, context: dict) -> list[dict]:
         """
@@ -1084,3 +1109,131 @@ class SignalExtractionPipeline:
 
         # Compute SHA256 hash
         return hashlib.sha256(sig_string.encode()).hexdigest()
+
+    # =========================================================================
+    # P0: Gemini Grounding Fact-Check (2026-02-08)
+    # =========================================================================
+
+    def _fact_check_signals(
+        self,
+        signals: list[dict],
+        corp_name: str,
+    ) -> list[dict]:
+        """
+        Gemini Grounding을 사용하여 모든 시그널을 팩트체크.
+
+        P0 Anti-Hallucination Layer:
+        - 모든 시그널을 Google Search 기반으로 검증
+        - FALSE 판정 시그널은 거부
+        - 검증 결과를 시그널에 첨부
+
+        Args:
+            signals: 추출된 시그널 리스트
+            corp_name: 기업명
+
+        Returns:
+            팩트체크를 통과한 시그널 리스트
+        """
+        import asyncio
+
+        if not signals:
+            return []
+
+        fact_checker = get_fact_checker()
+
+        if not fact_checker.is_available():
+            logger.warning(
+                "[FactCheck] Gemini not available, skipping fact check. "
+                "All signals will pass through."
+            )
+            # 팩트체크 불가 시 모든 시그널 통과 (서비스 중단 방지)
+            for signal in signals:
+                signal["fact_check"] = {
+                    "result": "skipped",
+                    "reason": "Fact checker not available",
+                }
+            return signals
+
+        logger.info(
+            f"[FactCheck] Starting Gemini Grounding fact-check for "
+            f"{len(signals)} signals (corp: {corp_name})"
+        )
+
+        # 비동기 팩트체크 실행
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+        try:
+            results = loop.run_until_complete(
+                fact_checker.check_signals_batch(signals, corp_name, max_concurrent=3)
+            )
+        except Exception as e:
+            logger.error(f"[FactCheck] Batch fact-check failed: {e}")
+            # 팩트체크 실패 시 모든 시그널 통과 (서비스 중단 방지)
+            for signal in signals:
+                signal["fact_check"] = {
+                    "result": "error",
+                    "reason": str(e),
+                }
+            return signals
+
+        # 결과 처리
+        verified_signals = []
+        rejected_count = 0
+        false_count = 0
+
+        for signal, fact_response in results:
+            # 팩트체크 결과를 시그널에 첨부
+            signal["fact_check"] = fact_response.to_dict()
+
+            if fact_response.is_acceptable:
+                # 검증 통과 또는 허용 가능한 결과
+                verified_signals.append(signal)
+
+                # PARTIALLY_VERIFIED인 경우 confidence 하향
+                if fact_response.result == FactCheckResult.PARTIALLY_VERIFIED:
+                    original_confidence = signal.get("confidence", "MED")
+                    if original_confidence == "HIGH":
+                        signal["confidence"] = "MED"
+                        logger.info(
+                            f"[FactCheck] Confidence downgraded HIGH→MED for: "
+                            f"{signal.get('title', '')[:30]}"
+                        )
+
+                # UNVERIFIED인 경우도 confidence 하향
+                elif fact_response.result == FactCheckResult.UNVERIFIED:
+                    original_confidence = signal.get("confidence", "MED")
+                    if original_confidence in ("HIGH", "MED"):
+                        signal["confidence"] = "LOW"
+                        logger.info(
+                            f"[FactCheck] Confidence downgraded to LOW (unverified): "
+                            f"{signal.get('title', '')[:30]}"
+                        )
+
+            else:
+                # FALSE 판정 - 시그널 거부
+                rejected_count += 1
+                if fact_response.result == FactCheckResult.FALSE:
+                    false_count += 1
+                    logger.warning(
+                        f"[FactCheck] REJECTED (FALSE): {signal.get('title', '')} | "
+                        f"Reason: {fact_response.explanation[:100]}"
+                    )
+                else:
+                    logger.warning(
+                        f"[FactCheck] REJECTED: {signal.get('title', '')} | "
+                        f"Result: {fact_response.result.value}"
+                    )
+
+        logger.info(
+            f"[FactCheck] Completed: "
+            f"total={len(signals)}, "
+            f"passed={len(verified_signals)}, "
+            f"rejected={rejected_count}, "
+            f"false={false_count}"
+        )
+
+        return verified_signals

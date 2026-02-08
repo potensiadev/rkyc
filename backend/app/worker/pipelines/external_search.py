@@ -1148,12 +1148,22 @@ If no ENACTED/ANNOUNCED policy found:
             )
             return None  # P0 Fix: 이전에는 신뢰도 하향만, 이제 거부
 
-        # 3. Hallucination indicator 검출 (P1)
-        text_to_check = f"{fact.get('title', '')} {fact.get('value', '')} {source_sentence}"
+        # 3. Hallucination indicator 검출 (P1 → P0 강화)
+        # P0 Fix: source_sentence의 금지 표현은 무조건 REJECT
+        source_sentence_indicators = ["전망", "예상", "추정", "예측", "것으로 보인다", "것으로 보임"]
+        for indicator in source_sentence_indicators:
+            if indicator in source_sentence:
+                logger.warning(
+                    f"[{search_type}][BUFFETT][REJECTED] Forbidden expression '{indicator}' in source_sentence"
+                )
+                return None  # P0 Fix: source_sentence 금지 표현은 무조건 거부
+
+        # title/value에서도 검출 (경고 수준)
+        text_to_check = f"{fact.get('title', '')} {fact.get('value', '')}"
         for indicator in HALLUCINATION_INDICATORS:
             if indicator in text_to_check:
                 logger.warning(
-                    f"[{search_type}][HALLUCINATION] Indicator detected: '{indicator}'"
+                    f"[{search_type}][HALLUCINATION] Indicator detected in title/value: '{indicator}'"
                 )
                 fact["_hallucination_indicator"] = indicator
                 # 심각한 indicator면 제외

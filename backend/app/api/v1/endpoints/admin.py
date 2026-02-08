@@ -19,6 +19,7 @@ from app.worker.llm.circuit_breaker import (
     CircuitState,
 )
 from app.worker.llm.cache import get_llm_cache, CacheOperation
+from app.worker.llm.fact_checker import get_fact_checker, FactCheckResult
 from app.core.database import get_db
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -1358,3 +1359,124 @@ async def get_demo_config():
             for corp_id, cfg in CORP_SENSITIVITY_CONFIG.items()
         },
     }
+
+
+# ============================================================================
+# P0: Fact-Checker API (2026-02-08)
+# ============================================================================
+
+
+class FactCheckerStatusResponse(BaseModel):
+    """팩트체커 상태 응답"""
+    enabled: bool
+    available: bool
+    provider: str = "gemini-2.0-flash"
+    grounding: str = "Google Search"
+
+
+class FactCheckRequest(BaseModel):
+    """팩트체크 요청"""
+    corp_name: str
+    signal_type: str
+    event_type: str
+    title: str
+    summary: str
+    impact_direction: str = "NEUTRAL"
+    impact_strength: str = "MED"
+
+
+class FactCheckResultResponse(BaseModel):
+    """팩트체크 결과 응답"""
+    result: str
+    confidence: float
+    explanation: str
+    sources: list[str]
+    is_acceptable: bool
+    latency_ms: int
+
+
+@router.get(
+    "/fact-checker/status",
+    response_model=FactCheckerStatusResponse,
+    summary="팩트체커 상태 조회",
+)
+async def get_fact_checker_status():
+    """Gemini Grounding 팩트체커 상태 조회"""
+    fact_checker = get_fact_checker()
+    return FactCheckerStatusResponse(
+        enabled=fact_checker._enabled,
+        available=fact_checker.is_available(),
+        provider="gemini-2.0-flash",
+        grounding="Google Search",
+    )
+
+
+@router.post(
+    "/fact-checker/enable",
+    summary="팩트체커 활성화",
+)
+async def enable_fact_checker():
+    """팩트체커 활성화"""
+    fact_checker = get_fact_checker()
+    fact_checker.enable()
+    return {"success": True, "message": "Fact checker enabled"}
+
+
+@router.post(
+    "/fact-checker/disable",
+    summary="팩트체커 비활성화 (긴급 시)",
+)
+async def disable_fact_checker():
+    """팩트체커 비활성화 (긴급 시 사용)"""
+    fact_checker = get_fact_checker()
+    fact_checker.disable()
+    return {"success": True, "message": "Fact checker disabled"}
+
+
+@router.post(
+    "/fact-checker/test",
+    response_model=FactCheckResultResponse,
+    summary="팩트체커 테스트",
+)
+async def test_fact_checker(request: FactCheckRequest):
+    """
+    단일 시그널 팩트체크 테스트
+
+    실제 Gemini Grounding을 사용하여 팩트체크를 수행합니다.
+    """
+    import asyncio
+
+    fact_checker = get_fact_checker()
+
+    if not fact_checker.is_available():
+        raise HTTPException(
+            status_code=503,
+            detail="Fact checker not available (Google API key not configured)"
+        )
+
+    signal = {
+        "signal_type": request.signal_type,
+        "event_type": request.event_type,
+        "title": request.title,
+        "summary": request.summary,
+        "impact_direction": request.impact_direction,
+        "impact_strength": request.impact_strength,
+    }
+
+    # 비동기 팩트체크 실행
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+    result = await fact_checker.check_signal(signal, request.corp_name)
+
+    return FactCheckResultResponse(
+        result=result.result.value,
+        confidence=result.confidence,
+        explanation=result.explanation,
+        sources=result.sources,
+        is_acceptable=result.is_acceptable,
+        latency_ms=result.latency_ms,
+    )

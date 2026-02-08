@@ -2162,5 +2162,75 @@ CLAUDE.md
 
 **다음 단계**: 5개 기업 분석 실행 필요
 
+### 세션 26 (2026-02-08) - Entity Confusion 방지 및 Gemini Grounding Fact-Checker ✅
+**목표**: 엠케이전자 상장폐지 Hallucination 해결 및 모든 시그널 팩트체크 적용
+
+**문제 발견**:
+- 엠케이전자에 "상장폐지 결정" 허위 시그널 생성
+- 실제 상장폐지는 "엑시큐어하이트론" (같은 뉴스 페이지에서 Entity Confusion)
+- 팩트체크 결과: 엠케이전자는 2025년 3분기 최대 실적 경신 중
+
+**완료 항목**:
+
+#### 1. Hallucination 시그널 삭제
+- 2개 허위 시그널 DB에서 삭제
+- `delete_hallucination.py` 스크립트 생성
+
+#### 2. Entity Confusion 방지 검증 추가 (P0)
+- `_validate_entity_attribution()` 메서드 추가
+- EXTREME_EVENTS 키워드 감지 (상장폐지, 부도, 파산, 횡령 등)
+- 극단적 이벤트 시 corp_name이 summary/title에 필수
+- Evidence snippet에서 기업명 존재 확인
+- 다른 기업명 감지 시 Entity Confusion 경고
+
+#### 3. Gemini Grounding Fact-Checker 구현 (P0)
+- `fact_checker.py` 신규 생성
+- **Gemini 2.0 Flash + Google Search Grounding** 사용
+- 모든 시그널 저장 전 팩트체크 수행
+- 검증 결과 분류:
+  - VERIFIED: 사실 확인 → 통과
+  - PARTIALLY_VERIFIED: 일부 확인 → confidence 하향
+  - UNVERIFIED: 확인 불가 → confidence LOW로 하향
+  - FALSE: 허위 확인 → **시그널 거부**
+  - ERROR: 검증 오류 → 통과 (서비스 중단 방지)
+
+#### 4. Signal Extraction Pipeline 통합
+- `execute()` 메서드에서 팩트체크 호출
+- `_fact_check_signals()` 메서드 추가
+- 배치 팩트체크 지원 (max_concurrent=3)
+- 검증 결과를 signal["fact_check"]에 첨부
+
+#### 5. Admin API 추가
+| Endpoint | Method | 설명 |
+|----------|--------|------|
+| `/admin/fact-checker/status` | GET | 팩트체커 상태 조회 |
+| `/admin/fact-checker/enable` | POST | 팩트체커 활성화 |
+| `/admin/fact-checker/disable` | POST | 팩트체커 비활성화 (긴급 시) |
+| `/admin/fact-checker/test` | POST | 단일 시그널 팩트체크 테스트 |
+
+**신규 파일**:
+```
+backend/app/worker/llm/fact_checker.py
+backend/scripts/delete_hallucination.py
+```
+
+**수정된 파일**:
+```
+backend/app/worker/pipelines/signal_extraction.py
+backend/app/worker/pipelines/signal_agents/base.py
+backend/app/worker/llm/__init__.py
+backend/app/api/v1/endpoints/admin.py
+CLAUDE.md
+```
+
+**Anti-Hallucination 5-Layer Defense (완성)**:
+| Layer | 목적 | 구현 |
+|-------|------|------|
+| 1 | Soft Guardrails | LLM 프롬프트 권고 |
+| 2 | Number Validation | 50%+ 극단적 수치 검증 |
+| 3 | Evidence Validation | URL/Keypath 실존 검증 |
+| 4 | **Entity Confusion Prevention** | 기업명 일치 검증 (신규) |
+| 5 | **Gemini Grounding Fact-Check** | Google Search 팩트체크 (신규) |
+
 ---
-*Last Updated: 2026-02-08 (세션 25 - PRD v2.0 Hackathon Edition 구현)*
+*Last Updated: 2026-02-08 (세션 26 - Entity Confusion 방지 및 Gemini Grounding Fact-Checker)*
