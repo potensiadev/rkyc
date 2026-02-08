@@ -44,6 +44,25 @@ from app.schemas.signal_enriched import (
 
 router = APIRouter()
 
+# event_type 한글 매핑
+EVENT_TYPE_LABEL_KR = {
+    "KYC_REFRESH": "KYC 갱신",
+    "INTERNAL_RISK_GRADE_CHANGE": "내부 등급 변경",
+    "OVERDUE_FLAG_ON": "연체 발생",
+    "LOAN_EXPOSURE_CHANGE": "여신 변동",
+    "COLLATERAL_CHANGE": "담보 변동",
+    "OWNERSHIP_CHANGE": "소유구조 변경",
+    "GOVERNANCE_CHANGE": "지배구조 변경",
+    "FINANCIAL_STATEMENT_UPDATE": "재무제표 업데이트",
+    "INDUSTRY_SHOCK": "산업 이슈",
+    "POLICY_REGULATION_CHANGE": "정책/규제 변화",
+}
+
+
+def get_event_type_label(event_type_value: str) -> str:
+    """event_type 값을 한글 레이블로 변환"""
+    return EVENT_TYPE_LABEL_KR.get(event_type_value, event_type_value)
+
 
 @router.get("/{signal_id}/enriched", response_model=SignalEnrichedDetailResponse)
 async def get_signal_enriched_detail(
@@ -437,7 +456,7 @@ async def _get_impact_analysis(
             impact_percentage=-5.0 if signal_index.impact_strength.value == "HIGH" else -2.0,
             industry_avg=None,
             industry_percentile=30 if signal_index.impact_strength.value == "HIGH" else 50,
-            reasoning=f"{signal_index.event_type.value} 이벤트로 인한 신용등급 하락 가능성 존재",
+            reasoning=f"{get_event_type_label(signal_index.event_type.value)} 이벤트로 인한 신용등급 하락 가능성 존재",
             data_source="Signal Analysis",
         ))
 
@@ -453,7 +472,7 @@ async def _get_impact_analysis(
             impact_percentage=10.0 if signal_index.impact_strength.value == "HIGH" else 5.0,
             industry_avg=None,
             industry_percentile=70 if signal_index.impact_strength.value == "HIGH" else 60,
-            reasoning=f"{signal_index.event_type.value} 이벤트로 인한 성장 기회 포착",
+            reasoning=f"{get_event_type_label(signal_index.event_type.value)} 이벤트로 인한 성장 기회 포착",
             data_source="Signal Analysis",
         ))
 
@@ -580,7 +599,7 @@ def _generate_analysis_reasoning(
     if signal_index.signal_type.value == "DIRECT":
         reasoning_parts.append(
             f"본 시그널은 {signal_index.corp_name}에 직접적으로 영향을 미치는 "
-            f"{signal_index.event_type.value} 이벤트입니다."
+            f"{get_event_type_label(signal_index.event_type.value)} 이벤트입니다."
         )
     elif signal_index.signal_type.value == "INDUSTRY":
         reasoning_parts.append(
