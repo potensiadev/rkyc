@@ -273,6 +273,8 @@ ENVIRONMENT_QUERY_TEMPLATES = {
 # - Perplexity는 웹 크롤링 기반 → DART/신평사 직접 접근 불가
 # - 뉴스/기사 검색에 집중, Tier 1 데이터는 별도 API로 처리
 # - 전체 한국어 통일
+# - Few-shot 예시 추가 (3번 개선)
+# - 출처 유형 분리 (4번 개선)
 # =============================================================================
 
 PERPLEXITY_SYSTEM_PROMPT = """당신은 한국 기업 뉴스를 검색하는 도우미입니다.
@@ -301,7 +303,96 @@ PERPLEXITY_SYSTEM_PROMPT = """당신은 한국 기업 뉴스를 검색하는 도
 1. JSON 형식만 (마크다운 금지)
 2. 한국어만 사용
 3. 출처 URL 필수
-4. 날짜 필수 (YYYY-MM-DD)"""
+4. 날짜 필수 (YYYY-MM-DD)
+5. source_type 필수 (news/disclosure/report)"""
+
+
+# =============================================================================
+# Few-shot Examples (3번 개선: 구체적 예시로 LLM 가이드)
+# =============================================================================
+
+FEW_SHOT_GOOD_EXAMPLE = """
+## 좋은 응답 예시 (이렇게 하세요)
+
+입력: "삼성전자 실적"
+출력:
+{
+  "status": "FOUND",
+  "facts": [
+    {
+      "title": "삼성전자 2025년 3분기 영업이익 9조1200억원",
+      "summary": "삼성전자가 2025년 3분기 영업이익 9조1200억원을 기록했다. 전년 동기 대비 274% 증가한 수치다. 반도체 부문이 HBM 수요 증가로 실적을 견인했다.",
+      "source_url": "https://www.hankyung.com/economy/article/202501151234",
+      "date": "2025-01-15",
+      "impact": "OPPORTUNITY",
+      "source_type": "news",
+      "numbers": {"영업이익": "9조1200억원", "YoY": "+274%"}
+    }
+  ]
+}
+"""
+
+FEW_SHOT_BAD_EXAMPLE = """
+## 나쁜 응답 예시 (이렇게 하지 마세요)
+
+❌ 잘못된 예시 1 - 추측 포함:
+{
+  "title": "삼성전자 실적 호조 전망",
+  "summary": "삼성전자는 반도체 수요 증가로 실적이 개선될 것으로 예상된다."
+}
+→ 문제: "전망", "예상" 금지 표현 사용
+
+❌ 잘못된 예시 2 - 숫자 없음:
+{
+  "title": "삼성전자 실적 발표",
+  "summary": "삼성전자가 3분기 실적을 발표했다. 영업이익이 크게 늘었다."
+}
+→ 문제: 구체적 숫자(금액, YoY) 없음
+
+❌ 잘못된 예시 3 - 다른 회사 혼동:
+{
+  "title": "삼성전자 부도 위기",
+  "summary": "삼성전자가 부도 위기에 처했다..."
+}
+→ 문제: "삼성전기" 또는 다른 회사 뉴스 혼동
+"""
+
+FEW_SHOT_NOT_FOUND_EXAMPLE = """
+## 정보 없을 때 예시 (솔직하게)
+
+입력: "ABC전자 부도" (실제로 해당 뉴스 없음)
+출력:
+{
+  "status": "NOT_FOUND",
+  "facts": [],
+  "not_found": ["ABC전자 부도 관련 뉴스를 최근 90일 내 찾을 수 없음"]
+}
+"""
+
+
+# =============================================================================
+# Source Type Classification (4번 개선: 출처 유형 분리)
+# =============================================================================
+
+SOURCE_TYPE_RULES = """
+## 출처 유형 (source_type) 분류 기준
+
+| source_type | 설명 | URL 패턴 예시 |
+|-------------|------|--------------|
+| disclosure | 공시/규제기관 | dart.fss.or.kr, kind.krx.co.kr, fss.or.kr |
+| report | 증권사/신평사 리포트 기사 | "리포트", "목표주가", "투자의견" 포함 |
+| news | 일반 뉴스 기사 | 그 외 모든 경제지, 통신사 |
+
+### 분류 우선순위
+1. URL에 dart.fss.or.kr, kind.krx.co.kr → disclosure
+2. 제목/내용에 "리포트", "목표주가", "투자의견" → report
+3. 그 외 → news
+
+### 신뢰도 가중치
+- disclosure: 100% (공시는 무조건 사실)
+- report: 80% (증권사 분석 포함)
+- news: 60% (기자 해석 포함 가능)
+"""
 
 # Legacy alias
 BUFFETT_SYSTEM_PROMPT = PERPLEXITY_SYSTEM_PROMPT
@@ -690,6 +781,8 @@ class ExternalSearchPipeline:
 
         개선 (2026-02-08):
         - DART 컨텍스트 주입: 공시 데이터 기반 검증 기준 제공
+        - Few-shot 예시 추가 (3번 개선)
+        - source_type 출처 분리 (4번 개선)
         """
         today = datetime.now().strftime("%Y-%m-%d")
 
@@ -721,7 +814,32 @@ class ExternalSearchPipeline:
 ⚠️ 추측/전망 기사 제외, 확정된 사실만
 ⚠️ 위 DART 공시 정보와 불일치하면 재확인 필요
 
-### 출력 형식 (간결한 JSON)
+---
+## 예시 (Few-shot)
+
+### ✅ 좋은 응답:
+{{
+  "status": "FOUND",
+  "facts": [
+    {{
+      "title": "{corp_name} 2025년 3분기 영업이익 1200억원",
+      "summary": "{corp_name}이 2025년 3분기 영업이익 1200억원을 기록했다. 전년 동기 대비 25% 증가. 주력 제품 수요 증가가 실적을 견인했다.",
+      "source_url": "https://www.hankyung.com/article/12345",
+      "date": "2025-01-15",
+      "impact": "OPPORTUNITY",
+      "source_type": "news",
+      "numbers": {{"영업이익": "1200억원", "YoY": "+25%"}}
+    }}
+  ]
+}}
+
+### ❌ 나쁜 응답 (하지 마세요):
+- "실적이 좋아질 것으로 예상됨" → 예상/전망 금지
+- "영업이익이 크게 늘었다" → 구체적 숫자 없음
+- 다른 회사 뉴스 혼동
+
+---
+### 출력 형식 (JSON)
 {{
   "status": "FOUND" | "NOT_FOUND",
   "facts": [
@@ -730,11 +848,18 @@ class ExternalSearchPipeline:
       "summary": "핵심 내용 2-3문장 (숫자+단위 포함)",
       "source_url": "기사 URL (필수)",
       "date": "YYYY-MM-DD (기사 날짜)",
-      "impact": "RISK | OPPORTUNITY | NEUTRAL"
+      "impact": "RISK | OPPORTUNITY | NEUTRAL",
+      "source_type": "news | disclosure | report",
+      "numbers": {{"항목": "값", "YoY": "+/-X%"}}
     }}
   ],
   "not_found": ["찾지 못한 항목 (있으면)"]
 }}
+
+### source_type 분류:
+- disclosure: dart.fss.or.kr, kind.krx.co.kr 등 공시
+- report: "리포트", "목표주가" 포함 기사
+- news: 그 외 일반 뉴스
 
 정보가 없으면:
 {{"status": "NOT_FOUND", "facts": [], "not_found": ["해당 기간 내 관련 뉴스 없음"]}}"""
@@ -760,6 +885,10 @@ class ExternalSearchPipeline:
         - 스키마 단순화 (6개 핵심 필드)
         - 현실적 출처만 요청 (경제지, 통신사)
         - falsification_check 제거 (코드에서 처리)
+
+        개선 (2026-02-08):
+        - Few-shot 예시 추가 (3번 개선)
+        - source_type 출처 분리 (4번 개선)
         """
         today = datetime.now().strftime("%Y-%m-%d")
 
@@ -791,21 +920,53 @@ class ExternalSearchPipeline:
 ❌ 단일 기업 주가 변동
 ❌ 블로그/커뮤니티 출처
 
-### 출력 형식 (간결한 JSON)
+---
+## 예시 (Few-shot)
+
+### ✅ 좋은 응답:
+{{
+  "status": "FOUND",
+  "facts": [
+    {{
+      "title": "{industry_name} 1월 생산지수 전월비 3.2% 상승",
+      "summary": "산업통상자원부 발표에 따르면 {industry_name} 1월 생산지수가 전월 대비 3.2% 상승했다. AI 수요 증가가 주요 원인으로 분석됐다.",
+      "source_url": "https://www.yna.co.kr/industry/12345",
+      "date": "2025-02-01",
+      "impact": "OPPORTUNITY",
+      "source_type": "news",
+      "affected_scope": "{industry_name} 전체",
+      "numbers": {{"생산지수": "+3.2% MoM"}}
+    }}
+  ]
+}}
+
+### ❌ 나쁜 응답:
+- "반도체 업황 좋아질 전망" → 전망 금지
+- 특정 기업(삼성전자 등) 실적 기사 → 업종 전체만
+
+---
+### 출력 형식 (JSON)
 {{
   "status": "FOUND" | "NOT_FOUND",
   "facts": [
     {{
       "title": "뉴스 제목 (50자 이내)",
-      "summary": "핵심 내용 2-3문장",
+      "summary": "핵심 내용 2-3문장 (숫자 포함)",
       "source_url": "기사 URL (필수)",
       "date": "YYYY-MM-DD",
       "impact": "RISK | OPPORTUNITY | NEUTRAL",
-      "affected_scope": "영향 범위 (예: 반도체 업종 전체)"
+      "source_type": "news | disclosure | report",
+      "affected_scope": "영향 범위 (예: {industry_name} 전체)",
+      "numbers": {{"항목": "값"}}
     }}
   ],
   "not_found": ["찾지 못한 항목"]
 }}
+
+### source_type 분류:
+- disclosure: 정부/기관 공식 발표
+- report: 연구기관/증권사 리포트 기사
+- news: 일반 경제 뉴스
 
 업종 전체 뉴스가 없으면:
 {{"status": "NOT_FOUND", "facts": [], "not_found": ["해당 기간 내 업종 전체 영향 뉴스 없음"]}}"""
@@ -832,6 +993,10 @@ class ExternalSearchPipeline:
         - 스키마 단순화 (6개 핵심 필드)
         - 현실적 출처만 (경제지 정책 기사)
         - falsification_check 제거
+
+        개선 (2026-02-08):
+        - Few-shot 예시 추가 (3번 개선)
+        - source_type 출처 분리 (4번 개선)
         """
         today = datetime.now().strftime("%Y-%m-%d")
 
@@ -877,21 +1042,67 @@ class ExternalSearchPipeline:
 ❌ "~할 전망", "~할 예정" 등 추측성 기사
 ❌ 업계 요청/건의 (정책 아님)
 
-### 출력 형식 (간결한 JSON)
+---
+## 예시 (Few-shot)
+
+### ✅ 좋은 응답:
+{{
+  "status": "FOUND",
+  "facts": [
+    {{
+      "title": "한은 기준금리 0.25%p 인하, 3.25%로 결정",
+      "summary": "한국은행 금융통화위원회가 2025년 1월 기준금리를 0.25%p 인하하여 3.25%로 결정했다. 경기 둔화 우려에 대응한 조치다.",
+      "source_url": "https://www.bok.or.kr/press/12345",
+      "date": "2025-01-16",
+      "impact": "OPPORTUNITY",
+      "source_type": "disclosure",
+      "policy_area": "monetary"
+    }},
+    {{
+      "title": "{industry_name} 탄소배출권 의무 강화, 2026년부터 적용",
+      "summary": "환경부가 {industry_name} 업종의 탄소배출권 할당량을 10% 축소한다고 발표했다. 2026년 1월부터 적용된다.",
+      "source_url": "https://www.me.go.kr/policy/12345",
+      "date": "2025-01-10",
+      "impact": "RISK",
+      "source_type": "disclosure",
+      "policy_area": "regulatory"
+    }}
+  ]
+}}
+
+### ❌ 나쁜 응답:
+- "금리 인하 전망" → 확정된 것만
+- "업계, 규제 완화 요청" → 정책 아님
+- "환경부 검토 중" → 미확정 정책
+
+---
+### 출력 형식 (JSON)
 {{
   "status": "FOUND" | "NOT_FOUND",
   "facts": [
     {{
       "title": "정책/규제 제목 (50자 이내)",
-      "summary": "핵심 내용 2-3문장 (확정된 사실만)",
+      "summary": "핵심 내용 2-3문장 (확정된 사실만, 숫자 포함)",
       "source_url": "기사 URL (필수)",
       "date": "YYYY-MM-DD",
       "impact": "RISK | OPPORTUNITY | NEUTRAL",
+      "source_type": "disclosure | news | report",
       "policy_area": "regulatory | fiscal | trade | monetary"
     }}
   ],
   "not_found": ["찾지 못한 항목"]
 }}
+
+### source_type 분류:
+- disclosure: 정부/기관 공식 발표 (me.go.kr, bok.or.kr 등)
+- report: 연구기관 정책 분석
+- news: 정책 관련 일반 뉴스
+
+### policy_area 분류:
+- regulatory: 규제/인허가
+- fiscal: 세금/보조금
+- trade: 무역/관세
+- monetary: 금리/환율
 
 확정된 정책 뉴스가 없으면:
 {{"status": "NOT_FOUND", "facts": [], "not_found": ["해당 기간 내 확정된 정책 변화 없음"]}}"""
@@ -1742,6 +1953,8 @@ class ExternalSearchPipeline:
 
         개선 (2026-02-08):
         - DART 컨텍스트 주입: 공시 데이터 기반 검증 기준 제공
+        - Few-shot 예시 추가 (3번 개선)
+        - source_type 출처 분리 (4번 개선)
         """
         today = datetime.now().strftime("%Y-%m-%d")
 
@@ -1773,7 +1986,32 @@ class ExternalSearchPipeline:
 ⚠️ 추측/전망 기사 제외, 확정된 사실만
 ⚠️ 위 DART 공시 정보와 불일치하면 재확인 필요
 
-### 출력 형식 (간결한 JSON)
+---
+## 예시 (Few-shot)
+
+### ✅ 좋은 응답:
+{{
+  "status": "FOUND",
+  "facts": [
+    {{
+      "title": "{corp_name} 2025년 3분기 영업이익 1200억원",
+      "summary": "{corp_name}이 2025년 3분기 영업이익 1200억원을 기록했다. 전년 동기 대비 25% 증가. 주력 제품 수요 증가가 실적을 견인했다.",
+      "source_url": "https://www.hankyung.com/article/12345",
+      "date": "2025-01-15",
+      "impact": "OPPORTUNITY",
+      "source_type": "news",
+      "numbers": {{"영업이익": "1200억원", "YoY": "+25%"}}
+    }}
+  ]
+}}
+
+### ❌ 나쁜 응답 (하지 마세요):
+- "실적이 좋아질 것으로 예상됨" → 예상/전망 금지
+- "영업이익이 크게 늘었다" → 구체적 숫자 없음
+- 다른 회사 뉴스 혼동
+
+---
+### 출력 형식 (JSON)
 {{
   "status": "FOUND" | "NOT_FOUND",
   "facts": [
@@ -1782,11 +2020,18 @@ class ExternalSearchPipeline:
       "summary": "핵심 내용 2-3문장 (숫자+단위 포함)",
       "source_url": "기사 URL (필수)",
       "date": "YYYY-MM-DD (기사 날짜)",
-      "impact": "RISK | OPPORTUNITY | NEUTRAL"
+      "impact": "RISK | OPPORTUNITY | NEUTRAL",
+      "source_type": "news | disclosure | report",
+      "numbers": {{"항목": "값", "YoY": "+/-X%"}}
     }}
   ],
   "not_found": ["찾지 못한 항목 (있으면)"]
 }}
+
+### source_type 분류:
+- disclosure: dart.fss.or.kr, kind.krx.co.kr 등 공시
+- report: "리포트", "목표주가" 포함 기사
+- news: 그 외 일반 뉴스
 
 정보가 없으면:
 {{"status": "NOT_FOUND", "facts": [], "not_found": ["해당 기간 내 관련 뉴스 없음"]}}"""
@@ -1813,6 +2058,10 @@ class ExternalSearchPipeline:
         - 스키마 단순화 (6개 핵심 필드)
         - 현실적 출처만 요청 (경제지, 통신사)
         - falsification_check 제거 (코드에서 처리)
+
+        개선 (2026-02-08):
+        - Few-shot 예시 추가 (3번 개선)
+        - source_type 출처 분리 (4번 개선)
         """
         today = datetime.now().strftime("%Y-%m-%d")
 
@@ -1844,21 +2093,53 @@ class ExternalSearchPipeline:
 ❌ 단일 기업 주가 변동
 ❌ 블로그/커뮤니티 출처
 
-### 출력 형식 (간결한 JSON)
+---
+## 예시 (Few-shot)
+
+### ✅ 좋은 응답:
+{{
+  "status": "FOUND",
+  "facts": [
+    {{
+      "title": "{industry_name} 1월 생산지수 전월비 3.2% 상승",
+      "summary": "산업통상자원부 발표에 따르면 {industry_name} 1월 생산지수가 전월 대비 3.2% 상승했다. AI 수요 증가가 주요 원인으로 분석됐다.",
+      "source_url": "https://www.yna.co.kr/industry/12345",
+      "date": "2025-02-01",
+      "impact": "OPPORTUNITY",
+      "source_type": "news",
+      "affected_scope": "{industry_name} 전체",
+      "numbers": {{"생산지수": "+3.2% MoM"}}
+    }}
+  ]
+}}
+
+### ❌ 나쁜 응답:
+- "반도체 업황 좋아질 전망" → 전망 금지
+- 특정 기업(삼성전자 등) 실적 기사 → 업종 전체만
+
+---
+### 출력 형식 (JSON)
 {{
   "status": "FOUND" | "NOT_FOUND",
   "facts": [
     {{
       "title": "뉴스 제목 (50자 이내)",
-      "summary": "핵심 내용 2-3문장",
+      "summary": "핵심 내용 2-3문장 (숫자 포함)",
       "source_url": "기사 URL (필수)",
       "date": "YYYY-MM-DD",
       "impact": "RISK | OPPORTUNITY | NEUTRAL",
-      "affected_scope": "영향 범위 (예: 반도체 업종 전체)"
+      "source_type": "news | disclosure | report",
+      "affected_scope": "영향 범위 (예: {industry_name} 전체)",
+      "numbers": {{"항목": "값"}}
     }}
   ],
   "not_found": ["찾지 못한 항목"]
 }}
+
+### source_type 분류:
+- disclosure: 정부/기관 공식 발표
+- report: 연구기관/증권사 리포트 기사
+- news: 일반 경제 뉴스
 
 업종 전체 뉴스가 없으면:
 {{"status": "NOT_FOUND", "facts": [], "not_found": ["해당 기간 내 업종 전체 영향 뉴스 없음"]}}"""
@@ -1886,6 +2167,10 @@ class ExternalSearchPipeline:
         - 스키마 단순화 (6개 핵심 필드)
         - 현실적 출처만 (경제지 정책 기사)
         - falsification_check 제거
+
+        개선 (2026-02-08):
+        - Few-shot 예시 추가 (3번 개선)
+        - source_type 출처 분리 (4번 개선)
         """
         today = datetime.now().strftime("%Y-%m-%d")
 
@@ -1931,21 +2216,67 @@ class ExternalSearchPipeline:
 ❌ "~할 전망", "~할 예정" 등 추측성 기사
 ❌ 업계 요청/건의 (정책 아님)
 
-### 출력 형식 (간결한 JSON)
+---
+## 예시 (Few-shot)
+
+### ✅ 좋은 응답:
+{{
+  "status": "FOUND",
+  "facts": [
+    {{
+      "title": "한은 기준금리 0.25%p 인하, 3.25%로 결정",
+      "summary": "한국은행 금융통화위원회가 2025년 1월 기준금리를 0.25%p 인하하여 3.25%로 결정했다. 경기 둔화 우려에 대응한 조치다.",
+      "source_url": "https://www.bok.or.kr/press/12345",
+      "date": "2025-01-16",
+      "impact": "OPPORTUNITY",
+      "source_type": "disclosure",
+      "policy_area": "monetary"
+    }},
+    {{
+      "title": "{industry_name} 탄소배출권 의무 강화, 2026년부터 적용",
+      "summary": "환경부가 {industry_name} 업종의 탄소배출권 할당량을 10% 축소한다고 발표했다. 2026년 1월부터 적용된다.",
+      "source_url": "https://www.me.go.kr/policy/12345",
+      "date": "2025-01-10",
+      "impact": "RISK",
+      "source_type": "disclosure",
+      "policy_area": "regulatory"
+    }}
+  ]
+}}
+
+### ❌ 나쁜 응답:
+- "금리 인하 전망" → 확정된 것만
+- "업계, 규제 완화 요청" → 정책 아님
+- "환경부 검토 중" → 미확정 정책
+
+---
+### 출력 형식 (JSON)
 {{
   "status": "FOUND" | "NOT_FOUND",
   "facts": [
     {{
       "title": "정책/규제 제목 (50자 이내)",
-      "summary": "핵심 내용 2-3문장 (확정된 사실만)",
+      "summary": "핵심 내용 2-3문장 (확정된 사실만, 숫자 포함)",
       "source_url": "기사 URL (필수)",
       "date": "YYYY-MM-DD",
       "impact": "RISK | OPPORTUNITY | NEUTRAL",
+      "source_type": "disclosure | news | report",
       "policy_area": "regulatory | fiscal | trade | monetary"
     }}
   ],
   "not_found": ["찾지 못한 항목"]
 }}
+
+### source_type 분류:
+- disclosure: 정부/기관 공식 발표 (me.go.kr, bok.or.kr 등)
+- report: 연구기관 정책 분석
+- news: 정책 관련 일반 뉴스
+
+### policy_area 분류:
+- regulatory: 규제/인허가
+- fiscal: 세금/보조금
+- trade: 무역/관세
+- monetary: 금리/환율
 
 확정된 정책 뉴스가 없으면:
 {{"status": "NOT_FOUND", "facts": [], "not_found": ["해당 기간 내 확정된 정책 변화 없음"]}}"""

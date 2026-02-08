@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useSignals, useSignalStats, useLoanInsightSummaries, ApiLoanInsightSummary } from "@/hooks/useApi";
@@ -8,7 +8,12 @@ import {
   TrendingDown,
   Lightbulb,
   Beaker,
-  Settings
+  Settings,
+  CheckCircle,
+  XCircle,
+  Filter,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import {
   DynamicBackground,
@@ -17,6 +22,7 @@ import {
   StatusBadge
 } from "@/components/premium";
 import { motion } from "framer-motion";
+import { SignalStatus, SIGNAL_STATUS_CONFIG } from "@/types/signal";
 
 import { GroupedSignalCard } from "@/components/dashboard/GroupedSignalCard";
 
@@ -56,8 +62,14 @@ function KPICard({ icon: Icon, label, value, trend, colorClass = "text-primary",
   );
 }
 
+// 상태 필터 타입
+type StatusFilter = "all" | "active" | SignalStatus;
+
 export default function SignalInbox() {
   const navigate = useNavigate();
+
+  // 상태 필터: 기본값 "active" (NEW + REVIEWED, DISMISSED 숨김)
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("active");
 
   // API에서 데이터 로드
   const { data: signals = [], isLoading, error } = useSignals();
@@ -75,8 +87,16 @@ export default function SignalInbox() {
     return map;
   }, [insightSummaries]);
 
-  // 시그널 목록 (필터 없이 전체 표시)
-  const filteredSignals = signals;
+  // 상태 필터 적용
+  const filteredSignals = useMemo(() => {
+    if (statusFilter === "all") return signals;
+    if (statusFilter === "active") {
+      // active = NEW + REVIEWED (DISMISSED 제외)
+      return signals.filter(s => s.status !== "dismissed");
+    }
+    // 특정 상태만 필터
+    return signals.filter(s => s.status === statusFilter);
+  }, [signals, statusFilter]);
 
   // 기업별로 시그널 그룹핑
   const groupedSignals = useMemo(() => {
@@ -108,9 +128,10 @@ export default function SignalInbox() {
 
   const counts = useMemo(() => ({
     todayNew: stats?.new || signals.filter(s => s.status === "new").length,
+    reviewed: stats?.reviewed || signals.filter(s => s.status === "reviewed").length,
+    dismissed: stats?.dismissed || signals.filter(s => s.status === "dismissed").length,
     riskHigh7d: stats?.risk || signals.filter(s => s.impact === "risk").length,
     opportunity7d: stats?.opportunity || signals.filter(s => s.impact === "opportunity").length,
-    loanEligible: 0,
   }), [signals, stats]);
 
   // Click row -> go to signal detail
@@ -184,25 +205,97 @@ export default function SignalInbox() {
           </motion.div>
         )}
 
-        {/* KPI Cards - Kept as "Satellites" */}
+        {/* KPI Cards - 상태별 통계 */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="grid grid-cols-4 gap-4"
+          className="grid grid-cols-2 md:grid-cols-4 gap-4"
         >
-          <KPICard icon={AlertCircle} label="금일 신규 시그널" value={counts.todayNew} trend="오늘" colorClass="text-indigo-500" trendData={[2, 4, 3, 5, 4, 6, counts.todayNew]} sparklineColor="#6366f1" />
-          <KPICard icon={TrendingDown} label="위험 시그널 (7일)" value={counts.riskHigh7d} trend="최근 7일" colorClass="text-rose-500" trendData={[5, 6, 8, 7, 9, 8, counts.riskHigh7d]} sparklineColor="#f43f5e" />
-          <KPICard icon={TrendingUp} label="기회 시그널 (7일)" value={counts.opportunity7d} trend="최근 7일" colorClass="text-emerald-500" trendData={[2, 3, 2, 4, 3, 5, counts.opportunity7d]} sparklineColor="#10b981" />
-          <KPICard icon={Lightbulb} label="여신 거래 법인" value={counts.loanEligible} trend="참고용" colorClass="text-amber-500" />
+          <KPICard icon={AlertCircle} label="신규 시그널" value={counts.todayNew} trend="미검토" colorClass="text-indigo-500" trendData={[2, 4, 3, 5, 4, 6, counts.todayNew]} sparklineColor="#6366f1" />
+          <KPICard icon={CheckCircle} label="검토 완료" value={counts.reviewed} trend="처리됨" colorClass="text-emerald-500" trendData={[1, 2, 2, 3, 3, 4, counts.reviewed]} sparklineColor="#10b981" />
+          <KPICard icon={TrendingDown} label="위험 시그널" value={counts.riskHigh7d} trend="주의 필요" colorClass="text-rose-500" trendData={[5, 6, 8, 7, 9, 8, counts.riskHigh7d]} sparklineColor="#f43f5e" />
+          <KPICard icon={TrendingUp} label="기회 시그널" value={counts.opportunity7d} trend="긍정적" colorClass="text-emerald-500" trendData={[2, 3, 2, 4, 3, 5, counts.opportunity7d]} sparklineColor="#10b981" />
         </motion.div>
 
-        {/* 정렬 옵션 */}
+        {/* 상태 필터 탭 + 정렬 옵션 */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.1 }}
-          className="flex items-center justify-end"
+          className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
         >
+          {/* 상태 필터 탭 */}
+          <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg">
+            <button
+              onClick={() => setStatusFilter("active")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+                statusFilter === "active"
+                  ? "bg-white text-slate-900 shadow-sm"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <Eye className="w-3.5 h-3.5" />
+              활성
+              <span className="ml-1 px-1.5 py-0.5 text-xs bg-indigo-100 text-indigo-700 rounded-full">
+                {signals.filter(s => s.status !== "dismissed").length}
+              </span>
+            </button>
+            <button
+              onClick={() => setStatusFilter("new")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+                statusFilter === "new"
+                  ? "bg-white text-slate-900 shadow-sm"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <AlertCircle className="w-3.5 h-3.5" />
+              신규
+              <span className="ml-1 px-1.5 py-0.5 text-xs bg-indigo-100 text-indigo-700 rounded-full">
+                {counts.todayNew}
+              </span>
+            </button>
+            <button
+              onClick={() => setStatusFilter("reviewed")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+                statusFilter === "reviewed"
+                  ? "bg-white text-slate-900 shadow-sm"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <CheckCircle className="w-3.5 h-3.5" />
+              검토 완료
+              <span className="ml-1 px-1.5 py-0.5 text-xs bg-emerald-100 text-emerald-700 rounded-full">
+                {counts.reviewed}
+              </span>
+            </button>
+            <button
+              onClick={() => setStatusFilter("dismissed")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+                statusFilter === "dismissed"
+                  ? "bg-white text-slate-900 shadow-sm"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              <EyeOff className="w-3.5 h-3.5" />
+              기각
+              <span className="ml-1 px-1.5 py-0.5 text-xs bg-slate-200 text-slate-600 rounded-full">
+                {counts.dismissed}
+              </span>
+            </button>
+            <button
+              onClick={() => setStatusFilter("all")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+                statusFilter === "all"
+                  ? "bg-white text-slate-900 shadow-sm"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              <Filter className="w-3.5 h-3.5" />
+              전체
+            </button>
+          </div>
+
+          {/* 정렬 옵션 */}
           <select className="text-sm border border-input rounded-md px-3 py-2 bg-card text-foreground focus:ring-2 focus:ring-primary/20 outline-none">
             <option value="recent">최신순</option>
             <option value="impact">영향도순</option>

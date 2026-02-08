@@ -169,7 +169,10 @@ export default function SignalDetailPage() {
     if (!signalId) return;
     updateStatus.mutate(
       { signalId, status: "REVIEWED" },
-      { onSuccess: () => toast.success("Verified", { description: "Signal marked as verified." }) }
+      {
+        onSuccess: () => toast.success("검토 완료", { description: "시그널이 검토 완료 처리되었습니다." }),
+        onError: (error) => toast.error("처리 실패", { description: "시그널 상태 변경에 실패했습니다. 다시 시도해주세요." }),
+      }
     );
   };
 
@@ -181,8 +184,9 @@ export default function SignalDetailPage() {
         onSuccess: () => {
           setDismissDialogOpen(false);
           setDismissReason("");
-          toast.success("Dismissed", { description: "Signal dismissed." });
+          toast.success("기각 완료", { description: "시그널이 기각 처리되었습니다." });
         },
+        onError: (error) => toast.error("처리 실패", { description: "시그널 기각에 실패했습니다. 다시 시도해주세요." }),
       }
     );
   };

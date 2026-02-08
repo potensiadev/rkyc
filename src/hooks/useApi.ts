@@ -86,8 +86,8 @@ function mapApiCorporationToFrontend(api: ApiCorporation): Corporation {
 
 function mapSignalStatus(status: SignalStatusType | null): SignalStatus {
   if (!status || status === 'NEW') return 'new';
-  if (status === 'REVIEWED') return 'review';
-  if (status === 'DISMISSED') return 'resolved';
+  if (status === 'REVIEWED') return 'reviewed';
+  if (status === 'DISMISSED') return 'dismissed';
   return 'new';
 }
 
@@ -198,8 +198,8 @@ export function useSignalStats() {
       return {
         total: signals.length,
         new: signals.filter(s => !s.signal_status || s.signal_status === 'NEW').length,
-        review: signals.filter(s => s.signal_status === 'REVIEWED').length,
-        resolved: signals.filter(s => s.signal_status === 'DISMISSED').length,
+        reviewed: signals.filter(s => s.signal_status === 'REVIEWED').length,
+        dismissed: signals.filter(s => s.signal_status === 'DISMISSED').length,
         risk: signals.filter(s => s.impact_direction === 'RISK').length,
         opportunity: signals.filter(s => s.impact_direction === 'OPPORTUNITY').length,
         neutral: signals.filter(s => s.impact_direction === 'NEUTRAL').length,
@@ -267,6 +267,9 @@ export function useUpdateSignalStatus() {
       queryClient.invalidateQueries({ queryKey: ['signalStats'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
+    onError: (error: Error) => {
+      console.error('Signal status update failed:', error);
+    },
   });
 }
 
@@ -282,6 +285,9 @@ export function useDismissSignal() {
       queryClient.invalidateQueries({ queryKey: ['signals'] });
       queryClient.invalidateQueries({ queryKey: ['signalStats'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+    onError: (error: Error) => {
+      console.error('Signal dismiss failed:', error);
     },
   });
 }

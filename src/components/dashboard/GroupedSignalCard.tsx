@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Signal, SIGNAL_TYPE_CONFIG, SIGNAL_IMPACT_CONFIG } from "@/types/signal";
+import { Signal, SIGNAL_TYPE_CONFIG, SIGNAL_IMPACT_CONFIG, SIGNAL_STATUS_CONFIG, SignalStatus } from "@/types/signal";
 import {
   AlertTriangle,
   TrendingUp,
@@ -12,10 +12,20 @@ import {
   ChevronDown,
   ChevronRight,
   ExternalLink,
+  CheckCircle,
+  XCircle,
+  AlertCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ApiLoanInsightSummary } from "@/hooks/useApi";
 import { StatusBadge, Tag } from "@/components/premium";
+
+// 상태별 아이콘 매핑
+const StatusIcons: Record<SignalStatus, typeof AlertCircle> = {
+  new: AlertCircle,
+  reviewed: CheckCircle,
+  dismissed: XCircle,
+};
 
 interface GroupedSignalCardProps {
   corporationId: string;
@@ -175,40 +185,72 @@ export function GroupedSignalCard({
                 const TypeIcon = TypeIcons[signal.signalCategory] || Building2;
                 const ImpactIcon = ImpactIcons[signal.impact] || FileText;
                 const typeConfig = SIGNAL_TYPE_CONFIG?.[signal.signalCategory];
+                const statusConfig = SIGNAL_STATUS_CONFIG[signal.status];
+                const StatusIcon = StatusIcons[signal.status];
                 const isRisk = signal.impact === "risk";
                 const isOpp = signal.impact === "opportunity";
+                const isDismissed = signal.status === "dismissed";
+                const isReviewed = signal.status === "reviewed";
 
                 return (
                   <div
                     key={signal.id}
-                    className="relative group p-2.5 rounded-lg hover:bg-white hover:shadow-sm border border-transparent hover:border-slate-100 transition-all cursor-pointer flex items-center gap-3"
+                    className={cn(
+                      "relative group p-2.5 rounded-lg hover:bg-white hover:shadow-sm border border-transparent hover:border-slate-100 transition-all cursor-pointer flex items-center gap-3",
+                      isDismissed && "opacity-50"
+                    )}
                     onClick={() => onSignalClick(signal.id)}
                   >
                     {/* Impact Indicator (Dot + Icon) */}
                     <div className={cn(
-                      "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors",
+                      "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors relative",
                       isRisk ? "bg-rose-50 text-rose-500 group-hover:bg-rose-100" :
                         isOpp ? "bg-emerald-50 text-emerald-500 group-hover:bg-emerald-100" :
                           "bg-slate-100 text-slate-500 group-hover:bg-slate-200"
                     )}>
                       <ImpactIcon className="w-4 h-4" />
-                      {isRisk && <span className="absolute top-2.5 right-2.5 w-1.5 h-1.5 bg-rose-500 rounded-full border border-white" />}
+                      {/* 상태 인디케이터 (우측 하단) */}
+                      {signal.status !== "new" && (
+                        <span className={cn(
+                          "absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full flex items-center justify-center border-2 border-white",
+                          isReviewed ? "bg-emerald-500" : "bg-slate-400"
+                        )}>
+                          <StatusIcon className="w-2 h-2 text-white" />
+                        </span>
+                      )}
                     </div>
 
                     {/* Content */}
                     <div className="flex-1 min-w-0">
                       {/* Title + Badges */}
                       <div className="flex items-center justify-between gap-2 mb-0.5">
-                        <h4 className="text-sm font-bold text-slate-700 group-hover:text-indigo-900 transition-colors line-clamp-1">
-                          {signal.title}
-                        </h4>
-                        <Tag className="text-[9px] py-0 px-1.5 h-4 bg-white border-slate-200 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <h4 className={cn(
+                            "text-sm font-bold transition-colors line-clamp-1",
+                            isDismissed ? "text-slate-400 line-through" : "text-slate-700 group-hover:text-indigo-900"
+                          )}>
+                            {signal.title}
+                          </h4>
+                          {/* 상태 배지 (신규 제외) */}
+                          {signal.status !== "new" && (
+                            <span className={cn(
+                              "flex-shrink-0 text-[9px] font-medium px-1.5 py-0.5 rounded-full",
+                              statusConfig.bgClass, statusConfig.colorClass
+                            )}>
+                              {statusConfig.label}
+                            </span>
+                          )}
+                        </div>
+                        <Tag className="text-[9px] py-0 px-1.5 h-4 bg-white border-slate-200 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
                           {typeConfig?.label}
                         </Tag>
                       </div>
 
                       {/* Summary - Only 1 Line */}
-                      <p className="text-xs text-slate-500 line-clamp-1 leading-normal">
+                      <p className={cn(
+                        "text-xs line-clamp-1 leading-normal",
+                        isDismissed ? "text-slate-400" : "text-slate-500"
+                      )}>
                         {signal.summary}
                       </p>
                     </div>

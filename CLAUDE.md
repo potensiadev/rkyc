@@ -2373,8 +2373,8 @@ backend/app/worker/llm/search_providers.py
 | 단순함이 최고 | 20개 필드 → 6개 필드, LLM 부담 감소 |
 | 코드가 검증 | source_tier, hallucination은 코드에서 처리 |
 
-### 세션 29 (2026-02-08) - DART Context Injection + Gemini 전체 Fact-Check ✅
-**목표**: 더 정확하고 풍부한 LLM 결과를 위한 2가지 개선 구현
+### 세션 29 (2026-02-08) - LLM 검색 4가지 개선 구현 ✅
+**목표**: 더 정확하고 풍부한 LLM 결과를 위한 4가지 개선 구현
 
 **배경**: 해커톤 시연에서 1개 기업만 분석, $10 예산 허용, 단 시간은 빨라야 함
 
@@ -2392,22 +2392,29 @@ backend/app/worker/llm/search_providers.py
 - FALSE 판정 → 제외, VERIFIED/PARTIAL → 유지
 - 메타데이터: `fact_check.verified_count`, `rejected_count`, `partial_count`
 
-#### 3. 병렬/순차 모드 모두 DART 컨텍스트 주입
-- `_execute_parallel()`: dart_prompt를 async 메서드에 전달
-- `_execute_sequential()`: dart_prompt를 sync 메서드에 전달
-- `_search_direct_events_async()`: dart_context 파라미터 추가
+#### 3. Few-shot 예시 추가 (검색 정확도 향상)
+- 모든 검색 메서드에 Few-shot 예시 추가
+- **좋은 응답 예시**: 구체적 숫자, 출처, 날짜 포함
+- **나쁜 응답 예시**: 전망/추측 금지, 숫자 없음 경고, 회사 혼동 주의
+- DIRECT, INDUSTRY, ENVIRONMENT 각각 업종별 맞춤 예시
+
+#### 4. 출처 유형 분리 (source_type)
+- **disclosure**: 공시/규제기관 (dart.fss.or.kr, bok.or.kr 등) - 100% 신뢰
+- **report**: 증권사/연구기관 리포트 기사 - 80% 신뢰
+- **news**: 일반 경제 뉴스 - 60% 신뢰
+- **numbers** 필드 추가: 숫자 데이터 구조화 (YoY, 금액 등)
 
 **수정된 파일**:
 ```
 backend/app/worker/pipelines/external_search.py
-  - DARTContext 데이터클래스 (lines 66-105)
-  - fetch_dart_context() 함수 (lines 108-143)
-  - execute() DART 컨텍스트 + Fact-check 통합
-  - _execute_parallel() dart_prompt 전달
-  - _execute_sequential() dart_prompt 전달
-  - _search_direct_events() dart_context 사용
-  - _search_direct_events_async() dart_context 파라미터 추가
-  - _fact_check_all_events() Gemini 팩트체크 (lines 1949-2089)
+  - FEW_SHOT_GOOD_EXAMPLE, FEW_SHOT_BAD_EXAMPLE 상수 추가
+  - SOURCE_TYPE_RULES 상수 추가
+  - _search_direct_events() Few-shot + source_type 추가
+  - _search_industry_events() Few-shot + source_type 추가
+  - _search_environment_events() Few-shot + source_type 추가
+  - _search_direct_events_async() Few-shot + source_type 추가
+  - _search_industry_events_async() Few-shot + source_type 추가
+  - _search_environment_events_async() Few-shot + source_type 추가
 ```
 
 **아키텍처 흐름**:
@@ -2415,21 +2422,22 @@ backend/app/worker/pipelines/external_search.py
 execute()
   → Step 1: fetch_dart_context(corp_name)
     → DART API에서 CEO, 주주, 임원 정보 조회
-  → Step 2: Perplexity 검색 (DART 컨텍스트 주입)
-    → 프롬프트에 "DART 공시 데이터 (100% Fact)" 섹션 추가
-    → LLM이 검색 시 검증 기준으로 활용
-  → Step 3: Gemini 팩트체크 (모든 결과)
-    → _fact_check_all_events()로 FALSE 필터링
-    → VERIFIED/PARTIAL 결과만 반환
+  → Step 2: Perplexity 검색 (4가지 개선 적용)
+    → DART 컨텍스트 주입 (1번)
+    → Few-shot 예시로 응답 품질 향상 (3번)
+    → source_type으로 출처 분류 (4번)
+  → Step 3: Gemini 팩트체크 (2번)
+    → FALSE 필터링, VERIFIED/PARTIAL 유지
 ```
 
 **예상 효과**:
 | 항목 | 이전 | 이후 |
 |------|------|------|
-| 검색 정확도 | Perplexity만 의존 | DART 기준 + Gemini 검증 |
+| 검색 정확도 | Perplexity만 의존 | DART 기준 + Few-shot + Gemini 검증 |
+| 출처 신뢰도 | 암묵적 | source_type으로 명시적 분류 |
+| 숫자 데이터 | 텍스트 혼합 | numbers 필드로 구조화 |
 | Hallucination | Soft Guardrails만 | Hard Fact-Check |
 | 추가 지연 | 0초 | +3~5초 (병렬 처리) |
-| 비용 | Perplexity만 | +Gemini (해커톤 $10 허용) |
 
 ---
-*Last Updated: 2026-02-08 (세션 29 - DART Context Injection + Gemini 전체 Fact-Check)*
+*Last Updated: 2026-02-08 (세션 29 - LLM 검색 4가지 개선)*

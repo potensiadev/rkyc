@@ -2,7 +2,7 @@
 // Each signal type represents different analysis logic and evidence sources
 
 export type SignalCategory = "direct" | "industry" | "environment";
-export type SignalStatus = "new" | "review" | "resolved";
+export type SignalStatus = "new" | "reviewed" | "dismissed";
 export type SignalSubType = "news" | "financial" | "regulatory" | "governance" | "market" | "macro";
 
 export interface SignalTypeInfo {
@@ -76,10 +76,38 @@ export const SIGNAL_SUBTYPE_CONFIG: Record<SignalSubType, { label: string; icon:
   macro: { label: "거시경제", icon: "Globe" },
 };
 
-export const SIGNAL_STATUS_CONFIG: Record<SignalStatus, { label: string; className: string }> = {
-  new: { label: "신규", className: "status-new" },
-  review: { label: "검토중", className: "status-review" },
-  resolved: { label: "완료", className: "status-resolved" },
+export const SIGNAL_STATUS_CONFIG: Record<SignalStatus, {
+  label: string;
+  labelEn: string;
+  colorClass: string;
+  bgClass: string;
+  borderClass: string;
+  iconName: string;
+}> = {
+  new: {
+    label: "신규",
+    labelEn: "New",
+    colorClass: "text-indigo-600",
+    bgClass: "bg-indigo-50",
+    borderClass: "border-indigo-200",
+    iconName: "AlertCircle"
+  },
+  reviewed: {
+    label: "검토 완료",
+    labelEn: "Reviewed",
+    colorClass: "text-emerald-600",
+    bgClass: "bg-emerald-50",
+    borderClass: "border-emerald-200",
+    iconName: "CheckCircle"
+  },
+  dismissed: {
+    label: "기각",
+    labelEn: "Dismissed",
+    colorClass: "text-slate-500",
+    bgClass: "bg-slate-100",
+    borderClass: "border-slate-300",
+    iconName: "XCircle"
+  },
 };
 
 export type SignalImpact = "risk" | "opportunity" | "neutral";
