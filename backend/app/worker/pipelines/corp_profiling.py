@@ -49,6 +49,7 @@ from app.worker.llm.circuit_breaker import get_circuit_breaker_manager
 from app.worker.llm.key_rotator import get_key_rotator
 from app.worker.llm.validator import get_validator, ValidationResult
 from app.worker.llm.search_providers import get_multi_search_manager
+from app.worker.llm.fact_checker import get_fact_checker, FactCheckResult, FactCheckResponse
 
 # DART API for shareholder verification and Fact-based data (P0/P1/P4)
 from app.services.dart_api import (
@@ -2201,6 +2202,9 @@ class CorpProfilingPipeline:
             profile = validation_result.corrected_profile or profile
         profile["validation_warnings"] = validation_result.warnings
 
+        # P0: Gemini Grounding Fact-Check (프로파일 저장 전 검증)
+        profile = await self._fact_check_profile(profile, corp_name)
+
         # Save to DB
         if db_session:
             await self._save_profile(profile, db_session)
@@ -2224,6 +2228,152 @@ class CorpProfilingPipeline:
             is_cached=orchestrator_result.fallback_layer == FallbackLayer.CACHE,
             query_details=details,
         )
+
+    async def _fact_check_profile(self, profile: dict, corp_name: str) -> dict:
+        """
+        P0: Gemini Grounding 기반 프로파일 팩트체크
+
+        핵심 프로파일 필드를 Google Search로 검증합니다.
+        검증 실패 시 confidence 하향 또는 필드 제거.
+
+        Args:
+            profile: 프로파일 딕셔너리
+            corp_name: 기업명
+
+        Returns:
+            검증된 프로파일 (fact_check_results 포함)
+        """
+        fact_checker = get_fact_checker()
+
+        if not fact_checker.is_available():
+            logger.warning("[FactCheck] Gemini not available, skipping profile fact-check")
+            profile["fact_check_status"] = "SKIPPED"
+            return profile
+
+        try:
+            # 팩트체크 대상 필드 선정 (핵심 정보만)
+            fields_to_check = self._get_fact_check_fields(profile, corp_name)
+
+            if not fields_to_check:
+                logger.info("[FactCheck] No fields to check")
+                profile["fact_check_status"] = "NO_FIELDS"
+                return profile
+
+            # 배치 팩트체크 수행
+            fact_check_results = {}
+            rejected_fields = []
+
+            for field_name, claim_info in fields_to_check.items():
+                # 개별 필드를 시그널 형태로 변환하여 검증
+                pseudo_signal = {
+                    "signal_type": "PROFILE",
+                    "event_type": "PROFILE_FIELD",
+                    "title": f"{corp_name} {field_name}",
+                    "summary": claim_info["claim"],
+                    "impact_direction": "NEUTRAL",
+                    "impact_strength": "LOW",
+                }
+
+                result = await fact_checker.check_signal(pseudo_signal, corp_name)
+                fact_check_results[field_name] = result.to_dict()
+
+                # FALSE 결과 처리
+                if result.result == FactCheckResult.FALSE:
+                    logger.warning(
+                        f"[FactCheck] FALSE detected for {field_name}: {result.explanation}"
+                    )
+                    rejected_fields.append(field_name)
+                    # 허위 필드는 null로 설정
+                    if field_name in profile:
+                        profile[field_name] = None
+                    # field_confidences도 업데이트
+                    if "field_confidences" in profile and field_name in profile.get("field_confidences", {}):
+                        profile["field_confidences"][field_name] = "REJECTED"
+
+                # UNVERIFIED 결과 처리: confidence 하향
+                elif result.result == FactCheckResult.UNVERIFIED and result.confidence < 0.5:
+                    logger.info(
+                        f"[FactCheck] UNVERIFIED for {field_name}, downgrading confidence"
+                    )
+                    if "field_confidences" in profile and field_name in profile.get("field_confidences", {}):
+                        current = profile["field_confidences"].get(field_name, "MED")
+                        if current == "HIGH":
+                            profile["field_confidences"][field_name] = "MED"
+                        elif current == "MED":
+                            profile["field_confidences"][field_name] = "LOW"
+
+            # 팩트체크 결과 저장
+            profile["fact_check_results"] = fact_check_results
+            profile["fact_check_rejected_fields"] = rejected_fields
+            profile["fact_check_status"] = "COMPLETED"
+
+            logger.info(
+                f"[FactCheck] Profile fact-check completed: "
+                f"checked={len(fields_to_check)}, rejected={len(rejected_fields)}"
+            )
+
+            return profile
+
+        except Exception as e:
+            logger.error(f"[FactCheck] Profile fact-check error: {e}")
+            profile["fact_check_status"] = "ERROR"
+            profile["fact_check_error"] = str(e)
+            return profile
+
+    def _get_fact_check_fields(self, profile: dict, corp_name: str) -> dict:
+        """
+        팩트체크 대상 필드 추출
+
+        핵심 주장이 포함된 필드만 선별합니다.
+        """
+        fields = {}
+
+        # 1. business_summary - 가장 중요한 팩트체크 대상
+        if profile.get("business_summary"):
+            fields["business_summary"] = {
+                "claim": f"{corp_name}: {profile['business_summary'][:300]}",
+            }
+
+        # 2. revenue_krw - 매출액 검증
+        if profile.get("revenue_krw"):
+            revenue_billion = profile["revenue_krw"] / 100000000  # 억원 단위
+            fields["revenue_krw"] = {
+                "claim": f"{corp_name}의 연간 매출액은 약 {revenue_billion:.0f}억원입니다.",
+            }
+
+        # 3. ceo_name - 대표이사 검증
+        if profile.get("ceo_name"):
+            fields["ceo_name"] = {
+                "claim": f"{corp_name}의 대표이사는 {profile['ceo_name']}입니다.",
+            }
+
+        # 4. shareholders - 주요 주주 검증 (DART 검증되지 않은 경우만)
+        shareholders = profile.get("shareholders", [])
+        shareholders_verification = profile.get("shareholders_verification", {})
+        if shareholders and not shareholders_verification.get("verified"):
+            # 상위 3명만 검증
+            top_shareholders = shareholders[:3] if isinstance(shareholders, list) else []
+            if top_shareholders:
+                names = ", ".join([s.get("name", s) if isinstance(s, dict) else str(s) for s in top_shareholders])
+                fields["shareholders"] = {
+                    "claim": f"{corp_name}의 주요 주주: {names}",
+                }
+
+        # 5. export_ratio_pct - 수출 비중 (극단적 값만)
+        export_ratio = profile.get("export_ratio_pct")
+        if export_ratio is not None and (export_ratio > 90 or export_ratio < 5):
+            fields["export_ratio_pct"] = {
+                "claim": f"{corp_name}의 수출 비중은 {export_ratio}%입니다.",
+            }
+
+        # 6. employee_count - 임직원 수 (대규모 기업만)
+        employee_count = profile.get("employee_count")
+        if employee_count and employee_count > 1000:
+            fields["employee_count"] = {
+                "claim": f"{corp_name}의 임직원 수는 약 {employee_count}명입니다.",
+            }
+
+        return fields
 
     def _normalize_supply_chain(self, supply_chain: Any) -> dict:
         """
