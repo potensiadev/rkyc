@@ -2237,5 +2237,141 @@ CLAUDE.md
 - Corp Profiling: 모든 프로파일 DB 저장 전 Gemini Grounding 팩트체크 (`corp_profiling.py`)
 - Multi-Agent Mode: 3-Agent 병렬 실행 시에도 동일 검증 (`signal_agents/base.py`)
 
+### 세션 27 (2026-02-08) - Ultimate Perplexity Prompt 설계 (전문가 자문) ✅
+**목표**: Goldman Sachs, JP Morgan, Moody's 전문가 자문 기반 Perplexity 프롬프트 최적화
+
+**배경**: 기존 프롬프트의 문제점 분석
+1. System/User Prompt에서 역할 정의 중복
+2. Entity 확인 로직 없음 (동명이인 방지 불가)
+3. 숫자 맥락 없음 (YoY, 업종평균 대비)
+4. Source Tier 암묵적 처리
+
+**전문가 자문 핵심**:
+- **Goldman Sachs (Sarah Chen)**: DART 공시 vs 뉴스 신뢰도 차등화
+- **JP Morgan (박정훈)**: 맥락 없는 숫자 = 위험, YoY/QoQ 필수
+- **Moody's (김미선)**: Entity Confusion 방지, 동명이인 구분
+
+**완료 항목**:
+
+#### 1. PERPLEXITY_ULTIMATE_SYSTEM_PROMPT 신규 생성
+- 5-Tier Source Hierarchy 명시 (Tier 1: 100% ~ Tier 5: 20%)
+- Entity Verification 체크리스트 (법인등록번호, 사업자번호, 본사주소)
+- Number Context 규칙 (값+단위+출처+비교 필수)
+- 한국어 비즈니스 격식체 유지
+
+#### 2. DIRECT 검색 프롬프트 개선
+- `entity_verified` 섹션 추가 (동명이인 검증)
+- `comparison` 필드 추가 (YoY, 업종평균)
+- biz_no, headquarters 파라미터 추가
+
+#### 3. INDUSTRY 검색 프롬프트 개선
+- `impact_on_reference_corp` 필드 필수화 ("{corp_name}에 미치는 영향")
+- 3개 이상 기업 영향 조건 명시
+
+#### 4. ENVIRONMENT 검색 프롬프트 개선
+- `industry_relevance` 필드 필수화
+- 확정/발표된 정책만 (추측 절대 금지)
+
+**수정된 파일**:
+```
+backend/app/worker/llm/search_providers.py
+  - PERPLEXITY_ULTIMATE_SYSTEM_PROMPT 추가
+  - PerplexityProvider payload 업데이트
+
+backend/app/worker/pipelines/external_search.py
+  - BUFFETT_SYSTEM_PROMPT 업데이트 (5-Tier Hierarchy, Entity Verification)
+  - _search_direct_events() 개선 (entity_verified, comparison)
+  - _search_industry_events() 개선 (impact_on_reference_corp)
+  - _search_environment_events() 개선 (industry_relevance)
+  - Async 버전들도 동일 업데이트
+```
+
+**Ultimate Prompt 핵심 원칙**:
+| 원칙 | 설명 |
+|------|------|
+| Less is More | 명확한 규칙 몇 개가 긴 프롬프트보다 효과적 |
+| Entity First | 동명이인 확인이 최우선 |
+| No Number Without Context | 값+단위+출처+비교 필수 |
+| Source Hierarchy | 모든 정보에 Tier 부여 |
+| Korean Business Korean | 영어 혼용 금지, 격식체 유지 |
+
+**Before vs After**:
+| 항목 | 기존 | 개선 |
+|------|------|------|
+| 역할 정의 | System+User 중복 | System만 |
+| 출처 신뢰도 | 암묵적 | 5-Tier 명시 |
+| Entity 확인 | 없음 | 필수 체크리스트 |
+| 숫자 맥락 | 없음 | YoY/업종평균 필수 |
+| JSON 구조 | 느슨함 | 엄격한 스키마 + tier 필드 |
+
+### 세션 28 (2026-02-08) - Perplexity P0 Critical Fix ✅
+**목표**: 월가 전문가 검토 결과 발견된 P0 Critical Error 수정
+
+**배경**: Morgan Stanley, Citi, S&P 전문가 롤플레이 검토에서 Perplexity API의 근본적 한계 발견
+- "택시 기사에게 비행기를 조종하라고 요청하는 격"
+
+**P0 Critical Errors 수정**:
+
+| Error | 문제 | 해결 |
+|-------|------|------|
+| **Tier 1 접근 불가** | Perplexity는 DART/신평사 접근 불가 (로그인 필요) | 현실적 출처만 요청 (경제지, 통신사) |
+| **entity_verified 불가능** | Perplexity로 법인등록번호/사업자번호 검증 불가 | 제거 (DART API로 별도 검증) |
+| **source_sentence 강제** | Perplexity는 요약 AI, 원문 인용 불가 | 50자+ 요구사항 제거 |
+
+**완료 항목**:
+
+#### 1. System Prompt 현실화
+```python
+PERPLEXITY_SYSTEM_PROMPT = """당신은 한국 기업 뉴스를 검색하는 도우미입니다.
+
+검색 가능한 출처:
+- 경제지: 한경, 매경, 조선비즈, 이데일리
+- 통신사: 연합뉴스, 뉴시스, 뉴스1
+- 외신: 로이터, 블룸버그
+
+접근 불가 (요청하지 마세요):
+- DART 전자공시 (로그인 필요)
+- 신용평가사 리포트 (유료 구독)
+- 금감원 내부 자료"""
+```
+
+#### 2. JSON 스키마 단순화 (20개 → 6개 필드)
+- **유지**: title, summary, source_url, date, impact
+- **추가**: affected_scope (INDUSTRY), policy_area (ENVIRONMENT)
+- **제거**: entity_verified, source_sentence, retrieval_confidence, source_tier (코드에서 계산), falsification_check (코드에서 처리)
+
+#### 3. Async 메서드 동일 적용
+- `_search_direct_events_async`
+- `_search_industry_events_async`
+- `_search_environment_events_async`
+
+#### 4. Parser 호환성 업데이트
+- `facts` 키 → `events` 매핑 추가
+- `status: NOT_FOUND` 처리 추가
+- `impact` → `impact_direction` 매핑
+
+**수정된 파일**:
+```
+backend/app/worker/pipelines/external_search.py
+  - PERPLEXITY_SYSTEM_PROMPT 현실화
+  - _search_direct_events() 간소화
+  - _search_industry_events() 간소화
+  - _search_environment_events() 간소화
+  - _search_*_async() 동일 적용
+  - _parse_events_v2() facts 키 지원
+  - _validate_event_v2() 검증 완화
+
+backend/app/worker/llm/search_providers.py
+  - PERPLEXITY_ULTIMATE_SYSTEM_PROMPT 현실화
+```
+
+**핵심 교훈**:
+| 원칙 | 설명 |
+|------|------|
+| API 한계 인정 | Perplexity는 뉴스 검색 AI, Tier 1 접근 불가 |
+| 책임 분리 | Entity 검증은 DART API, 검색은 Perplexity |
+| 단순함이 최고 | 20개 필드 → 6개 필드, LLM 부담 감소 |
+| 코드가 검증 | source_tier, hallucination은 코드에서 처리 |
+
 ---
-*Last Updated: 2026-02-08 (세션 27 - Corp Profiling Gemini Grounding Fact-Check 추가)*
+*Last Updated: 2026-02-08 (세션 28 - Perplexity P0 Critical Fix)*

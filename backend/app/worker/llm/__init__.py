@@ -296,6 +296,63 @@ from app.worker.llm.prompts_v2 import (
     INDUSTRY_CONTEXT,
 )
 
+# Sprint 1 - Enhanced Prompts (Anti-Hallucination, 50+ Forbidden Patterns)
+from app.worker.llm.prompts_enhanced import (
+    # Patterns
+    ForbiddenCategory,
+    CERTAINTY_PATTERNS,
+    PREDICTION_PATTERNS,
+    ESTIMATION_PATTERNS,
+    UNCERTAINTY_PATTERNS,
+    URGENCY_PATTERNS,
+    EXAGGERATION_PATTERNS,
+    ALL_FORBIDDEN_LITERALS,
+    COMPILED_FORBIDDEN_LITERALS,
+    REGEX_FORBIDDEN_PATTERNS,
+    COMPILED_REGEX_FORBIDDEN,
+    # Core Principles
+    V2_CORE_PRINCIPLES,
+    STRICT_JSON_SCHEMA,
+    CHAIN_OF_VERIFICATION,
+    # Personas
+    RISK_MANAGER_PERSONA,
+    IB_MANAGER_PERSONA,
+    # Examples (37 total)
+    DIRECT_EXAMPLES,
+    INDUSTRY_EXAMPLES,
+    ENVIRONMENT_EXAMPLES,
+    REJECTION_EXAMPLES,
+    # Functions
+    check_forbidden_patterns,
+    build_enhanced_system_prompt,
+    build_enhanced_user_prompt,
+    validate_signal_strict,
+)
+
+# Sprint 1 - Strict Schemas (Pydantic validation)
+from app.worker.llm.schemas_strict import (
+    # Enums
+    SignalType,
+    EventType,
+    ImpactDirection,
+    ImpactStrength,
+    ConfidenceLevel as StrictConfidenceLevel,
+    RetrievalConfidence,
+    EvidenceType,
+    RefType,
+    # Schemas
+    EvidenceStrictSchema,
+    QuantitativeDataSchema,
+    SignalStrictSchema,
+    SignalsResponseSchema,
+    # Validation Functions
+    validate_signal_dict,
+    validate_signals_response,
+    contains_forbidden_pattern,
+    # Constants
+    FORBIDDEN_PATTERNS as STRICT_FORBIDDEN_PATTERNS,
+)
+
 __all__ = [
     # Legacy service (for backward compatibility)
     "LLMService",
@@ -540,4 +597,46 @@ __all__ = [
     "FactCheckResponse",
     "get_fact_checker",
     "reset_fact_checker",
+    # Sprint 1 - Enhanced Prompts (Anti-Hallucination)
+    "ForbiddenCategory",
+    "CERTAINTY_PATTERNS",
+    "PREDICTION_PATTERNS",
+    "ESTIMATION_PATTERNS",
+    "UNCERTAINTY_PATTERNS",
+    "URGENCY_PATTERNS",
+    "EXAGGERATION_PATTERNS",
+    "ALL_FORBIDDEN_LITERALS",
+    "COMPILED_FORBIDDEN_LITERALS",
+    "REGEX_FORBIDDEN_PATTERNS",
+    "COMPILED_REGEX_FORBIDDEN",
+    "V2_CORE_PRINCIPLES",
+    "STRICT_JSON_SCHEMA",
+    "CHAIN_OF_VERIFICATION",
+    "RISK_MANAGER_PERSONA",
+    "IB_MANAGER_PERSONA",
+    "DIRECT_EXAMPLES",
+    "INDUSTRY_EXAMPLES",
+    "ENVIRONMENT_EXAMPLES",
+    "REJECTION_EXAMPLES",
+    "check_forbidden_patterns",
+    "build_enhanced_system_prompt",
+    "build_enhanced_user_prompt",
+    "validate_signal_strict",
+    # Sprint 1 - Strict Schemas (Pydantic validation)
+    "SignalType",
+    "EventType",
+    "ImpactDirection",
+    "ImpactStrength",
+    "StrictConfidenceLevel",
+    "RetrievalConfidence",
+    "EvidenceType",
+    "RefType",
+    "EvidenceStrictSchema",
+    "QuantitativeDataSchema",
+    "SignalStrictSchema",
+    "SignalsResponseSchema",
+    "validate_signal_dict",
+    "validate_signals_response",
+    "contains_forbidden_pattern",
+    "STRICT_FORBIDDEN_PATTERNS",
 ]

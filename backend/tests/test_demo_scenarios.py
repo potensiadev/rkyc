@@ -27,14 +27,19 @@ from typing import Optional
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 API_V1 = f"{API_BASE_URL}/api/v1"
 
-# 6개 시드 기업
+# 9개 시드 기업 (DART 조회 가능 기업만)
 SEED_CORPS = {
+    # 기존 4개
     "8001-3719240": {"name": "엠케이전자", "min_signals": 3},
     "8000-7647330": {"name": "동부건설", "min_signals": 3},
-    "4028-1234567": {"name": "전북식품", "min_signals": 3},
-    "6201-2345678": {"name": "광주정밀기계", "min_signals": 3},
     "4301-3456789": {"name": "삼성전자", "min_signals": 4},
     "6701-4567890": {"name": "휴림로봇", "min_signals": 3},
+    # 신규 5개 (소규모)
+    "9001-0000001": {"name": "크라우드웍스", "min_signals": 2},
+    "9001-0000002": {"name": "이엘피", "min_signals": 2},
+    "9001-0000003": {"name": "팬엔터테인먼트", "min_signals": 2},
+    "9001-0000004": {"name": "대한과학", "min_signals": 2},
+    "9001-0000005": {"name": "파이오링크", "min_signals": 2},
 }
 
 # 의심스러운 수치 패턴 (Hallucination 가능성)

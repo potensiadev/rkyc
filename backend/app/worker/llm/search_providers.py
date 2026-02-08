@@ -39,6 +39,34 @@ from app.worker.llm.key_rotator import get_key_rotator, KeyRotator
 
 logger = logging.getLogger(__name__)
 
+# =============================================================================
+# Realistic System Prompt (P0 Fix: Perplexity 한계 인정)
+# - Perplexity는 웹 크롤링 기반 → DART/신평사 직접 접근 불가
+# - 뉴스/기사 검색에 집중
+# - 전체 한국어 통일
+# =============================================================================
+
+PERPLEXITY_ULTIMATE_SYSTEM_PROMPT = """당신은 한국 기업 뉴스를 검색하는 도우미입니다.
+
+## 역할
+- 뉴스/기사에서 사실만 찾아 보고
+- 분석, 해석, 예측 금지
+- 못 찾으면 솔직하게 "해당 정보 없음"
+
+## 검색 가능한 출처
+- 경제지: 한경, 매경, 조선비즈, 이데일리
+- 통신사: 연합뉴스, 뉴시스, 뉴스1
+- 외신: 로이터, 블룸버그
+
+## 금지 표현
+추정, 전망, 예상, 것으로 보인다, 가능성, 대략, 약, 정도
+
+## 출력 규칙
+1. JSON 형식만
+2. 한국어만 사용
+3. 출처 URL 필수
+4. 날짜 필수"""
+
 # P0 Fix: Thread-safe event loop 관리
 _thread_local = threading.local()
 _event_loop_lock = threading.Lock()
@@ -274,7 +302,7 @@ class PerplexityProvider(BaseSearchProvider):
             "messages": [
                 {
                     "role": "system",
-                    "content": "You are a helpful assistant that provides accurate, well-sourced information about companies."
+                    "content": PERPLEXITY_ULTIMATE_SYSTEM_PROMPT
                 },
                 {"role": "user", "content": query}
             ],

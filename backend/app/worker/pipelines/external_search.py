@@ -170,41 +170,42 @@ ENVIRONMENT_QUERY_TEMPLATES = {
 
 
 # =============================================================================
-# Buffett Enhancement: System Prompt (Librarian, Not Analyst)
+# Realistic System Prompt (P0 Fix: Perplexity 한계 인정)
+# - Perplexity는 웹 크롤링 기반 → DART/신평사 직접 접근 불가
+# - 뉴스/기사 검색에 집중, Tier 1 데이터는 별도 API로 처리
+# - 전체 한국어 통일
 # =============================================================================
 
-BUFFETT_SYSTEM_PROMPT = """You are a librarian, not an analyst.
+PERPLEXITY_SYSTEM_PROMPT = """당신은 한국 기업 뉴스를 검색하는 도우미입니다.
 
-YOUR ONLY JOB: Find and copy facts. Do not interpret. Do not analyze.
+## 역할
+- 뉴스/기사에서 사실만 찾아 보고
+- 분석, 해석, 예측 금지
+- 못 찾으면 솔직하게 "해당 정보 없음"
 
-## ABSOLUTE RULES (BREAK ANY = ENTIRE RESPONSE REJECTED)
-1. Copy EXACT sentences from sources. Do not paraphrase unless impossible.
-2. Every number needs: value, unit, source_url, exact sentence, paragraph location
-3. If you cannot find something, say "NOT_FOUND" - this is a VALID and GOOD answer
-4. NEVER combine two numbers to create a third number
-5. NEVER use these words: 약, 추정, 전망, 예상, 일반적으로, 대략, 정도
+## 검색 가능한 출처 (현실적 범위)
+당신이 접근할 수 있는 출처:
+- 경제지: 한경, 매경, 조선비즈, 이데일리
+- 통신사: 연합뉴스, 뉴시스, 뉴스1
+- 외신: 로이터, 블룸버그
+- 포털 뉴스: 네이버뉴스, 다음뉴스
 
-## RETRIEVAL CONFIDENCE (must specify for each fact)
-- VERBATIM: Exact copy from source (preferred)
-- PARAPHRASED: Minor rewording for clarity (acceptable)
-- INFERRED: Derived from context (requires justification, last resort)
+접근 불가 (요청하지 마세요):
+- DART 전자공시 (로그인 필요)
+- 신용평가사 리포트 (유료 구독)
+- 금감원 내부 자료
 
-## SOURCE PRIORITY (Buffett's Value > Price)
-1. DART 정량 데이터 (재무제표, 주주명부, 임원현황) - 숫자만 추출
-2. 신용평가사 등급 변경 (한신평, NICE, 한기평) - 사실만
-3. 규제기관 제재/인허가 (금감원, 공정위) - 사실만
-4. 정부 공식 발표 (.go.kr) - 사실만
-5. 주요 경제지 (한경, 매경) - 위 1-4를 보완하는 용도로만
+## 금지 표현
+절대 사용 금지: 추정, 전망, 예상, 것으로 보인다, 가능성, 대략, 약, 정도
 
-## FALSIFICATION CHECKLIST (Invert, Always Invert)
-Before including any fact, ask yourself:
-- Is there a contradicting source?
-- Is this number within historical range for this company/industry?
-- Does this make sense compared to competitors?
+## 출력 규칙
+1. JSON 형식만 (마크다운 금지)
+2. 한국어만 사용
+3. 출처 URL 필수
+4. 날짜 필수 (YYYY-MM-DD)"""
 
-## OUTPUT FORMAT
-Return valid JSON only. No markdown, no explanation.
-Remember: Saying "I don't know" is better than guessing."""
+# Legacy alias
+BUFFETT_SYSTEM_PROMPT = PERPLEXITY_SYSTEM_PROMPT
 
 # Legacy alias for backward compatibility
 PERPLEXITY_SYSTEM_PROMPT = BUFFETT_SYSTEM_PROMPT
@@ -545,91 +546,57 @@ class ExternalSearchPipeline:
         corp_name: str,
         industry_name: str,
         corp_reg_no: Optional[str] = None,
+        biz_no: Optional[str] = None,
+        headquarters: Optional[str] = None,
     ) -> list[dict]:
         """
         Track 1: Search for company-specific credit risk signals.
 
-        Buffett Enhancement (2026-02-08):
-        - P0: 검색/추출 분리 (Librarian, Not Analyst)
-        - P0: retrieval_confidence 필드 (VERBATIM/PARAPHRASED/INFERRED)
-        - P1: 공시 데이터 최우선 (Value > Price)
-        - P2: could_not_find 필드 필수화
+        P0 Fix (2026-02-08):
+        - entity_verified 제거 (Perplexity로 불가능, 코드에서 DART API로 검증)
+        - source_sentence 강제 제거 (Perplexity는 요약 AI)
+        - 스키마 단순화 (20개 → 6개 핵심 필드)
+        - YoY 필수 → 선택적
         """
         today = datetime.now().strftime("%Y-%m-%d")
 
-        prompt = f"""## ROLE: LIBRARIAN (도서관 사서)
-You are a librarian, NOT an analyst. Your job is to FIND and COPY facts.
-Do NOT interpret, analyze, or infer. Just find and copy.
+        prompt = f"""## 검색 대상
+- 기업명: {corp_name}
+- 업종: {industry_name}
+- 검색일: {today}
+- 검색기간: 최근 90일
 
-## TARGET
-Company: {corp_name}
-{f"Corporate Registration: {corp_reg_no}" if corp_reg_no else ""}
-Industry: {industry_name}
-Today: {today}
-Period: Last 30 days
+## 검색 요청
+"{corp_name}" 관련 뉴스에서 아래 항목을 찾아주세요.
 
-## SEARCH PRIORITY (Buffett's Value > Price - 이 순서대로 검색)
-1. DART 공시 (dart.fss.or.kr) - 재무제표, 사업보고서, 주요사항보고서 [HIGHEST PRIORITY]
-2. 신용평가사 (kisrating.com, nicerating.com) - 등급 변경/전망 [HIGH PRIORITY]
-3. 금융감독원/공정위 (.go.kr) - 제재, 과징금, 인허가 [HIGH PRIORITY]
-4. 법원 공고 - 회생, 파산, 소송 판결 [HIGH PRIORITY]
-5. 주요 경제지 (한경, 매경) - 위 1-4를 보완하는 용도로만 [SUPPLEMENTARY]
+### 찾아야 할 정보
+1. **부정적 이벤트**: 연체, 부도, 소송, 과징금, 행정처분
+2. **경영 변화**: 대표이사 교체, 대주주 변경, 대규모 인력 변동
+3. **재무 뉴스**: 실적 발표, 신용등급 변경, 대규모 투자/차입
+4. **사업 변화**: 주요 계약 체결/해지, 사업 철수/확장
 
-## WHAT TO FIND (사실만, 분석 금지)
-Category 1 - NUMBERS (숫자):
-- 매출액, 영업이익, 순이익 (단위 포함)
-- 부채비율, 유동비율
-- 신용등급 (현재/변경)
+### 주의사항
+⚠️ 동명이인 주의: "{corp_name}" ({industry_name} 업종)만 해당
+⚠️ 다른 회사 뉴스 포함 금지
+⚠️ 추측/전망 기사 제외, 확정된 사실만
 
-Category 2 - EVENTS (이벤트):
-- 대표이사 변경 (이름, 일자)
-- 대주주 변경 (지분율, 일자)
-- 계약 체결/해지 (금액, 상대방)
-
-Category 3 - DATES (날짜):
-- 공시일, 발표일
-- 시행일, 만료일
-
-## OUTPUT FORMAT (STRICT JSON - Buffett Style)
+### 출력 형식 (간결한 JSON)
 {{
-  "retrieval_status": "FOUND" | "NOT_FOUND" | "PARTIAL" | "CONFLICTING",
-  "search_limitations": "검색의 한계점 명시 (예: DART 공시만 검색됨, 신평사 리포트 접근 불가)",
-  "could_not_find": ["찾지 못한 항목 목록 - 이것도 유효한 답변임"],
+  "status": "FOUND" | "NOT_FOUND",
   "facts": [
     {{
-      "fact_type": "NUMBER" | "EVENT" | "DATE",
-      "title": "사실 제목 (30자 이내)",
-      "value": "정확한 값 (숫자는 단위 포함)",
-      "unit": "원, %, 명 등 (해당시)",
-      "as_of_date": "이 정보의 기준일 (YYYY-MM-DD)",
-      "source_url": "https://full/url/path",
-      "source_name": "출처명 (예: DART, 한국경제)",
-      "source_tier": "tier1|tier2|tier3",
-      "source_sentence": "원문 문장 전체 복사 (요약 금지, 최소 50자)",
-      "paragraph_location": "문서 내 위치 설명 (예: 사업보고서 II.사업의내용 3페이지)",
-      "retrieval_confidence": "VERBATIM" | "PARAPHRASED" | "INFERRED",
-      "confidence_reason": "PARAPHRASED/INFERRED인 경우 그 이유",
-      "category": "credit_risk|governance|financial|operations",
-      "impact_direction": "RISK|OPPORTUNITY|NEUTRAL"
+      "title": "뉴스 제목 또는 사실 요약 (50자 이내)",
+      "summary": "핵심 내용 2-3문장",
+      "source_url": "기사 URL (필수)",
+      "date": "YYYY-MM-DD (기사 날짜)",
+      "impact": "RISK | OPPORTUNITY | NEUTRAL"
     }}
   ],
-  "falsification_check": {{
-    "contradicting_sources_found": true | false,
-    "contradicting_details": "상충되는 정보가 있으면 설명",
-    "numbers_within_historical_range": true | false,
-    "range_concern": "범위 벗어나면 설명"
-  }}
+  "not_found": ["찾지 못한 항목 (있으면)"]
 }}
 
-## CRITICAL RULES
-1. source_sentence는 원문 그대로 복사. 요약하면 REJECTED.
-2. 찾지 못한 정보는 could_not_find에 명시. "모르겠다"가 정답일 수 있음.
-3. 두 숫자를 조합해서 새 숫자를 만들지 마라.
-4. 추정, 전망, 예상 표현 사용 금지.
-5. INFERRED는 최후의 수단. 반드시 confidence_reason 필수.
-
-If you cannot find any credible information, return:
-{{"retrieval_status": "NOT_FOUND", "search_limitations": "검색 한계 설명", "could_not_find": ["전체 항목"], "facts": [], "falsification_check": {{}}}}"""
+정보가 없으면:
+{{"status": "NOT_FOUND", "facts": [], "not_found": ["해당 기간 내 관련 뉴스 없음"]}}"""
 
         events = self._call_perplexity(prompt, "direct")
 
@@ -648,96 +615,59 @@ If you cannot find any credible information, return:
         """
         Track 2: Search for industry-wide trends and shocks.
 
-        Buffett Enhancement (2026-02-08):
-        - P0: Librarian 역할 (분석 금지, 사실 수집만)
-        - P0: retrieval_confidence 필드 추가
-        - P1: 정부/연구기관 보고서 최우선
-        - P2: could_not_find 필드 필수화
+        P0 Fix (2026-02-08):
+        - 스키마 단순화 (6개 핵심 필드)
+        - 현실적 출처만 요청 (경제지, 통신사)
+        - falsification_check 제거 (코드에서 처리)
         """
         today = datetime.now().strftime("%Y-%m-%d")
 
         # Get industry-specific keywords
         keywords = INDUSTRY_KEYWORDS.get(industry_code, DEFAULT_INDUSTRY_KEYWORDS)
         supply_keywords = ", ".join(keywords.get("supply_chain", []))
-        regulation_keywords = ", ".join(keywords.get("regulation", []))
-        market_keywords = ", ".join(keywords.get("market", []))
 
-        prompt = f"""## ROLE: LIBRARIAN (도서관 사서)
-You are a librarian collecting industry statistics. Do NOT analyze. Just FIND and COPY.
+        prompt = f"""## 검색 대상
+- 업종: {industry_name}
+- 참조 기업: {corp_name} (이 기업만 검색하지 마세요)
+- 검색일: {today}
+- 검색기간: 최근 90일
 
-## TARGET
-Industry: {industry_name} (Code: {industry_code})
-Reference Company: {corp_name} (for context only - do NOT search this company specifically)
-Today: {today}
-Period: Last 30 days
+## 검색 요청
+"{industry_name}" 업종 전체에 영향을 미치는 뉴스를 찾아주세요.
+**조건: 특정 기업이 아닌, 업종 전체/다수 기업에 영향을 미치는 뉴스만**
 
-## SEARCH PRIORITY (Buffett's Value > Price)
-1. 산업통상자원부 통계/보고서 [HIGHEST - 정부 공식]
-2. 한국은행 산업동향 [HIGH - 중앙은행]
-3. KIET/KDI 연구보고서 [HIGH - 국책연구기관]
-4. 업종협회 통계 (예: 전자산업협회, 건설협회) [HIGH - 업계 공식]
-5. 관세청/KITA 수출입통계 [HIGH - 무역 데이터]
-6. 주요 경제지 [SUPPLEMENTARY - 위 출처 보완용]
+### 찾아야 할 정보
+1. **산업 통계**: 생산지수, 수출입 동향, 업황 전망
+2. **공급망 이슈**: 원자재 가격, 부품 수급, 물류 차질
+3. **규제 변화**: 업종 관련 정책, 법률 개정
+4. **시장 변화**: 수요 변동, 경쟁 구도, 기술 트렌드
 
-## INDUSTRY KEYWORDS
-- Supply Chain: {supply_keywords}
-- Regulation: {regulation_keywords}
-- Market: {market_keywords}
+### 업종 키워드 (참고용)
+{supply_keywords}
 
-## WHAT TO FIND (숫자와 사실만)
-**반드시 3개 이상 기업에 영향을 미치는 산업 전체 이벤트만**
-개별 기업 뉴스 → 제외
+### 제외 대상
+❌ 개별 기업 실적 발표
+❌ 단일 기업 주가 변동
+❌ 블로그/커뮤니티 출처
 
-1. NUMBERS (통계):
-- 산업 생산지수 (전월비, 전년비 %)
-- 수출입 금액/물량 (전년비 %)
-- 원자재 가격 변동 ({supply_keywords})
-- 고용 통계 (업종별 취업자 수)
-
-2. EVENTS (이벤트):
-- 업계 대형 M&A (거래금액 포함)
-- 공장 가동 중단 (다수 기업 영향)
-- 파업/노사갈등 (업계 전체)
-
-## OUTPUT FORMAT (STRICT JSON - Buffett Style)
+### 출력 형식 (간결한 JSON)
 {{
-  "retrieval_status": "FOUND" | "NOT_FOUND" | "PARTIAL",
-  "search_limitations": "검색 한계 (예: 협회 통계는 1개월 지연 발표)",
-  "could_not_find": ["찾지 못한 항목 - 이것도 유효한 답변"],
+  "status": "FOUND" | "NOT_FOUND",
   "facts": [
     {{
-      "fact_type": "STATISTIC" | "EVENT",
-      "title": "통계/이벤트명 (30자 이내)",
-      "value": "정확한 값 (숫자+단위)",
-      "comparison_base": "비교 기준 (예: 전년동기비, 전월비)",
-      "as_of_date": "기준일 (YYYY-MM-DD)",
-      "source_url": "URL",
-      "source_name": "출처명",
-      "source_tier": "tier1|tier2|tier3",
-      "source_sentence": "원문 문장 전체 복사 (50자 이상)",
-      "paragraph_location": "출처 내 위치",
-      "retrieval_confidence": "VERBATIM" | "PARAPHRASED" | "INFERRED",
-      "confidence_reason": "PARAPHRASED/INFERRED인 경우 이유",
-      "impact_area": "market_structure|supply_chain|demand|technology|labor",
-      "impact_direction": "RISK|OPPORTUNITY|NEUTRAL",
-      "affected_scope": "영향 범위 (예: 반도체 전 업종, 메모리 세그먼트)"
+      "title": "뉴스 제목 (50자 이내)",
+      "summary": "핵심 내용 2-3문장",
+      "source_url": "기사 URL (필수)",
+      "date": "YYYY-MM-DD",
+      "impact": "RISK | OPPORTUNITY | NEUTRAL",
+      "affected_scope": "영향 범위 (예: 반도체 업종 전체)"
     }}
   ],
-  "falsification_check": {{
-    "contradicting_sources_found": true | false,
-    "contradicting_details": "상충 정보 있으면 설명",
-    "numbers_within_historical_range": true | false,
-    "range_concern": "이상치 있으면 설명"
-  }}
+  "not_found": ["찾지 못한 항목"]
 }}
 
-## EXCLUSION RULE (강력 적용)
-- 단일 기업 실적 발표 → 제외 (업계 1위라도)
-- 주가 변동 → 제외 (펀더멘털 변화 없으면)
-- 블로그/커뮤니티만 출처 → 제외
-
-If no industry-wide facts found:
-{{"retrieval_status": "NOT_FOUND", "search_limitations": "설명", "could_not_find": ["산업 통계", "업종 이벤트"], "facts": [], "falsification_check": {{}}}}"""
+업종 전체 뉴스가 없으면:
+{{"status": "NOT_FOUND", "facts": [], "not_found": ["해당 기간 내 업종 전체 영향 뉴스 없음"]}}"""
 
         events = self._call_perplexity(prompt, "industry")
 
@@ -752,15 +682,15 @@ If no industry-wide facts found:
         industry_name: str,
         industry_code: str,
         selected_queries: list[str],
+        corp_name: Optional[str] = None,
     ) -> list[dict]:
         """
         Track 3: Search for policy, regulation, and macro-economic changes.
 
-        Buffett Enhancement (2026-02-08):
-        - P0: Librarian 역할 (정책 사실만 수집, 전망/분석 금지)
-        - P0: retrieval_confidence 필드 추가
-        - P1: 관보/정부 발표 최우선
-        - P2: could_not_find 필드 필수화
+        P0 Fix (2026-02-08):
+        - 스키마 단순화 (6개 핵심 필드)
+        - 현실적 출처만 (경제지 정책 기사)
+        - falsification_check 제거
         """
         today = datetime.now().strftime("%Y-%m-%d")
 
@@ -768,7 +698,7 @@ If no industry-wide facts found:
         query_topics = []
 
         if selected_queries:
-            for query_key in selected_queries[:5]:  # Limit to top 5
+            for query_key in selected_queries[:5]:
                 if query_key in ENVIRONMENT_QUERY_TEMPLATES:
                     query_topics.append(
                         ENVIRONMENT_QUERY_TEMPLATES[query_key].format(
@@ -776,90 +706,54 @@ If no industry-wide facts found:
                         )
                     )
         else:
-            # Default queries if no profile
             query_topics = [
-                f"{industry_name} 정책 규제 변경 정부 발표",
-                f"{industry_name} 세제 혜택 보조금 지원",
-                f"{industry_name} 환율 금리 영향 수출",
+                f"{industry_name} 정책 규제 변경",
+                f"{industry_name} 정부 지원 보조금",
+                f"{industry_name} 환율 금리 영향",
             ]
 
         query_focus = "\n".join(f"- {topic}" for topic in query_topics)
 
-        prompt = f"""## ROLE: LIBRARIAN (도서관 사서)
-You are a librarian collecting ENACTED policy documents. Do NOT analyze or predict. Just FIND and COPY.
+        prompt = f"""## 검색 대상
+- 업종: {industry_name}
+- 검색일: {today}
+- 검색기간: 최근 90일
 
-## TARGET
-Industry: {industry_name} (Code: {industry_code})
-Today: {today}
-Period: Last 30 days
+## 검색 요청
+"{industry_name}" 업종에 영향을 미치는 정책/규제/거시경제 뉴스를 찾아주세요.
 
-## SEARCH PRIORITY (Buffett's Value > Price - 공식 출처만)
-1. 관보 (gwanbo.go.kr) - 법률, 시행령, 시행규칙 원문 [HIGHEST]
-2. 법제처 (law.go.kr) - 제/개정 법률 [HIGHEST]
-3. 부처 보도자료 - 기재부, 산업부, 금융위, 환경부 [HIGH]
-4. 금융감독원 고시/공고 [HIGH]
-5. 한국은행 통화정책 결정문 [HIGH]
-6. 경제지 정책 기사 [SUPPLEMENTARY - 위 출처 보완용]
-
-## FOCUSED SEARCH
+### 찾아야 할 정보
 {query_focus}
 
-## WHAT TO FIND (확정된 정책만, 추측 금지)
-1. ENACTED (확정):
-- 법률명 + 법률 번호
-- 시행령/시행규칙 명칭
-- 시행일 (YYYY-MM-DD)
-- 주요 조항 내용 (원문 인용)
+### 구체적 항목
+1. **정책 변화**: 법률 제정/개정, 시행령 변경, 정부 발표
+2. **규제 변화**: 인허가 기준, 환경규제, 안전기준
+3. **금융/통화**: 금리 결정, 환율 동향, 자금 지원
+4. **무역/통상**: 관세, FTA, 수출규제
 
-2. ANNOUNCED (발표):
-- 부처명 + 발표일
-- 정책명
-- 구체적 내용 (금액, 세율, 기간 등)
+### 제외 대상
+❌ "검토 중", "논의 중" 등 미확정 정책
+❌ "~할 전망", "~할 예정" 등 추측성 기사
+❌ 업계 요청/건의 (정책 아님)
 
-3. MONETARY (금융통화):
-- 기준금리 결정 (수치, 결정일)
-- 통화정책방향
-
-## OUTPUT FORMAT (STRICT JSON - Buffett Style)
+### 출력 형식 (간결한 JSON)
 {{
-  "retrieval_status": "FOUND" | "NOT_FOUND" | "PARTIAL",
-  "search_limitations": "검색 한계 (예: 관보는 1주 지연 반영)",
-  "could_not_find": ["찾지 못한 정책 영역 - 이것도 유효한 답변"],
+  "status": "FOUND" | "NOT_FOUND",
   "facts": [
     {{
-      "fact_type": "LAW" | "DECREE" | "ANNOUNCEMENT" | "MONETARY",
-      "title": "정책명/법률명 (공식 명칭)",
-      "law_number": "법률 제XXXXX호 (해당시)",
-      "effective_date": "YYYY-MM-DD (시행일)",
-      "announcement_date": "YYYY-MM-DD (발표일)",
-      "issuing_authority": "발표 기관 (예: 기획재정부, 한국은행)",
-      "source_url": "URL (관보/법제처 우선)",
-      "source_name": "출처명",
-      "source_tier": "tier1|tier2|tier3",
-      "source_sentence": "원문 조항 또는 발표문 복사 (최소 100자)",
-      "paragraph_location": "출처 내 위치 (예: 제3조 제1항)",
-      "retrieval_confidence": "VERBATIM" | "PARAPHRASED" | "INFERRED",
-      "confidence_reason": "PARAPHRASED/INFERRED인 경우 이유",
-      "policy_area": "regulatory|fiscal|trade|environmental|monetary",
-      "impact_direction": "RISK|OPPORTUNITY|NEUTRAL",
-      "industry_relevance": "{industry_name}와의 관련성 설명 (1문장)"
+      "title": "정책/규제 제목 (50자 이내)",
+      "summary": "핵심 내용 2-3문장 (확정된 사실만)",
+      "source_url": "기사 URL (필수)",
+      "date": "YYYY-MM-DD",
+      "impact": "RISK | OPPORTUNITY | NEUTRAL",
+      "policy_area": "regulatory | fiscal | trade | monetary"
     }}
   ],
-  "falsification_check": {{
-    "is_enacted_or_announced": true | false,
-    "has_official_source": true | false,
-    "speculation_detected": "추측성 내용 있으면 설명"
-  }}
+  "not_found": ["찾지 못한 항목"]
 }}
 
-## ABSOLUTE EXCLUSIONS (발견 시 제외, 포함 금지)
-- "검토 중", "논의 중", "추진 예정" → 미확정이므로 제외
-- "~할 전망", "~할 것으로 예상" → 추측이므로 제외
-- 업계 요청/건의 → 아직 정책 아님
-- 언론 보도만 있고 공식 발표 없음 → 제외
-
-If no ENACTED/ANNOUNCED policy found:
-{{"retrieval_status": "NOT_FOUND", "search_limitations": "검색 한계 설명", "could_not_find": ["확정 정책", "공식 발표"], "facts": [], "falsification_check": {{"is_enacted_or_announced": false}}}}"""
+확정된 정책 뉴스가 없으면:
+{{"status": "NOT_FOUND", "facts": [], "not_found": ["해당 기간 내 확정된 정책 변화 없음"]}}"""
 
         events = self._call_perplexity(prompt, "environment")
 
@@ -956,11 +850,16 @@ If no ENACTED/ANNOUNCED policy found:
             if retrieval_status:
                 return self._parse_buffett_response(response_obj, search_type)
 
-            # Legacy 포맷 (status 필드)
+            # P0 Simple/Legacy 포맷 (status 필드)
             status = response_obj.get("status", "SUCCESS")
             reason = response_obj.get("reason", "")
+            not_found = response_obj.get("not_found", [])
 
-            if status == "NO_RESULTS":
+            # P0 Simple 포맷: status=NOT_FOUND 처리
+            if status == "NOT_FOUND":
+                logger.info(f"[{search_type}] NOT_FOUND: {not_found}")
+                return []
+            elif status == "NO_RESULTS":
                 logger.info(f"[{search_type}] NO_RESULTS: {reason}")
                 return []
             elif status == "NO_CREDIBLE_SOURCES":
@@ -970,8 +869,8 @@ If no ENACTED/ANNOUNCED policy found:
                 logger.error(f"[{search_type}] SEARCH_FAILED: {reason}")
                 return []
 
-            # events 배열 추출
-            events = response_obj.get("events", [])
+            # P0 Fix: facts 키도 events로 처리 (새 스키마 호환)
+            events = response_obj.get("events", response_obj.get("facts", []))
 
             # 유효성 검증 및 필터링
             valid_events = []
@@ -1237,16 +1136,20 @@ If no ENACTED/ANNOUNCED policy found:
 
     def _validate_event_v2(self, event: dict, search_type: str) -> Optional[dict]:
         """
-        Validate a single event dict (Buffett Enhanced).
+        Validate a single event dict.
+
+        P0 Fix (2026-02-08):
+        - 간소화된 스키마 (6개 핵심 필드) 지원
+        - source_excerpt 필수 제거 (Perplexity는 요약 AI)
+        - Summary 길이 제한 완화 (200자 → 경고만)
+        - impact → impact_direction 매핑
 
         검증 항목:
-        1. 필수 필드 존재
+        1. 필수 필드 존재 (title, summary, source_url)
         2. 블로그/커뮤니티 URL 차단
-        3. Summary 200자 이상
-        4. source_excerpt 존재 (수치 포함 시 검증)
-        5. source_tier 계산
-        6. [P1] Falsification 체크 (의심 키워드, 수치 범위)
-        7. [P1] Hallucination indicator 검출
+        3. Hallucination indicator 검출
+        4. source_tier 계산
+        5. impact_direction 정규화
         """
         import re
 
@@ -1267,42 +1170,30 @@ If no ENACTED/ANNOUNCED policy found:
 
         title = event.get("title", "")
         summary = event.get("summary", "")
-        source_excerpt = event.get("source_excerpt", "")
 
-        # 3. Summary 길이 검증 (200자 이상)
-        if len(summary) < 200:
-            logger.warning(
-                f"[{search_type}] Summary too short ({len(summary)} chars): {summary[:50]}..."
+        # 3. Summary 길이 검증 (경고만, 제외 안 함)
+        if len(summary) < 50:
+            logger.debug(
+                f"[{search_type}] Summary short ({len(summary)} chars): {summary[:50]}..."
             )
-            event["_validation_warning"] = "summary_too_short"
+            event["_validation_warning"] = "summary_short"
 
-        # 4. source_excerpt 검증
-        if not source_excerpt:
-            logger.debug(f"[{search_type}] Missing source_excerpt")
-            event["_validation_warning"] = "missing_source_excerpt"
-
-        # 5. 숫자 hallucination 검증
-        if source_excerpt:
-            numbers_in_summary = re.findall(r'[\d,.]+%?', summary)
-            for num in numbers_in_summary:
-                if len(num.replace(",", "").replace(".", "").replace("%", "")) >= 3:
-                    if num not in source_excerpt and num.replace(",", "") not in source_excerpt:
-                        logger.warning(
-                            f"[{search_type}][HALLUCINATION_RISK] Number '{num}' not in source_excerpt"
-                        )
-                        event["_hallucination_risk"] = True
-
-        # 6. [P1] Falsification 체크 - 의심 키워드
+        # 4. Hallucination indicator 검출
         text_to_check = f"{title} {summary}"
-        for keyword in FALSIFICATION_RULES["suspicious_keywords"]:
-            if keyword in text_to_check:
+        for indicator in HALLUCINATION_INDICATORS:
+            if indicator in text_to_check:
                 logger.warning(
-                    f"[{search_type}][FALSIFICATION] Suspicious keyword: '{keyword}'"
+                    f"[{search_type}][HALLUCINATION] Indicator: '{indicator}'"
                 )
-                event["_suspicious_keyword"] = keyword
-                event["_needs_cross_verify"] = True
+                event["_hallucination_indicator"] = indicator
+                # 심각한 indicator만 제외
+                if indicator in ["~로 추정됨", "~로 예상됨", "~할 전망", "~할 것으로 예상"]:
+                    logger.warning(
+                        f"[{search_type}][REJECTED] Critical hallucination indicator"
+                    )
+                    return None
 
-        # 7. [P1] Falsification 체크 - 교차검증 필요 주제
+        # 5. Falsification 체크 - 교차검증 필요 주제 (경고만)
         for topic in FALSIFICATION_RULES["cross_verify_required"]:
             if topic in text_to_check:
                 logger.info(
@@ -1311,49 +1202,33 @@ If no ENACTED/ANNOUNCED policy found:
                 event["_cross_verify_topic"] = topic
                 event["_needs_cross_verify"] = True
 
-        # 8. [P1] Falsification 체크 - 수치 범위 검증
+        # 6. 극단적 수치 검증 (경고 + 플래그)
         percentages = re.findall(r'[-+]?(\d+(?:\.\d+)?)\s*%', summary)
         for pct_str in percentages:
             try:
                 pct_value = float(pct_str)
-                # 매출/이익 증감률 범위 체크
                 if abs(pct_value) > FALSIFICATION_RULES["revenue_change_max_pct"]:
-                    if "매출" in text_to_check or "영업이익" not in text_to_check:
-                        logger.warning(
-                            f"[{search_type}][FALSIFICATION] Extreme revenue change: {pct_value}%"
-                        )
-                        event["_extreme_value"] = f"{pct_value}%"
-                        event["_needs_cross_verify"] = True
-                if abs(pct_value) > FALSIFICATION_RULES["profit_change_max_pct"]:
-                    if "영업이익" in text_to_check or "순이익" in text_to_check:
-                        logger.warning(
-                            f"[{search_type}][FALSIFICATION] Extreme profit change: {pct_value}%"
-                        )
-                        event["_extreme_value"] = f"{pct_value}%"
-                        event["_needs_cross_verify"] = True
+                    logger.warning(
+                        f"[{search_type}][FALSIFICATION] Extreme value: {pct_value}%"
+                    )
+                    event["_extreme_value"] = f"{pct_value}%"
+                    event["_needs_cross_verify"] = True
             except ValueError:
                 pass
 
-        # 9. [P1] Hallucination indicator 검출
-        for indicator in HALLUCINATION_INDICATORS:
-            if indicator in text_to_check:
-                logger.warning(
-                    f"[{search_type}][HALLUCINATION] Indicator: '{indicator}'"
-                )
-                event["_hallucination_indicator"] = indicator
-                # 심각한 indicator면 제외
-                if indicator in ["~로 추정됨", "~로 예상됨", "~할 전망", "~할 것으로 예상"]:
-                    logger.warning(
-                        f"[{search_type}][REJECTED] Critical hallucination indicator"
-                    )
-                    return None
-
-        # 10. source_tier 계산 (코드에서 계산, LLM 응답 무시)
+        # 7. source_tier 계산 (코드에서 계산, LLM 응답 무시)
         event["source_tier"] = self._get_source_tier(source_url)
 
-        # 11. impact_direction 검증
-        if event.get("impact_direction") not in {"RISK", "OPPORTUNITY", "NEUTRAL"}:
+        # 8. P0 Fix: impact → impact_direction 매핑
+        impact = event.get("impact") or event.get("impact_direction")
+        if impact in {"RISK", "OPPORTUNITY", "NEUTRAL"}:
+            event["impact_direction"] = impact
+        else:
             event["impact_direction"] = "NEUTRAL"
+
+        # 9. P0 Fix: date → published_at 매핑
+        if event.get("date") and not event.get("published_at"):
+            event["published_at"] = event["date"]
 
         return event
 
@@ -1712,65 +1587,56 @@ If no ENACTED/ANNOUNCED policy found:
         corp_name: str,
         industry_name: str,
         corp_reg_no: Optional[str] = None,
+        biz_no: Optional[str] = None,
+        headquarters: Optional[str] = None,
     ) -> list[dict]:
         """
-        Async version of DIRECT search (Buffett Enhanced).
+        Async version of DIRECT search.
 
-        Uses same prompt as sync version for consistency.
+        P0 Fix (2026-02-08):
+        - entity_verified 제거 (Perplexity로 불가능, 코드에서 DART API로 검증)
+        - source_sentence 강제 제거 (Perplexity는 요약 AI)
+        - 스키마 단순화 (20개 → 6개 핵심 필드)
         """
         today = datetime.now().strftime("%Y-%m-%d")
 
-        # Buffett-style prompt (same as sync version)
-        prompt = f"""## ROLE: LIBRARIAN (도서관 사서)
-You are a librarian, NOT an analyst. Your job is to FIND and COPY facts.
-Do NOT interpret, analyze, or infer. Just find and copy.
+        prompt = f"""## 검색 대상
+- 기업명: {corp_name}
+- 업종: {industry_name}
+- 검색일: {today}
+- 검색기간: 최근 90일
 
-## TARGET
-Company: {corp_name}
-{f"Corporate Registration: {corp_reg_no}" if corp_reg_no else ""}
-Industry: {industry_name}
-Today: {today}
-Period: Last 30 days
+## 검색 요청
+"{corp_name}" 관련 뉴스에서 아래 항목을 찾아주세요.
 
-## SEARCH PRIORITY (Buffett's Value > Price)
-1. DART 공시 (dart.fss.or.kr) - 재무제표, 사업보고서 [HIGHEST]
-2. 신용평가사 (kisrating.com, nicerating.com) - 등급 변경 [HIGH]
-3. 금융감독원/공정위 (.go.kr) - 제재, 과징금 [HIGH]
-4. 법원 공고 - 회생, 파산, 소송 [HIGH]
-5. 주요 경제지 - 위 1-4 보완용 [SUPPLEMENTARY]
+### 찾아야 할 정보
+1. **부정적 이벤트**: 연체, 부도, 소송, 과징금, 행정처분
+2. **경영 변화**: 대표이사 교체, 대주주 변경, 대규모 인력 변동
+3. **재무 뉴스**: 실적 발표, 신용등급 변경, 대규모 투자/차입
+4. **사업 변화**: 주요 계약 체결/해지, 사업 철수/확장
 
-## WHAT TO FIND (사실만)
-- NUMBERS: 매출, 영업이익, 신용등급
-- EVENTS: 대표이사 변경, 대주주 변경, 계약 체결
-- DATES: 공시일, 발표일, 시행일
+### 주의사항
+⚠️ 동명이인 주의: "{corp_name}" ({industry_name} 업종)만 해당
+⚠️ 다른 회사 뉴스 포함 금지
+⚠️ 추측/전망 기사 제외, 확정된 사실만
 
-## OUTPUT FORMAT (Buffett Style)
+### 출력 형식 (간결한 JSON)
 {{
-  "retrieval_status": "FOUND" | "NOT_FOUND" | "PARTIAL",
-  "search_limitations": "검색 한계 설명",
-  "could_not_find": ["찾지 못한 항목"],
+  "status": "FOUND" | "NOT_FOUND",
   "facts": [
     {{
-      "fact_type": "NUMBER" | "EVENT" | "DATE",
-      "title": "사실 제목 (30자)",
-      "value": "정확한 값",
-      "as_of_date": "YYYY-MM-DD",
-      "source_url": "URL",
-      "source_name": "출처명",
-      "source_sentence": "원문 문장 전체 복사 (50자 이상)",
-      "retrieval_confidence": "VERBATIM" | "PARAPHRASED" | "INFERRED",
-      "confidence_reason": "INFERRED인 경우 이유",
-      "category": "credit_risk|governance|financial|operations",
-      "impact_direction": "RISK|OPPORTUNITY|NEUTRAL"
+      "title": "뉴스 제목 또는 사실 요약 (50자 이내)",
+      "summary": "핵심 내용 2-3문장",
+      "source_url": "기사 URL (필수)",
+      "date": "YYYY-MM-DD (기사 날짜)",
+      "impact": "RISK | OPPORTUNITY | NEUTRAL"
     }}
   ],
-  "falsification_check": {{
-    "contradicting_sources_found": false,
-    "numbers_within_historical_range": true
-  }}
+  "not_found": ["찾지 못한 항목 (있으면)"]
 }}
 
-CRITICAL: source_sentence는 원문 그대로. "모르겠다"도 유효한 답변."""
+정보가 없으면:
+{{"status": "NOT_FOUND", "facts": [], "not_found": ["해당 기간 내 관련 뉴스 없음"]}}"""
 
         events = await self._call_perplexity_async(client, prompt, "direct")
 
@@ -1788,9 +1654,12 @@ CRITICAL: source_sentence는 원문 그대로. "모르겠다"도 유효한 답�
         industry_code: str,
     ) -> list[dict]:
         """
-        Async version of INDUSTRY search (Buffett Enhanced).
+        Async version of INDUSTRY search.
 
-        Uses same prompt as sync version for consistency.
+        P0 Fix (2026-02-08):
+        - 스키마 단순화 (6개 핵심 필드)
+        - 현실적 출처만 요청 (경제지, 통신사)
+        - falsification_check 제거 (코드에서 처리)
         """
         today = datetime.now().strftime("%Y-%m-%d")
 
@@ -1798,56 +1667,48 @@ CRITICAL: source_sentence는 원문 그대로. "모르겠다"도 유효한 답�
         keywords = INDUSTRY_KEYWORDS.get(industry_code, DEFAULT_INDUSTRY_KEYWORDS)
         supply_keywords = ", ".join(keywords.get("supply_chain", []))
 
-        # Buffett-style prompt (same as sync version)
-        prompt = f"""## ROLE: LIBRARIAN (도서관 사서)
-You are a librarian collecting industry statistics. Do NOT analyze. Just FIND and COPY.
+        prompt = f"""## 검색 대상
+- 업종: {industry_name}
+- 참조 기업: {corp_name} (이 기업만 검색하지 마세요)
+- 검색일: {today}
+- 검색기간: 최근 90일
 
-## TARGET
-Industry: {industry_name} (Code: {industry_code})
-Reference Company: {corp_name} (for context only)
-Today: {today}
-Period: Last 30 days
+## 검색 요청
+"{industry_name}" 업종 전체에 영향을 미치는 뉴스를 찾아주세요.
+**조건: 특정 기업이 아닌, 업종 전체/다수 기업에 영향을 미치는 뉴스만**
 
-## SEARCH PRIORITY (Buffett's Value > Price)
-1. 산업통상자원부 통계/보고서 [HIGHEST]
-2. 한국은행 산업동향 [HIGH]
-3. KIET/KDI 연구보고서 [HIGH]
-4. 업종협회 통계 [HIGH]
-5. 관세청/KITA 수출입통계 [HIGH]
-6. 주요 경제지 [SUPPLEMENTARY]
+### 찾아야 할 정보
+1. **산업 통계**: 생산지수, 수출입 동향, 업황 전망
+2. **공급망 이슈**: 원자재 가격, 부품 수급, 물류 차질
+3. **규제 변화**: 업종 관련 정책, 법률 개정
+4. **시장 변화**: 수요 변동, 경쟁 구도, 기술 트렌드
 
-## INDUSTRY KEYWORDS
-- Supply Chain: {supply_keywords}
+### 업종 키워드 (참고용)
+{supply_keywords}
 
-## WHAT TO FIND (산업 전체 영향 사실만)
-- STATISTICS: 생산지수, 수출입 금액, 원자재 가격
-- EVENTS: 업계 M&A, 공장 가동 중단, 파업
+### 제외 대상
+❌ 개별 기업 실적 발표
+❌ 단일 기업 주가 변동
+❌ 블로그/커뮤니티 출처
 
-## OUTPUT FORMAT (Buffett Style)
+### 출력 형식 (간결한 JSON)
 {{
-  "retrieval_status": "FOUND" | "NOT_FOUND" | "PARTIAL",
-  "search_limitations": "검색 한계",
-  "could_not_find": ["찾지 못한 항목"],
+  "status": "FOUND" | "NOT_FOUND",
   "facts": [
     {{
-      "fact_type": "STATISTIC" | "EVENT",
-      "title": "통계/이벤트명 (30자)",
-      "value": "정확한 값",
-      "comparison_base": "비교 기준 (전년비 등)",
-      "as_of_date": "YYYY-MM-DD",
-      "source_url": "URL",
-      "source_name": "출처명",
-      "source_sentence": "원문 복사 (50자 이상)",
-      "retrieval_confidence": "VERBATIM" | "PARAPHRASED" | "INFERRED",
-      "impact_area": "market_structure|supply_chain|demand|technology|labor",
-      "impact_direction": "RISK|OPPORTUNITY|NEUTRAL",
-      "affected_scope": "영향 범위"
+      "title": "뉴스 제목 (50자 이내)",
+      "summary": "핵심 내용 2-3문장",
+      "source_url": "기사 URL (필수)",
+      "date": "YYYY-MM-DD",
+      "impact": "RISK | OPPORTUNITY | NEUTRAL",
+      "affected_scope": "영향 범위 (예: 반도체 업종 전체)"
     }}
   ],
-  "falsification_check": {{}}
+  "not_found": ["찾지 못한 항목"]
 }}
 
-개별 기업 뉴스 제외. 산업 전체 영향만."""
+업종 전체 뉴스가 없으면:
+{{"status": "NOT_FOUND", "facts": [], "not_found": ["해당 기간 내 업종 전체 영향 뉴스 없음"]}}"""
 
         events = await self._call_perplexity_async(client, prompt, "industry")
 
@@ -1863,11 +1724,15 @@ Period: Last 30 days
         industry_name: str,
         industry_code: str,
         selected_queries: list[str],
+        corp_name: Optional[str] = None,
     ) -> list[dict]:
         """
-        Async version of ENVIRONMENT search (Buffett Enhanced).
+        Async version of ENVIRONMENT search.
 
-        Uses same prompt as sync version for consistency.
+        P0 Fix (2026-02-08):
+        - 스키마 단순화 (6개 핵심 필드)
+        - 현실적 출처만 (경제지 정책 기사)
+        - falsification_check 제거
         """
         today = datetime.now().strftime("%Y-%m-%d")
 
@@ -1884,65 +1749,53 @@ Period: Last 30 days
                     )
         else:
             query_topics = [
-                f"{industry_name} 정책 규제 변경 정부 발표",
-                f"{industry_name} 세제 혜택 보조금 지원",
+                f"{industry_name} 정책 규제 변경",
+                f"{industry_name} 정부 지원 보조금",
+                f"{industry_name} 환율 금리 영향",
             ]
 
         query_focus = "\n".join(f"- {topic}" for topic in query_topics)
 
-        # Buffett-style prompt (same as sync version)
-        prompt = f"""## ROLE: LIBRARIAN (도서관 사서)
-You are a librarian collecting ENACTED policy documents. Do NOT analyze. Just FIND and COPY.
+        prompt = f"""## 검색 대상
+- 업종: {industry_name}
+- 검색일: {today}
+- 검색기간: 최근 90일
 
-## TARGET
-Industry: {industry_name} (Code: {industry_code})
-Today: {today}
-Period: Last 30 days
+## 검색 요청
+"{industry_name}" 업종에 영향을 미치는 정책/규제/거시경제 뉴스를 찾아주세요.
 
-## SEARCH PRIORITY (공식 출처만)
-1. 관보 (gwanbo.go.kr) - 법률, 시행령 원문 [HIGHEST]
-2. 법제처 (law.go.kr) - 제/개정 법률 [HIGHEST]
-3. 부처 보도자료 - 기재부, 산업부 [HIGH]
-4. 금융감독원 고시 [HIGH]
-5. 한국은행 통화정책 결정문 [HIGH]
-
-## FOCUSED SEARCH
+### 찾아야 할 정보
 {query_focus}
 
-## WHAT TO FIND (확정된 정책만)
-- LAW: 법률명 + 법률 번호, 시행일
-- DECREE: 시행령/시행규칙
-- ANNOUNCEMENT: 부처 공식 발표
-- MONETARY: 기준금리 결정
+### 구체적 항목
+1. **정책 변화**: 법률 제정/개정, 시행령 변경, 정부 발표
+2. **규제 변화**: 인허가 기준, 환경규제, 안전기준
+3. **금융/통화**: 금리 결정, 환율 동향, 자금 지원
+4. **무역/통상**: 관세, FTA, 수출규제
 
-## OUTPUT FORMAT (Buffett Style)
+### 제외 대상
+❌ "검토 중", "논의 중" 등 미확정 정책
+❌ "~할 전망", "~할 예정" 등 추측성 기사
+❌ 업계 요청/건의 (정책 아님)
+
+### 출력 형식 (간결한 JSON)
 {{
-  "retrieval_status": "FOUND" | "NOT_FOUND" | "PARTIAL",
-  "search_limitations": "검색 한계",
-  "could_not_find": ["찾지 못한 정책"],
+  "status": "FOUND" | "NOT_FOUND",
   "facts": [
     {{
-      "fact_type": "LAW" | "DECREE" | "ANNOUNCEMENT" | "MONETARY",
-      "title": "정책명/법률명",
-      "law_number": "법률 제XXXXX호 (해당시)",
-      "effective_date": "YYYY-MM-DD (시행일)",
-      "issuing_authority": "발표 기관",
-      "source_url": "URL",
-      "source_name": "출처명",
-      "source_sentence": "원문 조항 복사 (100자 이상)",
-      "retrieval_confidence": "VERBATIM" | "PARAPHRASED" | "INFERRED",
-      "policy_area": "regulatory|fiscal|trade|environmental|monetary",
-      "impact_direction": "RISK|OPPORTUNITY|NEUTRAL"
+      "title": "정책/규제 제목 (50자 이내)",
+      "summary": "핵심 내용 2-3문장 (확정된 사실만)",
+      "source_url": "기사 URL (필수)",
+      "date": "YYYY-MM-DD",
+      "impact": "RISK | OPPORTUNITY | NEUTRAL",
+      "policy_area": "regulatory | fiscal | trade | monetary"
     }}
   ],
-  "falsification_check": {{
-    "is_enacted_or_announced": true,
-    "has_official_source": true
-  }}
+  "not_found": ["찾지 못한 항목"]
 }}
 
-"검토 중", "논의 중" = 미확정 → 제외.
-"모르겠다"도 유효한 답변."""
+확정된 정책 뉴스가 없으면:
+{{"status": "NOT_FOUND", "facts": [], "not_found": ["해당 기간 내 확정된 정책 변화 없음"]}}"""
 
         events = await self._call_perplexity_async(client, prompt, "environment")
 

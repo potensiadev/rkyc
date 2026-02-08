@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useSignals, useSignalStats, useLoanInsightSummaries, ApiLoanInsightSummary } from "@/hooks/useApi";
@@ -58,7 +58,6 @@ function KPICard({ icon: Icon, label, value, trend, colorClass = "text-primary",
 
 export default function SignalInbox() {
   const navigate = useNavigate();
-  const [activeStatus, setActiveStatus] = useState<"all" | "new" | "review" | "resolved">("all");
 
   // API에서 데이터 로드
   const { data: signals = [], isLoading, error } = useSignals();
@@ -76,12 +75,8 @@ export default function SignalInbox() {
     return map;
   }, [insightSummaries]);
 
-  const filteredSignals = useMemo(() => {
-    return signals.filter((signal) => {
-      if (activeStatus !== "all" && signal.status !== activeStatus) return false;
-      return true;
-    });
-  }, [activeStatus, signals]);
+  // 시그널 목록 (필터 없이 전체 표시)
+  const filteredSignals = signals;
 
   // 기업별로 시그널 그룹핑
   const groupedSignals = useMemo(() => {
@@ -112,10 +107,6 @@ export default function SignalInbox() {
   }, [filteredSignals]);
 
   const counts = useMemo(() => ({
-    all: stats?.total || signals.length,
-    new: stats?.new || signals.filter(s => s.status === "new").length,
-    review: stats?.review || signals.filter(s => s.status === "review").length,
-    resolved: stats?.resolved || signals.filter(s => s.status === "resolved").length,
     todayNew: stats?.new || signals.filter(s => s.status === "new").length,
     riskHigh7d: stats?.risk || signals.filter(s => s.impact === "risk").length,
     opportunity7d: stats?.opportunity || signals.filter(s => s.impact === "opportunity").length,
@@ -127,12 +118,6 @@ export default function SignalInbox() {
     navigate(`/signals/${signalId}`);
   };
 
-  const statusFilters = [
-    { id: "all", label: "전체", count: counts.all },
-    { id: "new", label: "신규", count: counts.new },
-    { id: "review", label: "검토중", count: counts.review },
-    { id: "resolved", label: "완료", count: counts.resolved },
-  ];
 
   // 로딩 상태
   if (isLoading) {
@@ -211,25 +196,13 @@ export default function SignalInbox() {
           <KPICard icon={Lightbulb} label="여신 거래 법인" value={counts.loanEligible} trend="참고용" colorClass="text-amber-500" />
         </motion.div>
 
-        {/* Filters and Title */}
+        {/* 정렬 옵션 */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.1 }}
-          className="flex items-center justify-between gap-4"
+          className="flex items-center justify-end"
         >
-          <div className="flex items-center gap-1 bg-secondary/50 backdrop-blur-sm rounded-lg p-1 border border-border/50">
-            {statusFilters.map((filter) => (
-              <button
-                key={filter.id}
-                onClick={() => setActiveStatus(filter.id as typeof activeStatus)}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ${activeStatus === filter.id ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground hover:bg-background/50"}`}
-              >
-                {filter.label}
-                <span className={`ml-2 ${activeStatus === filter.id ? "text-primary" : "text-muted-foreground"}`}>{filter.count}</span>
-              </button>
-            ))}
-          </div>
           <select className="text-sm border border-input rounded-md px-3 py-2 bg-card text-foreground focus:ring-2 focus:ring-primary/20 outline-none">
             <option value="recent">최신순</option>
             <option value="impact">영향도순</option>
