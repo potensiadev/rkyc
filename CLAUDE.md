@@ -2224,13 +2224,18 @@ CLAUDE.md
 ```
 
 **Anti-Hallucination 5-Layer Defense (완성)**:
-| Layer | 목적 | 구현 |
-|-------|------|------|
-| 1 | Soft Guardrails | LLM 프롬프트 권고 |
-| 2 | Number Validation | 50%+ 극단적 수치 검증 |
-| 3 | Evidence Validation | URL/Keypath 실존 검증 |
-| 4 | **Entity Confusion Prevention** | 기업명 일치 검증 (신규) |
-| 5 | **Gemini Grounding Fact-Check** | Google Search 팩트체크 (신규) |
+| Layer | 목적 | 구현 | 적용 범위 |
+|-------|------|------|----------|
+| 1 | Soft Guardrails | LLM 프롬프트 권고 | 모든 LLM 호출 |
+| 2 | Number Validation | 50%+ 극단적 수치 검증 | Signal Extraction |
+| 3 | Evidence Validation | URL/Keypath 실존 검증 | Signal Extraction |
+| 4 | **Entity Confusion Prevention** | 기업명 일치 검증 | Signal Extraction |
+| 5 | **Gemini Grounding Fact-Check** | Google Search 팩트체크 | **모든 Signal + Corp Profile** |
+
+**적용 범위**:
+- Signal Extraction: 모든 시그널 DB 저장 전 5-Layer 검증 (`signal_extraction.py`)
+- Corp Profiling: 모든 프로파일 DB 저장 전 Gemini Grounding 팩트체크 (`corp_profiling.py`)
+- Multi-Agent Mode: 3-Agent 병렬 실행 시에도 동일 검증 (`signal_agents/base.py`)
 
 ---
-*Last Updated: 2026-02-08 (세션 26 - Entity Confusion 방지 및 Gemini Grounding Fact-Checker)*
+*Last Updated: 2026-02-08 (세션 27 - Corp Profiling Gemini Grounding Fact-Check 추가)*
