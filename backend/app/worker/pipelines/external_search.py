@@ -1004,6 +1004,10 @@ If no ENACTED/ANNOUNCED policy found:
         - could_not_find: 찾지 못한 항목 배열 (P2)
         - facts: 사실 배열
         - falsification_check: 검증 결과 (P1)
+
+        P0 E2E Test Fixes (2026-02-08):
+        - could_not_find 빈 배열 경고 강화
+        - falsification_check 결과에 따른 자동 신뢰도 하향
         """
         retrieval_status = response_obj.get("retrieval_status", "NOT_FOUND")
         search_limitations = response_obj.get("search_limitations", "")
@@ -1024,20 +1028,34 @@ If no ENACTED/ANNOUNCED policy found:
                 f"[{search_type}][BUFFETT] CONFLICTING sources detected - "
                 f"falsification: {falsification_check}"
             )
-            # 충돌이 있어도 일단 진행 (플래그 설정)
+            # P0 Fix: 충돌 시 모든 facts에 경고 플래그 추가
+            for fact in facts:
+                fact["_conflicting_sources"] = True
+
+        # P0 Fix: could_not_find가 비어있으면서 facts가 있으면 의심
+        # (정상적인 검색이라면 일부는 못 찾았을 가능성이 높음)
+        if facts and not could_not_find:
+            logger.warning(
+                f"[{search_type}][BUFFETT][P0] facts={len(facts)} but could_not_find is empty - "
+                f"LLM may have ignored 'I don't know' instruction"
+            )
 
         # P1: Falsification 체크 결과 처리
+        # P0 Fix: contradicting_sources_found=true면 모든 facts confidence 하향
+        confidence_downgrade = False
         if falsification_check:
             if falsification_check.get("contradicting_sources_found"):
                 logger.warning(
                     f"[{search_type}][FALSIFICATION] Contradicting sources: "
                     f"{falsification_check.get('contradicting_details', '')}"
                 )
+                confidence_downgrade = True
             if not falsification_check.get("numbers_within_historical_range", True):
                 logger.warning(
                     f"[{search_type}][FALSIFICATION] Numbers out of range: "
                     f"{falsification_check.get('range_concern', '')}"
                 )
+                confidence_downgrade = True
 
         # P2: could_not_find 로깅 (이것도 유효한 정보)
         if could_not_find:
@@ -1048,13 +1066,23 @@ If no ENACTED/ANNOUNCED policy found:
         # facts 검증 및 변환
         valid_events = []
         for fact in facts:
+            # P0 Fix: falsification 체크 실패 시 confidence 하향
+            if confidence_downgrade:
+                original_conf = fact.get("retrieval_confidence", "INFERRED")
+                if original_conf == "VERBATIM":
+                    fact["retrieval_confidence"] = "PARAPHRASED"
+                    fact["_confidence_downgraded_reason"] = "falsification_check_failed"
+                elif original_conf == "PARAPHRASED":
+                    fact["retrieval_confidence"] = "INFERRED"
+                    fact["_confidence_downgraded_reason"] = "falsification_check_failed"
+
             validated = self._validate_buffett_fact(fact, search_type)
             if validated:
                 valid_events.append(validated)
 
         logger.info(
             f"[{search_type}][BUFFETT] Parsed {len(valid_events)}/{len(facts)} valid facts "
-            f"(status={retrieval_status})"
+            f"(status={retrieval_status}, confidence_downgraded={confidence_downgrade})"
         )
 
         return valid_events
@@ -1068,36 +1096,57 @@ If no ENACTED/ANNOUNCED policy found:
         Validate Buffett-style fact (P0/P1/P2 Enhanced).
 
         검증 항목:
-        1. retrieval_confidence 검증
-        2. source_sentence 존재 및 길이
+        1. retrieval_confidence 검증 (P0: 없으면 REJECTED)
+        2. source_sentence 존재 및 길이 (P0: 50자 미만 REJECTED)
         3. Hallucination indicator 검출
-        4. INFERRED인 경우 confidence_reason 필수
+        4. INFERRED인 경우 confidence_reason 필수 (P0: 없으면 REJECTED)
         5. 블로그/커뮤니티 차단
-        """
-        # 1. retrieval_confidence 검증 (P0)
-        confidence = fact.get("retrieval_confidence", "INFERRED")
-        if confidence not in {"VERBATIM", "PARAPHRASED", "INFERRED"}:
-            confidence = "INFERRED"
-            fact["retrieval_confidence"] = confidence
 
-        # INFERRED인 경우 confidence_reason 필수
+        P0 E2E Test Fixes (2026-02-08):
+        - retrieval_confidence 없으면 REJECTED (이전: INFERRED로 대체)
+        - source_sentence 50자 미만이면 REJECTED (이전: 경고만)
+        - INFERRED + confidence_reason 없으면 REJECTED (이전: 경고만)
+        """
+        # 0. source_url 필수 검증 (P0)
+        if not fact.get("source_url"):
+            logger.warning(
+                f"[{search_type}][BUFFETT][REJECTED] Missing source_url: {fact.get('title', '')[:30]}"
+            )
+            return None
+
+        # 1. retrieval_confidence 검증 (P0 강화: 없으면 REJECTED)
+        confidence = fact.get("retrieval_confidence")
+        if not confidence:
+            logger.warning(
+                f"[{search_type}][BUFFETT][REJECTED] Missing retrieval_confidence: "
+                f"{fact.get('title', '')[:30]}"
+            )
+            return None  # P0 Fix: 이전에는 INFERRED로 대체했지만 이제 거부
+
+        if confidence not in {"VERBATIM", "PARAPHRASED", "INFERRED"}:
+            logger.warning(
+                f"[{search_type}][BUFFETT][REJECTED] Invalid retrieval_confidence '{confidence}': "
+                f"{fact.get('title', '')[:30]}"
+            )
+            return None
+
+        # INFERRED인 경우 confidence_reason 필수 (P0 강화: 없으면 REJECTED)
         if confidence == "INFERRED":
             if not fact.get("confidence_reason"):
                 logger.warning(
-                    f"[{search_type}][BUFFETT] INFERRED without reason: {fact.get('title', '')[:30]}"
+                    f"[{search_type}][BUFFETT][REJECTED] INFERRED without confidence_reason: "
+                    f"{fact.get('title', '')[:30]}"
                 )
-                fact["_validation_warning"] = "INFERRED without reason"
+                return None  # P0 Fix: 이전에는 경고만, 이제 거부
 
-        # 2. source_sentence 검증 (P0)
+        # 2. source_sentence 검증 (P0 강화: 50자 미만 REJECTED)
         source_sentence = fact.get("source_sentence", "")
         if len(source_sentence) < 50:
             logger.warning(
-                f"[{search_type}][BUFFETT] source_sentence too short: {len(source_sentence)} chars"
+                f"[{search_type}][BUFFETT][REJECTED] source_sentence too short "
+                f"({len(source_sentence)} chars < 50): {fact.get('title', '')[:30]}"
             )
-            # VERBATIM인데 짧으면 신뢰도 하향
-            if confidence == "VERBATIM":
-                fact["retrieval_confidence"] = "PARAPHRASED"
-                fact["_confidence_downgraded"] = True
+            return None  # P0 Fix: 이전에는 신뢰도 하향만, 이제 거부
 
         # 3. Hallucination indicator 검출 (P1)
         text_to_check = f"{fact.get('title', '')} {fact.get('value', '')} {source_sentence}"

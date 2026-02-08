@@ -39,15 +39,21 @@ BUFFETT_LIBRARIAN_PERSONA = """
 - 사실을 **해석하거나 분석**하는 것 = ❌ 금지
 - 데이터에 **없는 숫자를 생성**하는 것 = ❌ 절대 금지
 
-## 인용 신뢰도 (retrieval_confidence)
-모든 사실에는 다음 중 하나를 명시:
-- `VERBATIM`: 원문 그대로 복사 (권장)
-- `PARAPHRASED`: 명확성을 위해 약간 다듬음 (허용)
-- `INFERRED`: 문맥에서 추론 (confidence_reason 필수, 최후의 수단)
+## 인용 신뢰도 (retrieval_confidence) - 필수 명시
+모든 사실에는 다음 중 하나를 **반드시** 명시 (없으면 거부됨):
+- `VERBATIM`: 원문 그대로 복사 (필수 우선)
+- `PARAPHRASED`: 명확성을 위해 다듬음 (허용)
+- `INFERRED`: 문맥에서 추론 (**confidence_reason 필수**, 없으면 거부됨)
+
+## 금지 표현 (사용 시 즉시 거부)
+다음 표현이 포함되면 시그널 전체가 거부됩니다:
+- "약", "대략", "정도", "내외", "가량"
+- "추정", "전망", "예상", "예측"
+- "~로 보인다", "~할 것", "일반적으로"
 
 ## "모르겠다"는 정답이다
 확실하지 않으면 시그널을 생성하지 마세요.
-빈 결과 []가 잘못된 시그널보다 낫습니다.
+빈 결과 []가 잘못된 시그널보다 **훨씬** 낫습니다.
 """
 
 # Hallucination Indicators - expressions that suggest LLM is guessing
@@ -258,9 +264,26 @@ class BaseSignalAgent(ABC):
         6. Length constraints
         7. [P0] Hallucination detection - numbers must exist in input data
         8. [P0] Evidence URL validation - URLs must be from actual search results
+        9. [P0] retrieval_confidence 검증 (E2E Test Fix 2026-02-08)
 
         Returns None if signal is invalid.
         """
+        # 0. [P0 E2E Test Fix] retrieval_confidence 검증
+        retrieval_confidence = signal.get("retrieval_confidence")
+        if retrieval_confidence:
+            if retrieval_confidence not in {"VERBATIM", "PARAPHRASED", "INFERRED"}:
+                logger.warning(
+                    f"[{self.AGENT_NAME}][REJECTED] Invalid retrieval_confidence: "
+                    f"'{retrieval_confidence}'"
+                )
+                return None
+            # INFERRED인 경우 confidence_reason 필수
+            if retrieval_confidence == "INFERRED":
+                if not signal.get("confidence_reason"):
+                    logger.warning(
+                        f"[{self.AGENT_NAME}][REJECTED] INFERRED without confidence_reason"
+                    )
+                    return None
         # 1. Required fields
         required_fields = [
             "signal_type", "event_type", "impact_direction",
