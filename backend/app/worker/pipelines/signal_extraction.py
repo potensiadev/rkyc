@@ -30,6 +30,12 @@ Sprint 5 Rule-Based Signal Generator (2026-02-06):
 - OVERDUE_FLAG_ON, INTERNAL_RISK_GRADE_CHANGE 등 100% 감지 보장
 - LLM Agent 호출 전에 Rule-Based 시그널 먼저 생성
 - 중복 방지: event_signature 기반 deduplication
+
+PRD v2.0 Hackathon Edition (2026-02-08):
+- 해커톤 모드: 최소 시그널 보장 (기업당 3-5개)
+- 6개 시드 기업 민감도 설정
+- Fallback 시그널 생성 (빈 화면 방지)
+- 시연 시나리오 검증
 """
 
 import json
@@ -64,6 +70,15 @@ from app.worker.pipelines.signal_agents.orchestrator import OrchestratorMetadata
 from app.worker.pipelines.signal_agents.rule_based_generator import (
     RuleBasedSignalGenerator,
     get_rule_based_generator,
+)
+
+# PRD v2.0: Hackathon Mode
+from app.worker.pipelines.hackathon_config import (
+    is_hackathon_mode,
+    get_generation_config,
+    get_corp_sensitivity,
+    ensure_minimum_signals,
+    validate_demo_scenario,
 )
 
 logger = logging.getLogger(__name__)
@@ -362,13 +377,28 @@ class SignalExtractionPipeline:
                     # No signature, add anyway (shouldn't happen)
                     all_signals.append(signal)
 
+            # =================================================================
+            # PRD v2.0: Hackathon Mode - Ensure minimum signals
+            # =================================================================
+            if is_hackathon_mode():
+                all_signals = ensure_minimum_signals(all_signals, corp_id, context)
+
+                # Validate demo scenario
+                validation = validate_demo_scenario(corp_id, all_signals)
+                if not validation["passed"]:
+                    logger.warning(
+                        f"[HACKATHON] Demo validation issues for {corp_id}: "
+                        f"{validation['issues']}"
+                    )
+
             logger.info(
                 f"SIGNAL stage completed [Multi-Agent + Rule-Based]: "
                 f"rule_based={len(rule_based_signals) if 'rule_based_signals' in dir() else 0}, "
                 f"llm={len(llm_signals)}, "
                 f"total={len(all_signals)}, "
                 f"conflicts={metadata.conflicts_detected}, "
-                f"needs_review={metadata.needs_review_count}"
+                f"needs_review={metadata.needs_review_count}, "
+                f"hackathon_mode={is_hackathon_mode()}"
             )
             return all_signals
 
@@ -548,9 +578,24 @@ class SignalExtractionPipeline:
             rule_based_count = len([s for s in all_signals if "RULE_BASED" in s.get("event_signature", "")])
             llm_count = len(all_signals) - rule_based_count
 
+            # =================================================================
+            # PRD v2.0: Hackathon Mode - Ensure minimum signals
+            # =================================================================
+            if is_hackathon_mode():
+                all_signals = ensure_minimum_signals(all_signals, corp_id, context)
+
+                # Validate demo scenario
+                validation = validate_demo_scenario(corp_id, all_signals)
+                if not validation["passed"]:
+                    logger.warning(
+                        f"[HACKATHON] Demo validation issues for {corp_id}: "
+                        f"{validation['issues']}"
+                    )
+
             logger.info(
                 f"SIGNAL stage completed [Legacy + Rule-Based]: "
-                f"rule_based={rule_based_count}, llm={llm_count}, total={len(all_signals)}"
+                f"rule_based={rule_based_count}, llm={llm_count}, total={len(all_signals)}, "
+                f"hackathon_mode={is_hackathon_mode()}"
             )
             return all_signals
 

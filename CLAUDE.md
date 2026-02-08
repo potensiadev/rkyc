@@ -2076,5 +2076,91 @@ src/hooks/useApi.ts
 src/pages/CorporateDetailPage.tsx
 ```
 
+### 세션 25 (2026-02-08) - PRD v2.0 Hackathon Edition 구현 ✅
+**목표**: First Principles 기반 PRD v2.0 구현 - 해커톤 시연 최적화
+
+**배경**: Senior SWE, PM, QA, Data Analyst 코드 리뷰에서 12개 Critical Error 발견
+- Elon Musk First Principles: "완벽함을 버려라" - 해커톤에서는 작동하는 데모가 최우선
+
+**PRD v2.0 Hackathon Edition 핵심 원칙**:
+1. 기존 시스템 유지 + Hard Validation 강화
+2. 6개 시드 기업 하드코딩 (추상화 X)
+3. 최소 시그널 보장 (빈 화면 방지)
+4. 1주일 타임라인 (5주 Rule Engine 폐기)
+
+**완료 항목**:
+
+#### 1. PRD 전면 개정
+- `docs/PRD-Deterministic-Signal-Generation.md` → v2.0 Hackathon Edition
+- 5주 Two-Pass Architecture → 1주 MVP
+- 12개 Critical Error → 6개 해커톤 무관, 6개 간단 해결
+
+#### 2. hackathon_config.py 신규 생성
+- `SignalGenerationMode` Enum: PRODUCTION / HACKATHON
+- `CORP_SENSITIVITY_CONFIG`: 6개 시드 기업별 설정
+  - 민감도 토픽 (수출규제, 환율, 금리 등)
+  - min_signals / max_signals
+  - expected_signal_types
+  - environment_queries
+- Fallback Signal Generators:
+  - `create_kyc_monitoring_signal()` - DIRECT fallback
+  - `create_industry_monitoring_signal()` - INDUSTRY fallback
+  - `create_policy_monitoring_signal()` - ENVIRONMENT fallback
+- `ensure_minimum_signals()`: 최소 3개 시그널 보장
+- `validate_demo_scenario()`: 시연 시나리오 검증
+
+#### 3. signal_extraction.py 통합
+- 해커톤 모드 import 및 연동
+- `_execute_multi_agent()`, `_execute_legacy()` 양쪽 통합
+- 파이프라인 끝에서 `ensure_minimum_signals()` 호출
+
+#### 4. test_demo_scenarios.py 신규 생성
+- pytest 기반 시연 테스트 자동화
+- `TestSystemHealth`: API 상태, 시드 기업 존재 확인
+- `TestSignalCount`: 기업별 최소 시그널 수 확인
+- `TestSignalQuality`: 허위 수치, Evidence 존재 확인
+- `TestDemoScenarios`: 시나리오 1, 2, 3 테스트
+- `TestPreDemoChecklist`: 시연 전 전체 체크리스트
+
+#### 5. Admin Demo Validation API
+- `GET /admin/demo/validate`: 모든 시드 기업 검증
+- `GET /admin/demo/checklist`: 시연 전 체크리스트
+- `GET /admin/demo/config`: 현재 해커톤 모드 설정
+
+**신규 파일**:
+```
+backend/app/worker/pipelines/hackathon_config.py
+backend/tests/test_demo_scenarios.py
+```
+
+**수정된 파일**:
+```
+docs/PRD-Deterministic-Signal-Generation.md (v2.0 전면 개정)
+backend/app/worker/pipelines/signal_extraction.py
+backend/app/api/v1/endpoints/admin.py
+CLAUDE.md
+```
+
+**PRD v2.0 타임라인 (1주)**:
+| Day | 작업 | 상태 |
+|-----|------|------|
+| 1 | Hard Validation 강화 | ✅ 기존 구현 확인 |
+| 2 | 6개 기업 민감도 설정 | ✅ hackathon_config.py |
+| 3 | 해커톤 모드 구현 | ✅ signal_extraction.py 통합 |
+| 4 | 시연 테스트 자동화 | ✅ test_demo_scenarios.py |
+| 5 | 시드 데이터 검증 | ⏳ 진행 중 |
+| 6 | 시연 리허설 #1 | ⏳ 대기 |
+| 7 | 시연 리허설 #2 | ⏳ 대기 |
+
+**현재 DB 상태**:
+- 엠케이전자: 2 signals ✅
+- 동부건설: 0 signals ⚠️
+- 전북식품: 0 signals ⚠️
+- 광주정밀기계: 0 signals ⚠️
+- 삼성전자: 0 signals ⚠️
+- 휴림로봇: 0 signals ⚠️
+
+**다음 단계**: 5개 기업 분석 실행 필요
+
 ---
-*Last Updated: 2026-02-08 (세션 24 - DART 필드 전체 코드베이스 싱크)*
+*Last Updated: 2026-02-08 (세션 25 - PRD v2.0 Hackathon Edition 구현)*

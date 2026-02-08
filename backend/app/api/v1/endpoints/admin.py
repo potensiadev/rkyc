@@ -1072,3 +1072,289 @@ async def get_hallucination_stats(db: AsyncSession = Depends(get_db)):
             "dry_run=false로 실행하면 탐지된 hallucination이 자동으로 DISMISSED 처리됩니다.",
         ],
     }
+
+
+# ============================================================================
+# PRD v2.0: Hackathon Demo Validation API
+# ============================================================================
+
+
+class DemoValidationResult(BaseModel):
+    """시연 검증 결과"""
+    passed: bool
+    issues: list[str]
+    corp_results: dict
+
+
+class DemoChecklistResult(BaseModel):
+    """시연 체크리스트 결과"""
+    all_passed: bool
+    checklist: list[dict]
+    summary: dict
+
+
+@router.get(
+    "/demo/validate",
+    response_model=DemoValidationResult,
+    summary="시연 시나리오 검증",
+    description="모든 시드 기업에 대해 시연 준비 상태를 검증합니다.",
+)
+async def validate_demo_scenarios(db: AsyncSession = Depends(get_db)):
+    """
+    시연 시나리오 검증
+
+    PRD v2.0 Hackathon Edition:
+    - 각 시드 기업의 시그널 수 확인
+    - Hallucination 패턴 탐지
+    - Evidence 존재 확인
+
+    Returns:
+        DemoValidationResult: 검증 결과
+    """
+    from app.worker.pipelines.hackathon_config import (
+        CORP_SENSITIVITY_CONFIG,
+        validate_demo_scenario,
+    )
+    import re
+
+    all_issues = []
+    corp_results = {}
+
+    for corp_id, config in CORP_SENSITIVITY_CONFIG.items():
+        corp_name = config.get("corp_name", corp_id)
+        min_signals = config.get("min_signals", 3)
+
+        # 시그널 조회
+        query = text("""
+            SELECT s.id, s.signal_type, s.event_type, s.title, s.summary
+            FROM rkyc_signal s
+            WHERE s.corp_id = :corp_id AND s.status != 'DISMISSED'
+            ORDER BY s.created_at DESC
+        """)
+        result = await db.execute(query, {"corp_id": corp_id})
+        signals = result.fetchall()
+
+        issues = []
+        signal_count = len(signals)
+
+        # 1. 최소 시그널 수 확인
+        if signal_count < min_signals:
+            issues.append(f"시그널 부족 ({signal_count} < {min_signals})")
+
+        # 2. Hallucination 패턴 확인
+        suspicious_patterns = [
+            r"8[0-9]%\s*(감소|하락|축소)",
+            r"9[0-9]%\s*(감소|하락|축소)",
+        ]
+
+        for signal in signals:
+            text_to_check = f"{signal.title} {signal.summary}"
+            for pattern in suspicious_patterns:
+                match = re.search(pattern, text_to_check)
+                if match:
+                    issues.append(f"의심 수치: '{match.group()}' in '{signal.title[:30]}'")
+
+        # 3. Signal type 분포 확인
+        signal_types = {s.signal_type for s in signals}
+        expected_types = set(config.get("expected_signal_types", []))
+        missing_types = expected_types - signal_types
+        if missing_types:
+            issues.append(f"누락된 signal_type: {missing_types}")
+
+        corp_results[corp_id] = {
+            "corp_name": corp_name,
+            "signal_count": signal_count,
+            "min_signals": min_signals,
+            "passed": len(issues) == 0,
+            "issues": issues,
+            "signal_types": list(signal_types),
+        }
+
+        all_issues.extend([f"{corp_name}: {i}" for i in issues])
+
+    return DemoValidationResult(
+        passed=len(all_issues) == 0,
+        issues=all_issues,
+        corp_results=corp_results,
+    )
+
+
+@router.get(
+    "/demo/checklist",
+    response_model=DemoChecklistResult,
+    summary="시연 전 체크리스트",
+    description="시연 전 체크리스트를 실행하고 결과를 반환합니다.",
+)
+async def run_demo_checklist(db: AsyncSession = Depends(get_db)):
+    """
+    시연 전 체크리스트 실행
+
+    PRD v2.0 Hackathon Edition:
+    1. 시스템 상태 확인
+    2. 시드 기업 확인
+    3. 시그널 수 확인
+    4. Hallucination 확인
+
+    Returns:
+        DemoChecklistResult: 체크리스트 결과
+    """
+    from app.worker.pipelines.hackathon_config import CORP_SENSITIVITY_CONFIG
+
+    checklist = []
+
+    # 1. Database 연결 확인
+    try:
+        await db.execute(text("SELECT 1"))
+        checklist.append({
+            "item": "Database 연결",
+            "passed": True,
+            "message": "정상",
+        })
+    except Exception as e:
+        checklist.append({
+            "item": "Database 연결",
+            "passed": False,
+            "message": str(e),
+        })
+
+    # 2. 시드 기업 존재 확인
+    try:
+        query = text("SELECT corp_id FROM corp")
+        result = await db.execute(query)
+        existing_corps = {row.corp_id for row in result.fetchall()}
+        seed_corps = set(CORP_SENSITIVITY_CONFIG.keys())
+        missing = seed_corps - existing_corps
+
+        if missing:
+            checklist.append({
+                "item": "시드 기업 존재",
+                "passed": False,
+                "message": f"누락: {missing}",
+            })
+        else:
+            checklist.append({
+                "item": "시드 기업 존재",
+                "passed": True,
+                "message": f"{len(seed_corps)}개 기업 확인",
+            })
+    except Exception as e:
+        checklist.append({
+            "item": "시드 기업 존재",
+            "passed": False,
+            "message": str(e),
+        })
+
+    # 3. 각 기업 시그널 수 확인
+    total_signals = 0
+    corps_with_enough_signals = 0
+
+    for corp_id, config in CORP_SENSITIVITY_CONFIG.items():
+        try:
+            query = text("""
+                SELECT COUNT(*) as cnt
+                FROM rkyc_signal
+                WHERE corp_id = :corp_id AND status != 'DISMISSED'
+            """)
+            result = await db.execute(query, {"corp_id": corp_id})
+            count = result.fetchone().cnt
+            total_signals += count
+
+            min_signals = config.get("min_signals", 3)
+            if count >= min_signals:
+                corps_with_enough_signals += 1
+        except Exception:
+            pass
+
+    checklist.append({
+        "item": "시그널 충분성",
+        "passed": corps_with_enough_signals == len(CORP_SENSITIVITY_CONFIG),
+        "message": f"{corps_with_enough_signals}/{len(CORP_SENSITIVITY_CONFIG)} 기업이 최소 시그널 보유",
+    })
+
+    checklist.append({
+        "item": "전체 시그널 수",
+        "passed": total_signals >= 18,  # 6기업 * 3개
+        "message": f"총 {total_signals}개 시그널",
+    })
+
+    # 4. Hallucination 패턴 확인
+    try:
+        query = text("""
+            SELECT COUNT(*) as cnt
+            FROM rkyc_signal
+            WHERE status != 'DISMISSED'
+            AND (
+                summary ~ '8[0-9]%' OR
+                summary ~ '9[0-9]%'
+            )
+            AND (
+                summary ~* '감소|하락|축소'
+            )
+        """)
+        result = await db.execute(query)
+        suspicious_count = result.fetchone().cnt
+
+        checklist.append({
+            "item": "Hallucination 패턴",
+            "passed": suspicious_count == 0,
+            "message": f"{suspicious_count}개 의심 패턴 발견" if suspicious_count > 0 else "정상",
+        })
+    except Exception as e:
+        checklist.append({
+            "item": "Hallucination 패턴",
+            "passed": False,
+            "message": str(e),
+        })
+
+    all_passed = all(item["passed"] for item in checklist)
+
+    return DemoChecklistResult(
+        all_passed=all_passed,
+        checklist=checklist,
+        summary={
+            "total_items": len(checklist),
+            "passed_items": sum(1 for item in checklist if item["passed"]),
+            "failed_items": sum(1 for item in checklist if not item["passed"]),
+            "ready_for_demo": all_passed,
+        },
+    )
+
+
+@router.get(
+    "/demo/config",
+    summary="해커톤 설정 조회",
+    description="현재 해커톤 모드 설정을 조회합니다.",
+)
+async def get_demo_config():
+    """
+    해커톤 설정 조회
+
+    Returns:
+        dict: 현재 해커톤 모드 설정
+    """
+    from app.worker.pipelines.hackathon_config import (
+        SIGNAL_MODE,
+        get_generation_config,
+        CORP_SENSITIVITY_CONFIG,
+        is_hackathon_mode,
+    )
+
+    config = get_generation_config()
+
+    return {
+        "mode": SIGNAL_MODE.value,
+        "is_hackathon_mode": is_hackathon_mode(),
+        "generation_config": config,
+        "seed_corps": {
+            corp_id: {
+                "name": cfg["corp_name"],
+                "industry": cfg["industry_name"],
+                "min_signals": cfg["min_signals"],
+                "high_sensitivity_topics": [
+                    topic for topic, level in cfg["sensitivity"].items()
+                    if level == "HIGH"
+                ],
+            }
+            for corp_id, cfg in CORP_SENSITIVITY_CONFIG.items()
+        },
+    }

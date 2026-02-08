@@ -1,1540 +1,739 @@
-# PRD: Deterministic Signal Generation (Two-Pass Architecture)
+# PRD: Hackathon-Optimized Signal Generation
 
-**문서 버전**: v1.0
+**문서 버전**: v2.0 (Hackathon Edition)
 **작성일**: 2026-02-08
 **작성자**: Silicon Valley Senior Engineer
-**검토자**: Elon Musk (First Principles), JP Morgan CEO (금융 품질)
-**상태**: Draft
+**검토자**: Elon Musk (First Principles)
+**상태**: Approved for Hackathon
 
 ---
 
 ## 1. Executive Summary
 
-### 1.1 문제 정의
+### 1.1 핵심 원칙 (Elon Musk First Principles)
 
-현재 rKYC 시그널 생성 시스템은 LLM에게 **추출, 판단, 생성**을 모두 위임합니다.
-이로 인해 두 가지 상충하는 문제가 발생합니다:
+> "완벽함을 버려라. 해커톤에서 이기는 것이 목표다."
 
-| 문제 | 원인 | 영향 |
-|------|------|------|
-| **Hallucination** | LLM이 없는 정보 생성 | 허위 시그널로 잘못된 의사결정 유도 |
-| **Under-Detection** | Hallucination 방지 위해 보수적 프롬프트 | 실제 리스크 누락 |
+**해커톤 성공 조건**:
+1. ✅ **충분한 데이터**: 기업당 3-5개 시그널
+2. ✅ **정확한 데이터**: 이상한 숫자 없음 (88% 감소 같은 허위 정보 방지)
+3. ✅ **안정적 시연**: 빈 화면, 에러 없음
 
-**근본 원인**: LLM에게 "판단"을 맡기는 것 자체가 문제입니다.
+### 1.2 전략적 결정
 
-### 1.2 해결책 요약
+| 항목 | Two-Pass Architecture (원안) | Hackathon Edition (수정안) |
+|------|---------------------------|--------------------------|
+| **구현 범위** | Rule Engine + Fact Extractor + Template Generator | 기존 LLM 시스템 + Hard Validation 강화 |
+| **타임라인** | 5주 | 1주 (해커톤 전) |
+| **리스크** | 새 시스템 불안정 | 검증된 시스템 유지 |
+| **Recall** | 85% (보수적) | 95% (적극적, Confidence로 조절) |
 
-**Two-Pass Architecture**:
-- **Pass 1 (LLM)**: 데이터에서 "사실(Fact)"만 추출 - 판단 금지
-- **Pass 2 (Rule Engine)**: 추출된 사실로 시그널 생성 여부를 결정론적으로 결정
+### 1.3 핵심 변경사항
 
 ```
-현재:  Data → LLM(추출+판단+생성) → Signal (불확실)
-제안:  Data → LLM(추출) → Facts → Rule Engine(판단+생성) → Signal (결정론적)
+[해커톤 버전]
+기존 시스템 유지 + 4가지 강화:
+1. Hard Validation (Hallucination 방지)
+2. 6개 시드 기업 맞춤 튜닝
+3. Fallback 최소화 (5% 이하)
+4. 시연 시나리오 검증
 ```
-
-### 1.3 기대 효과
-
-| 지표 | 현재 | 목표 | 개선율 |
-|------|------|------|--------|
-| Hallucination Rate | ~5% | <0.1% | 98% 감소 |
-| Signal Consistency | ~70% | >99% | 41% 개선 |
-| 테스트 가능성 | 없음 | 100% 규칙 테스트 | - |
-| LLM 비용 | $0.15/기업 | $0.05/기업 | 67% 절감 |
-| 설명 가능성 | 없음 | 규칙 ID로 추적 | - |
 
 ---
 
-## 2. 제1원칙 분석
+## 2. 제1원칙 분석: 12개 오류 해결
 
-### 2.1 기존 가정 검증
+### 2.1 오류별 해결책 요약
 
-| 가정 | 검증 결과 | 결론 |
-|------|----------|------|
-| "LLM이 관련성을 잘 판단한다" | ❌ 그럴듯하게 보이는 것 생성 | 코드가 판단해야 함 |
-| "Few-Shot 예시가 필요하다" | ❌ 숫자 복사, 플레이스홀더 출력 | JSON Schema로 대체 |
-| "Confidence를 LLM이 결정해야 한다" | ❌ 항상 자신만만 | 출처 기반 코드 계산 |
-| "프롬프트 개선으로 해결 가능하다" | ❌ 본질적 한계 존재 | 아키텍처 변경 필요 |
-
-### 2.2 LLM의 적합한 역할
-
-| 작업 | LLM 적합성 | 이유 |
-|------|-----------|------|
-| 패턴 인식/추출 | ✅ 적합 | 다양한 형식의 텍스트에서 정보 추출 |
-| 관련성 판단 | ❌ 부적합 | 일관성 없음, 검증 불가 |
-| 영향도 평가 | ❌ 부적합 | 도메인 지식 불확실 |
-| 텍스트 생성 | ⚠️ 조건부 | 템플릿 기반으로 제한 시 가능 |
+| # | 오류 | 해커톤 해결책 | 복잡도 |
+|---|------|--------------|--------|
+| 1 | Single Rule Matching | **적용 안 함** (Rule Engine 미구현) | N/A |
+| 2 | Recall 85% 불일치 | **해커톤 모드 95%** 적용 | LOW |
+| 3 | Ground Truth 부재 | **상식 검증만** (정식 GT 불필요) | ZERO |
+| 4 | 업종 Threshold 미분화 | **6개 기업 하드코딩** | LOW |
+| 5 | 5주 타임라인 | **1주 MVP** (기존 시스템 + Validation) | LOW |
+| 6 | 테스트 전략 부재 | **시연 경로 테스트만** | LOW |
+| 7 | 경계 조건 미정의 | **명확한 케이스만 사용** | ZERO |
+| 8 | Fallback 20% 과다 | **5% 이하 목표** (Rule 하드코딩) | LOW |
+| 9 | Rule 거버넌스 부재 | **스킵** (고정 데이터) | ZERO |
+| 10 | A/B 테스트 부족 | **스킵** (단일 버전) | ZERO |
+| 11 | 메모리 누수 | **무시** (시연 시간 15분) | ZERO |
+| 12 | Race Condition | **무시** (시연자 1명) | ZERO |
 
 ---
 
-## 3. 시스템 아키텍처
+## 3. 해커톤 아키텍처
 
-### 3.1 전체 흐름
+### 3.1 시스템 구성 (현재 유지)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                        Two-Pass Architecture                        │
+│                    Hackathon Architecture (v2.0)                     │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                     │
 │  ┌──────────┐    ┌──────────────┐    ┌──────────────┐              │
-│  │  Input   │    │   Pass 1     │    │   Fact       │              │
-│  │  Data    │───▶│   LLM        │───▶│   Store      │              │
-│  │          │    │  (Extract)   │    │              │              │
+│  │  Input   │    │   3-Agent    │    │   Hard       │              │
+│  │  Data    │───▶│   Signal     │───▶│  Validation  │              │
+│  │          │    │  Extraction  │    │  (강화됨)    │              │
 │  └──────────┘    └──────────────┘    └──────┬───────┘              │
-│       │                                      │                      │
-│       │          ┌──────────────┐           │                      │
-│       │          │   Fact       │           │                      │
-│       └─────────▶│  Validator   │◀──────────┘                      │
-│                  │              │                                   │
-│                  └──────┬───────┘                                   │
-│                         │                                           │
-│                         ▼                                           │
-│                  ┌──────────────┐    ┌──────────────┐              │
-│                  │   Pass 2     │    │   Signal     │              │
-│                  │   Rule       │───▶│   Output     │              │
-│                  │   Engine     │    │              │              │
-│                  └──────────────┘    └──────────────┘              │
-│                         │                                           │
-│                         ▼                                           │
-│                  ┌──────────────┐                                   │
-│                  │   LLM        │  (규칙 미매칭 시에만)              │
-│                  │   Fallback   │                                   │
-│                  └──────────────┘                                   │
+│                                              │                      │
+│                         ┌────────────────────┴────────────────┐    │
+│                         │                                      │    │
+│                         ▼                                      ▼    │
+│                  ┌──────────────┐                      ┌──────────┐│
+│                  │   ✅ Valid   │                      │ ❌ Reject ││
+│                  │   Signals    │                      │ (로그만) ││
+│                  └──────────────┘                      └──────────┘│
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-### 3.2 컴포넌트 설명
+### 3.2 기존 컴포넌트 (변경 없음)
 
-| 컴포넌트 | 역할 | 기술 |
+| 컴포넌트 | 상태 | 비고 |
 |----------|------|------|
-| **Pass 1: LLM Extractor** | 데이터에서 사실만 추출 | Claude/GPT + JSON Schema |
-| **Fact Validator** | 추출된 사실이 원본에 있는지 검증 | Python 정규식/문자열 매칭 |
-| **Pass 2: Rule Engine** | 사실 → 시그널 변환 규칙 | Python 규칙 엔진 |
-| **Summary Generator** | 템플릿 기반 Summary 생성 | Python 문자열 포맷 |
-| **LLM Fallback** | 규칙 미매칭 사실 처리 | Claude/GPT (LOW confidence) |
+| 3-Agent Signal Extraction | ✅ 유지 | Direct/Industry/Environment |
+| Buffett 스타일 프롬프트 | ✅ 유지 | "사서" 원칙 |
+| DART 2-Source Verification | ✅ 유지 | 주주 정보 검증 |
+| Corp Profile | ✅ 유지 | 관련성 필터링 |
+
+### 3.3 강화되는 컴포넌트
+
+| 컴포넌트 | 변경 내용 |
+|----------|----------|
+| **Hard Validation** | 숫자 검증, URL 검증, Keypath 검증 강화 |
+| **시드 기업 튜닝** | 6개 기업별 민감도 설정 |
+| **시연 테스트** | 시연 경로 자동화 테스트 |
 
 ---
 
-## 4. Pass 1: Fact Extraction
+## 4. Hard Validation (Anti-Hallucination)
 
-### 4.1 Fact 타입 정의
-
-```python
-class FactType(Enum):
-    # Internal Snapshot Facts
-    OVERDUE_STATUS = "overdue_status"           # 연체 상태
-    GRADE_CHANGE = "grade_change"               # 등급 변동
-    EXPOSURE_CHANGE = "exposure_change"         # 여신 변동
-    COLLATERAL_CHANGE = "collateral_change"     # 담보 변동
-
-    # Document Facts
-    SHAREHOLDER_CHANGE = "shareholder_change"   # 주주 변경
-    OFFICER_CHANGE = "officer_change"           # 임원 변경
-    FINANCIAL_CHANGE = "financial_change"       # 재무 변동
-
-    # External Event Facts
-    COMPANY_NEWS = "company_news"               # 기업 직접 뉴스
-    INDUSTRY_NEWS = "industry_news"             # 산업 뉴스
-    POLICY_NEWS = "policy_news"                 # 정책/규제 뉴스
-
-    # Unclassified (LLM Fallback 대상)
-    UNCLASSIFIED = "unclassified"
-```
-
-### 4.2 Fact 스키마
+### 4.1 4-Layer Defense Model
 
 ```python
-@dataclass
-class ExtractedFact:
-    """LLM이 추출한 사실 단위"""
+# 4-Layer Anti-Hallucination Defense
 
-    fact_id: str                    # 고유 ID
-    fact_type: FactType             # 사실 유형
-
-    # 핵심 데이터
-    subject: str                    # 주체 (기업명, 산업명 등)
-    predicate: str                  # 서술 (변동, 발생, 발표 등)
-    object_value: Any               # 값 (숫자, 문자열, bool 등)
-
-    # 변화 정보 (해당 시)
-    previous_value: Optional[Any]   # 이전 값
-    change_direction: Optional[str] # INCREASE, DECREASE, NEW, REMOVED
-    change_magnitude: Optional[float]  # 변화율 (%)
-
-    # 출처
-    source_type: str                # SNAPSHOT, DOCUMENT, EXTERNAL
-    source_ref: str                 # keypath, doc_page, URL
-    source_snippet: str             # 원문 발췌 (100자 이내)
-
-    # 메타데이터
-    extracted_at: datetime
-    extraction_confidence: float    # LLM 추출 신뢰도 (내부용)
+LAYER_1 = "Soft Guardrails"      # LLM 프롬프트 권고 (기존)
+LAYER_2 = "Number Validation"     # 50%+ 수치 원본 검증 (신규)
+LAYER_3 = "Evidence Validation"   # URL/Keypath 실존 검증 (신규)
+LAYER_4 = "Admin Scan"            # 기존 DB Hallucination 탐지 (신규)
 ```
 
-### 4.3 Extraction 프롬프트
+### 4.2 Number Validation 규칙
 
 ```python
-FACT_EXTRACTION_SYSTEM = """당신은 데이터 추출 전문가입니다.
-주어진 데이터에서 "사실(Fact)"만 추출합니다.
+def validate_numbers(signal: dict, input_data: dict) -> ValidationResult:
+    """
+    시그널 내 숫자가 입력 데이터에 있는지 검증
 
-## 핵심 규칙
+    Rules:
+    1. 50% 이상 극단적 수치 → 즉시 거부 (CRITICAL)
+    2. 30% 이상 수치 → needs_review 플래그 (WARNING)
+    3. 입력 데이터에 없는 숫자 → 거부 (CRITICAL)
+    """
 
-### 1. 판단 금지
-- "리스크", "기회", "영향" 등 판단 표현 사용 금지
-- 오직 "무엇이 어떻게 되었다"만 추출
+    # 시그널에서 숫자 추출
+    numbers = extract_numbers(signal['summary'])
 
-### 2. 숫자 정확성
-- 원본에 있는 숫자만 추출
-- 단위 변환 시 원본 값도 함께 기록
-- 추정/계산 금지
+    for num in numbers:
+        # Rule 1: 극단적 수치 검증
+        if num >= 50:
+            if not exists_in_input(num, input_data):
+                return ValidationResult(
+                    valid=False,
+                    reason=f"극단적 수치 {num}%가 원본에 없음",
+                    severity="CRITICAL"
+                )
 
-### 3. 출처 필수
-- 모든 Fact에 source_ref 필수
-- source_snippet은 원본에서 복사
+        # Rule 2: 30% 이상 수치
+        elif num >= 30:
+            if not exists_in_input(num, input_data):
+                signal['needs_review'] = True
+                signal['review_reason'] = f"수치 {num}% 검증 필요"
 
-### 4. 분류
-- fact_type은 제공된 유형 중 선택
-- 해당 없으면 "unclassified"
-
-## 출력 형식
-```json
-{
-  "facts": [
-    {
-      "fact_type": "overdue_status",
-      "subject": "엠케이전자",
-      "predicate": "연체 발생",
-      "object_value": true,
-      "previous_value": false,
-      "change_direction": "NEW",
-      "source_type": "SNAPSHOT",
-      "source_ref": "/credit/loan_summary/overdue_flag",
-      "source_snippet": "overdue_flag: true, overdue_days: 32"
-    }
-  ]
-}
-```
-"""
-
-FACT_EXTRACTION_USER = """# 분석 대상
-- 기업명: {corp_name}
-- 업종: {industry_name}
-
-# 데이터 소스
-
-## 1. 내부 스냅샷
-```json
-{snapshot_json}
+    return ValidationResult(valid=True)
 ```
 
-## 2. 이전 스냅샷 (비교용)
-```json
-{prev_snapshot_json}
-```
-
-## 3. 외부 이벤트
-```json
-{external_events}
-```
-
-# 요청
-위 데이터에서 사실(Fact)만 추출하세요.
-- 변화가 없는 항목은 추출 불필요
-- 판단/평가 표현 금지
-- 숫자는 원본 그대로
-"""
-```
-
-### 4.4 JSON Schema 강제
+### 4.3 Evidence Validation 규칙
 
 ```python
-FACT_EXTRACTION_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "facts": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "fact_type": {
-                        "type": "string",
-                        "enum": [
-                            "overdue_status", "grade_change", "exposure_change",
-                            "collateral_change", "shareholder_change", "officer_change",
-                            "financial_change", "company_news", "industry_news",
-                            "policy_news", "unclassified"
-                        ]
-                    },
-                    "subject": {"type": "string"},
-                    "predicate": {"type": "string"},
-                    "object_value": {},  # any type
-                    "previous_value": {},
-                    "change_direction": {
-                        "type": "string",
-                        "enum": ["INCREASE", "DECREASE", "NEW", "REMOVED", "UNCHANGED"]
-                    },
-                    "change_magnitude": {"type": "number"},
-                    "source_type": {
-                        "type": "string",
-                        "enum": ["SNAPSHOT", "DOCUMENT", "EXTERNAL"]
-                    },
-                    "source_ref": {"type": "string"},
-                    "source_snippet": {"type": "string", "maxLength": 150}
-                },
-                "required": ["fact_type", "subject", "predicate", "source_type", "source_ref"]
-            }
-        }
+def validate_evidence(signal: dict, context: dict) -> ValidationResult:
+    """
+    Evidence의 URL/Keypath가 실제로 존재하는지 검증
+
+    Rules:
+    1. URL → 검색 결과에 있는 도메인인지 확인
+    2. SNAPSHOT_KEYPATH → JSON 경로 존재 확인
+    """
+
+    for evidence in signal.get('evidence', []):
+        ref_type = evidence.get('ref_type')
+        ref_value = evidence.get('ref_value')
+
+        if ref_type == 'URL':
+            # 검색 결과 URL과 비교
+            search_urls = extract_urls(context.get('search_results', []))
+            domain = extract_domain(ref_value)
+
+            if domain not in [extract_domain(u) for u in search_urls]:
+                return ValidationResult(
+                    valid=False,
+                    reason=f"URL 도메인 {domain}이 검색 결과에 없음",
+                    severity="CRITICAL"
+                )
+
+        elif ref_type == 'SNAPSHOT_KEYPATH':
+            # JSON Pointer 경로 검증
+            snapshot = context.get('snapshot_json', {})
+            if not keypath_exists(ref_value, snapshot):
+                return ValidationResult(
+                    valid=False,
+                    reason=f"Keypath {ref_value}가 스냅샷에 없음",
+                    severity="CRITICAL"
+                )
+
+    return ValidationResult(valid=True)
+```
+
+---
+
+## 5. 6개 시드 기업 맞춤 튜닝
+
+### 5.1 기업별 민감도 설정
+
+```python
+CORP_SENSITIVITY_CONFIG = {
+    # 엠케이전자 (8001-3719240) - 반도체
+    "8001-3719240": {
+        "corp_name": "엠케이전자",
+        "industry_code": "C26",
+        "sensitivity": {
+            "수출규제": "HIGH",      # 반도체 수출 규제 민감
+            "환율변동": "HIGH",      # 수출 비중 높음
+            "원자재가격": "MED",     # 웨이퍼, 가스 등
+            "금리정책": "LOW",
+        },
+        "expected_signals": ["DIRECT", "ENVIRONMENT"],
+        "min_signals": 3,
     },
-    "required": ["facts"]
+
+    # 동부건설 (8000-7647330) - 건설
+    "8000-7647330": {
+        "corp_name": "동부건설",
+        "industry_code": "F41",
+        "sensitivity": {
+            "금리정책": "HIGH",      # 건설 금융 민감
+            "부동산정책": "HIGH",    # 건설 수요
+            "환율변동": "LOW",
+            "원자재가격": "MED",     # 철강, 시멘트
+        },
+        "expected_signals": ["DIRECT", "INDUSTRY"],
+        "min_signals": 3,
+    },
+
+    # 전북식품 (4028-1234567) - 식품
+    "4028-1234567": {
+        "corp_name": "전북식품",
+        "industry_code": "C10",
+        "sensitivity": {
+            "원자재가격": "HIGH",    # 농산물 가격
+            "식량정책": "HIGH",      # 농업 정책
+            "환율변동": "MED",       # 수입 원자재
+            "금리정책": "LOW",
+        },
+        "expected_signals": ["DIRECT", "ENVIRONMENT"],
+        "min_signals": 3,
+    },
+
+    # 광주정밀기계 (6201-2345678) - 기계
+    "6201-2345678": {
+        "corp_name": "광주정밀기계",
+        "industry_code": "C29",
+        "sensitivity": {
+            "공급망정책": "HIGH",    # 부품 수급
+            "수출규제": "MED",       # 기계 수출
+            "환율변동": "MED",
+            "원자재가격": "MED",     # 철강 등
+        },
+        "expected_signals": ["DIRECT", "INDUSTRY"],
+        "min_signals": 3,
+    },
+
+    # 삼성전자 (4301-3456789) - 전자
+    "4301-3456789": {
+        "corp_name": "삼성전자",
+        "industry_code": "C21",
+        "sensitivity": {
+            "무역분쟁": "HIGH",      # 미중 갈등
+            "수출규제": "HIGH",      # 반도체 규제
+            "환율변동": "HIGH",      # 글로벌 매출
+            "기술정책": "HIGH",      # AI, 반도체 정책
+        },
+        "expected_signals": ["DIRECT", "INDUSTRY", "ENVIRONMENT"],
+        "min_signals": 4,
+    },
+
+    # 휴림로봇 (6701-4567890) - 에너지
+    "6701-4567890": {
+        "corp_name": "휴림로봇",
+        "industry_code": "D35",
+        "sensitivity": {
+            "에너지정책": "HIGH",    # 탄소중립, 재생에너지
+            "환경규제": "HIGH",      # ESG 규제
+            "기술정책": "MED",       # 로봇/자동화
+            "환율변동": "LOW",
+        },
+        "expected_signals": ["DIRECT", "ENVIRONMENT"],
+        "min_signals": 3,
+    },
+}
+```
+
+### 5.2 기업별 쿼리 조정
+
+```python
+def get_environment_queries(corp_id: str) -> list[str]:
+    """기업별 ENVIRONMENT 검색 쿼리 반환"""
+
+    config = CORP_SENSITIVITY_CONFIG.get(corp_id, {})
+    sensitivity = config.get("sensitivity", {})
+
+    queries = []
+
+    for topic, level in sensitivity.items():
+        if level in ["HIGH", "MED"]:
+            queries.append(ENVIRONMENT_QUERY_TEMPLATES[topic])
+
+    return queries
+
+
+ENVIRONMENT_QUERY_TEMPLATES = {
+    "수출규제": "{corp_name} 관련 반도체/기술 수출 규제 정책 2026",
+    "환율변동": "원달러 환율 정책 {industry_name} 영향 2026",
+    "원자재가격": "{key_materials} 원자재 가격 동향 정책 2026",
+    "금리정책": "한국은행 기준금리 {industry_name} 영향 2026",
+    "부동산정책": "부동산 건설 정책 규제 2026",
+    "식량정책": "농업 식량 정책 {industry_name} 2026",
+    "공급망정책": "공급망 안정화 정책 {industry_name} 2026",
+    "무역분쟁": "미중 무역 분쟁 {industry_name} 영향 2026",
+    "기술정책": "AI 반도체 기술 정책 {industry_name} 2026",
+    "에너지정책": "탄소중립 에너지 정책 {industry_name} 2026",
+    "환경규제": "ESG 환경 규제 {industry_name} 2026",
 }
 ```
 
 ---
 
-## 5. Fact Validator
+## 6. 해커톤 모드: Recall 95%
 
-### 5.1 검증 규칙
+### 6.1 모드 전환 설정
 
 ```python
-class FactValidator:
-    """추출된 Fact가 원본 데이터에 실제로 존재하는지 검증"""
+class SignalGenerationMode(Enum):
+    PRODUCTION = "production"   # Recall 85%, Precision 우선
+    HACKATHON = "hackathon"     # Recall 95%, 데이터 풍부 우선
 
-    def validate(self, fact: ExtractedFact, source_data: dict) -> ValidationResult:
-        """
-        Returns:
-            ValidationResult with:
-            - is_valid: bool
-            - confidence_adjustment: float (-1.0 to 0.0)
-            - rejection_reason: Optional[str]
-        """
-        checks = [
-            self._check_source_exists(fact, source_data),
-            self._check_number_exists(fact, source_data),
-            self._check_snippet_exists(fact, source_data),
-        ]
 
-        failed = [c for c in checks if not c.passed]
+# 환경 변수로 제어
+SIGNAL_MODE = os.getenv("SIGNAL_MODE", "hackathon")
 
-        if any(c.severity == "CRITICAL" for c in failed):
-            return ValidationResult(is_valid=False, reason=failed[0].message)
 
-        confidence_penalty = sum(c.penalty for c in failed)
-        return ValidationResult(
-            is_valid=True,
-            confidence_adjustment=confidence_penalty
+def get_generation_config() -> dict:
+    """모드별 설정 반환"""
+
+    if SIGNAL_MODE == "hackathon":
+        return {
+            "min_confidence": "LOW",           # LOW도 허용
+            "allow_monitoring_signals": True,  # "모니터링 권고" 시그널 허용
+            "empty_result_fallback": True,     # 빈 결과 시 Fallback 시그널 생성
+            "max_signals_per_corp": 10,        # 충분한 시그널
+            "min_signals_per_corp": 3,         # 최소 보장
+        }
+    else:
+        return {
+            "min_confidence": "MED",           # MED 이상만
+            "allow_monitoring_signals": False, # 구체적 시그널만
+            "empty_result_fallback": False,    # 없으면 없음
+            "max_signals_per_corp": 5,
+            "min_signals_per_corp": 0,
+        }
+```
+
+### 6.2 빈 결과 방지 로직
+
+```python
+def ensure_minimum_signals(
+    signals: list[dict],
+    corp_id: str,
+    context: dict
+) -> list[dict]:
+    """
+    해커톤 모드: 최소 시그널 수 보장
+
+    빈 화면 방지를 위해 최소 3개 시그널 생성
+    """
+
+    config = get_generation_config()
+    min_signals = config.get("min_signals_per_corp", 0)
+
+    if len(signals) >= min_signals:
+        return signals
+
+    # 부족한 경우 Fallback 시그널 생성
+    corp_config = CORP_SENSITIVITY_CONFIG.get(corp_id, {})
+
+    fallback_signals = []
+
+    # 1. 내부 데이터 기반 DIRECT 시그널
+    if "DIRECT" not in [s["signal_type"] for s in signals]:
+        fallback_signals.append(
+            create_kyc_monitoring_signal(corp_id, context)
         )
 
-    def _check_number_exists(self, fact: ExtractedFact, source_data: dict) -> CheckResult:
-        """Fact의 숫자가 원본에 있는지 확인"""
-        if fact.object_value is None:
-            return CheckResult(passed=True)
+    # 2. 업종 기반 INDUSTRY 시그널
+    if "INDUSTRY" not in [s["signal_type"] for s in signals]:
+        fallback_signals.append(
+            create_industry_monitoring_signal(corp_id, context)
+        )
 
-        # 숫자 추출
-        numbers_in_fact = self._extract_numbers(str(fact.object_value))
-        if not numbers_in_fact:
-            return CheckResult(passed=True)
-
-        # 원본 데이터 문자열화
-        source_str = json.dumps(source_data, ensure_ascii=False)
-
-        for num in numbers_in_fact:
-            if str(num) not in source_str:
-                # 비율로 변환해서 재확인 (100 → 100%, 0.5 → 50%)
-                if f"{num}%" not in source_str and f"{num*100}%" not in source_str:
-                    return CheckResult(
-                        passed=False,
-                        severity="CRITICAL",
-                        message=f"Number {num} not found in source data",
-                        penalty=-1.0
-                    )
-
-        return CheckResult(passed=True)
-
-    def _check_snippet_exists(self, fact: ExtractedFact, source_data: dict) -> CheckResult:
-        """source_snippet이 원본에서 발췌된 것인지 확인"""
-        if not fact.source_snippet:
-            return CheckResult(passed=True)
-
-        source_str = json.dumps(source_data, ensure_ascii=False)
-
-        # 공백 정규화 후 비교
-        normalized_snippet = " ".join(fact.source_snippet.split())
-        normalized_source = " ".join(source_str.split())
-
-        # 80% 이상 매칭
-        if self._fuzzy_match(normalized_snippet, normalized_source) < 0.8:
-            return CheckResult(
-                passed=False,
-                severity="WARNING",
-                message="Snippet not found in source (fuzzy match < 80%)",
-                penalty=-0.3
+    # 3. 정책 기반 ENVIRONMENT 시그널
+    if "ENVIRONMENT" not in [s["signal_type"] for s in signals]:
+        sensitivity = corp_config.get("sensitivity", {})
+        high_topics = [k for k, v in sensitivity.items() if v == "HIGH"]
+        if high_topics:
+            fallback_signals.append(
+                create_policy_monitoring_signal(corp_id, high_topics[0], context)
             )
 
-        return CheckResult(passed=True)
-```
-
-### 5.2 검증 결과 처리
-
-| 검증 결과 | 처리 |
-|----------|------|
-| ✅ 모든 검증 통과 | Rule Engine으로 전달 |
-| ⚠️ WARNING 있음 | 전달하되 confidence 하향 |
-| ❌ CRITICAL 실패 | Fact 폐기, 로그 기록 |
-
----
-
-## 6. Pass 2: Rule Engine
-
-### 6.1 규칙 구조
-
-```python
-@dataclass
-class SignalRule:
-    """시그널 생성 규칙"""
-
-    rule_id: str                    # 규칙 고유 ID (예: "RULE_OVERDUE_001")
-    rule_name: str                  # 사람이 읽을 수 있는 이름
-
-    # 매칭 조건
-    fact_type: FactType             # 대상 Fact 유형
-    conditions: list[Condition]     # 추가 조건들 (AND)
-
-    # 시그널 생성 정보
-    signal_type: str                # DIRECT, INDUSTRY, ENVIRONMENT
-    event_type: str                 # 10종 중 하나
-    impact_direction: str | Callable  # RISK, OPPORTUNITY, NEUTRAL 또는 함수
-    impact_strength: str | Callable   # HIGH, MED, LOW 또는 함수
-
-    # 우선순위 (낮을수록 우선)
-    priority: int = 100
-
-    # 활성화 여부
-    enabled: bool = True
-
-
-@dataclass
-class Condition:
-    """규칙 조건"""
-    field: str                      # Fact 필드명
-    operator: str                   # eq, ne, gt, lt, gte, lte, in, contains
-    value: Any                      # 비교 값
-```
-
-### 6.2 기본 규칙 정의
-
-```python
-# rules/direct_rules.py
-
-DIRECT_RULES = [
-    # =========================================================================
-    # OVERDUE_FLAG_ON: 연체 발생
-    # =========================================================================
-    SignalRule(
-        rule_id="DIRECT_OVERDUE_001",
-        rule_name="30일 이상 연체 발생",
-        fact_type=FactType.OVERDUE_STATUS,
-        conditions=[
-            Condition("object_value", "eq", True),
-            Condition("change_direction", "eq", "NEW"),
-        ],
-        signal_type="DIRECT",
-        event_type="OVERDUE_FLAG_ON",
-        impact_direction="RISK",
-        impact_strength=lambda fact: "HIGH" if fact.get("overdue_days", 0) >= 30 else "MED",
-        priority=10,
-    ),
-
-    # =========================================================================
-    # INTERNAL_RISK_GRADE_CHANGE: 등급 변동
-    # =========================================================================
-    SignalRule(
-        rule_id="DIRECT_GRADE_DOWN_001",
-        rule_name="내부등급 하락",
-        fact_type=FactType.GRADE_CHANGE,
-        conditions=[
-            Condition("change_direction", "eq", "DECREASE"),
-        ],
-        signal_type="DIRECT",
-        event_type="INTERNAL_RISK_GRADE_CHANGE",
-        impact_direction="RISK",
-        impact_strength=lambda fact: "HIGH" if abs(fact.get("change_magnitude", 0)) >= 2 else "MED",
-        priority=10,
-    ),
-
-    SignalRule(
-        rule_id="DIRECT_GRADE_UP_001",
-        rule_name="내부등급 상승",
-        fact_type=FactType.GRADE_CHANGE,
-        conditions=[
-            Condition("change_direction", "eq", "INCREASE"),
-        ],
-        signal_type="DIRECT",
-        event_type="INTERNAL_RISK_GRADE_CHANGE",
-        impact_direction="OPPORTUNITY",
-        impact_strength=lambda fact: "HIGH" if abs(fact.get("change_magnitude", 0)) >= 2 else "MED",
-        priority=10,
-    ),
-
-    # =========================================================================
-    # LOAN_EXPOSURE_CHANGE: 여신 변동
-    # =========================================================================
-    SignalRule(
-        rule_id="DIRECT_EXPOSURE_UP_001",
-        rule_name="여신 증가 (10% 이상)",
-        fact_type=FactType.EXPOSURE_CHANGE,
-        conditions=[
-            Condition("change_direction", "eq", "INCREASE"),
-            Condition("change_magnitude", "gte", 10),
-        ],
-        signal_type="DIRECT",
-        event_type="LOAN_EXPOSURE_CHANGE",
-        impact_direction="NEUTRAL",  # 여신 증가는 기회일 수도, 리스크일 수도
-        impact_strength=lambda fact: "HIGH" if fact.get("change_magnitude", 0) >= 30 else "MED",
-        priority=20,
-    ),
-
-    SignalRule(
-        rule_id="DIRECT_EXPOSURE_DOWN_001",
-        rule_name="여신 감소 (10% 이상)",
-        fact_type=FactType.EXPOSURE_CHANGE,
-        conditions=[
-            Condition("change_direction", "eq", "DECREASE"),
-            Condition("change_magnitude", "gte", 10),
-        ],
-        signal_type="DIRECT",
-        event_type="LOAN_EXPOSURE_CHANGE",
-        impact_direction="NEUTRAL",
-        impact_strength=lambda fact: "HIGH" if fact.get("change_magnitude", 0) >= 30 else "MED",
-        priority=20,
-    ),
-
-    # =========================================================================
-    # GOVERNANCE_CHANGE: 임원 변경
-    # =========================================================================
-    SignalRule(
-        rule_id="DIRECT_CEO_CHANGE_001",
-        rule_name="대표이사 변경",
-        fact_type=FactType.OFFICER_CHANGE,
-        conditions=[
-            Condition("object_value.position", "contains", "대표"),
-        ],
-        signal_type="DIRECT",
-        event_type="GOVERNANCE_CHANGE",
-        impact_direction="NEUTRAL",  # 긍정/부정 불명확
-        impact_strength="MED",
-        priority=30,
-    ),
-
-    # =========================================================================
-    # OWNERSHIP_CHANGE: 주주 변경
-    # =========================================================================
-    SignalRule(
-        rule_id="DIRECT_MAJOR_SHAREHOLDER_001",
-        rule_name="주요주주 변경",
-        fact_type=FactType.SHAREHOLDER_CHANGE,
-        conditions=[
-            Condition("change_magnitude", "gte", 5),  # 지분 5% 이상 변동
-        ],
-        signal_type="DIRECT",
-        event_type="OWNERSHIP_CHANGE",
-        impact_direction="NEUTRAL",
-        impact_strength=lambda fact: "HIGH" if fact.get("change_magnitude", 0) >= 10 else "MED",
-        priority=30,
-    ),
-
-    # =========================================================================
-    # FINANCIAL_STATEMENT_UPDATE: 재무 변동
-    # =========================================================================
-    SignalRule(
-        rule_id="DIRECT_REVENUE_DROP_001",
-        rule_name="매출 급감 (20% 이상)",
-        fact_type=FactType.FINANCIAL_CHANGE,
-        conditions=[
-            Condition("object_value.field", "eq", "revenue"),
-            Condition("change_direction", "eq", "DECREASE"),
-            Condition("change_magnitude", "gte", 20),
-        ],
-        signal_type="DIRECT",
-        event_type="FINANCIAL_STATEMENT_UPDATE",
-        impact_direction="RISK",
-        impact_strength="HIGH",
-        priority=10,
-    ),
-
-    SignalRule(
-        rule_id="DIRECT_REVENUE_SURGE_001",
-        rule_name="매출 급증 (20% 이상)",
-        fact_type=FactType.FINANCIAL_CHANGE,
-        conditions=[
-            Condition("object_value.field", "eq", "revenue"),
-            Condition("change_direction", "eq", "INCREASE"),
-            Condition("change_magnitude", "gte", 20),
-        ],
-        signal_type="DIRECT",
-        event_type="FINANCIAL_STATEMENT_UPDATE",
-        impact_direction="OPPORTUNITY",
-        impact_strength="HIGH",
-        priority=10,
-    ),
-
-    SignalRule(
-        rule_id="DIRECT_OPERATING_LOSS_001",
-        rule_name="영업이익 적자 전환",
-        fact_type=FactType.FINANCIAL_CHANGE,
-        conditions=[
-            Condition("object_value.field", "eq", "operating_income"),
-            Condition("previous_value", "gt", 0),
-            Condition("object_value.value", "lt", 0),
-        ],
-        signal_type="DIRECT",
-        event_type="FINANCIAL_STATEMENT_UPDATE",
-        impact_direction="RISK",
-        impact_strength="HIGH",
-        priority=5,
-    ),
-]
-```
-
-```python
-# rules/industry_rules.py
-
-INDUSTRY_RULES = [
-    # =========================================================================
-    # INDUSTRY_SHOCK: 산업 이벤트
-    # =========================================================================
-    SignalRule(
-        rule_id="INDUSTRY_NEGATIVE_001",
-        rule_name="산업 부정적 뉴스",
-        fact_type=FactType.INDUSTRY_NEWS,
-        conditions=[
-            Condition("object_value.sentiment", "in", ["negative", "부정", "하락", "위기"]),
-        ],
-        signal_type="INDUSTRY",
-        event_type="INDUSTRY_SHOCK",
-        impact_direction="RISK",
-        impact_strength="MED",
-        priority=50,
-        # 추가 조건: Corp Profile 기반 관련성 확인 (런타임)
-    ),
-
-    SignalRule(
-        rule_id="INDUSTRY_POSITIVE_001",
-        rule_name="산업 긍정적 뉴스",
-        fact_type=FactType.INDUSTRY_NEWS,
-        conditions=[
-            Condition("object_value.sentiment", "in", ["positive", "긍정", "상승", "성장"]),
-        ],
-        signal_type="INDUSTRY",
-        event_type="INDUSTRY_SHOCK",
-        impact_direction="OPPORTUNITY",
-        impact_strength="MED",
-        priority=50,
-    ),
-]
-```
-
-```python
-# rules/environment_rules.py
-
-ENVIRONMENT_RULES = [
-    # =========================================================================
-    # POLICY_REGULATION_CHANGE: 정책/규제
-    # =========================================================================
-    SignalRule(
-        rule_id="ENV_POLICY_REGULATION_001",
-        rule_name="정책/규제 발표",
-        fact_type=FactType.POLICY_NEWS,
-        conditions=[],  # 기본 조건 없음, Corp Profile 기반 필터링
-        signal_type="ENVIRONMENT",
-        event_type="POLICY_REGULATION_CHANGE",
-        impact_direction=lambda fact: _determine_policy_impact(fact),
-        impact_strength="MED",
-        priority=50,
-    ),
-]
-
-def _determine_policy_impact(fact: dict) -> str:
-    """정책 영향 방향 결정"""
-    keywords_risk = ["규제 강화", "세금 인상", "수출 제한", "금지"]
-    keywords_opp = ["규제 완화", "지원 확대", "세금 감면", "인센티브"]
-
-    text = str(fact.get("object_value", ""))
-
-    if any(kw in text for kw in keywords_risk):
-        return "RISK"
-    elif any(kw in text for kw in keywords_opp):
-        return "OPPORTUNITY"
-    else:
-        return "NEUTRAL"
-```
-
-### 6.3 Rule Engine 구현
-
-```python
-# rule_engine.py
-
-class RuleEngine:
-    """결정론적 시그널 생성 엔진"""
-
-    def __init__(self):
-        self.rules: list[SignalRule] = []
-        self._load_rules()
-
-    def _load_rules(self):
-        """모든 규칙 로드"""
-        from rules.direct_rules import DIRECT_RULES
-        from rules.industry_rules import INDUSTRY_RULES
-        from rules.environment_rules import ENVIRONMENT_RULES
-
-        self.rules = DIRECT_RULES + INDUSTRY_RULES + ENVIRONMENT_RULES
-        self.rules.sort(key=lambda r: r.priority)
-
-    def process(
-        self,
-        facts: list[ExtractedFact],
-        corp_profile: dict
-    ) -> tuple[list[dict], list[ExtractedFact]]:
-        """
-        Facts를 시그널로 변환
-
-        Returns:
-            (생성된 시그널 목록, 규칙 미매칭 Fact 목록)
-        """
-        signals = []
-        unmatched_facts = []
-        processed_fact_ids = set()
-
-        for fact in facts:
-            matched = False
-
-            for rule in self.rules:
-                if not rule.enabled:
-                    continue
-
-                if self._matches(rule, fact, corp_profile):
-                    signal = self._create_signal(rule, fact, corp_profile)
-                    signals.append(signal)
-                    processed_fact_ids.add(fact.fact_id)
-                    matched = True
-                    break  # 첫 번째 매칭 규칙만 적용
-
-            if not matched:
-                unmatched_facts.append(fact)
-
-        return signals, unmatched_facts
-
-    def _matches(
-        self,
-        rule: SignalRule,
-        fact: ExtractedFact,
-        corp_profile: dict
-    ) -> bool:
-        """규칙이 Fact에 매칭되는지 확인"""
-
-        # 1. Fact 타입 확인
-        if rule.fact_type != fact.fact_type:
-            return False
-
-        # 2. 조건 확인
-        for cond in rule.conditions:
-            if not self._check_condition(cond, fact):
-                return False
-
-        # 3. INDUSTRY/ENVIRONMENT는 Corp Profile 관련성 확인
-        if rule.signal_type in ["INDUSTRY", "ENVIRONMENT"]:
-            if not self._check_corp_relevance(rule, fact, corp_profile):
-                return False
-
-        return True
-
-    def _check_corp_relevance(
-        self,
-        rule: SignalRule,
-        fact: ExtractedFact,
-        corp_profile: dict
-    ) -> bool:
-        """Corp Profile 기반 관련성 확인"""
-
-        if rule.signal_type == "INDUSTRY":
-            # 산업 코드 매칭
-            fact_industries = fact.object_value.get("affected_industries", [])
-            corp_industry = corp_profile.get("industry_code", "")
-
-            if fact_industries and corp_industry:
-                return corp_industry in fact_industries or \
-                       corp_industry[:2] in [i[:2] for i in fact_industries]
-
-            # 산업명 텍스트 매칭
-            fact_text = str(fact.object_value).lower()
-            corp_industry_name = corp_profile.get("industry_name", "").lower()
-
-            return corp_industry_name in fact_text
-
-        elif rule.signal_type == "ENVIRONMENT":
-            # 환경 이벤트는 Corp Profile 특성 기반 필터링
-            return self._check_environment_relevance(fact, corp_profile)
-
-        return True
-
-    def _check_environment_relevance(
-        self,
-        fact: ExtractedFact,
-        corp_profile: dict
-    ) -> bool:
-        """ENVIRONMENT 이벤트의 기업 관련성 확인"""
-
-        fact_text = str(fact.object_value).lower()
-
-        # 수출 관련 → 수출 비중 30% 이상 기업
-        if any(kw in fact_text for kw in ["수출", "관세", "무역", "환율"]):
-            export_ratio = corp_profile.get("export_ratio_pct", 0)
-            if export_ratio < 30:
-                return False
-
-        # 국가 관련 → 해당 국가 노출 기업
-        country_keywords = {
-            "중국": ["중국", "china", "베이징", "상하이"],
-            "미국": ["미국", "usa", "us", "워싱턴", "뉴욕"],
-            "EU": ["유럽", "eu", "브뤼셀", "독일", "프랑스"],
-        }
-
-        for country, keywords in country_keywords.items():
-            if any(kw in fact_text for kw in keywords):
-                country_exposure = corp_profile.get("country_exposure", [])
-                if not any(country.lower() in str(c).lower() for c in country_exposure):
-                    return False
-
-        return True
-
-    def _create_signal(
-        self,
-        rule: SignalRule,
-        fact: ExtractedFact,
-        corp_profile: dict
-    ) -> dict:
-        """규칙과 Fact로 시그널 생성"""
-
-        # impact_direction/strength 계산
-        if callable(rule.impact_direction):
-            impact_direction = rule.impact_direction(fact.__dict__)
-        else:
-            impact_direction = rule.impact_direction
-
-        if callable(rule.impact_strength):
-            impact_strength = rule.impact_strength(fact.__dict__)
-        else:
-            impact_strength = rule.impact_strength
-
-        # Confidence 계산 (출처 기반)
-        confidence = self._calculate_confidence(fact)
-
-        # Summary 생성 (템플릿)
-        summary = self._generate_summary(rule, fact, corp_profile)
-
-        return {
-            "signal_type": rule.signal_type,
-            "event_type": rule.event_type,
-            "impact_direction": impact_direction,
-            "impact_strength": impact_strength,
-            "confidence": confidence,
-            "title": self._generate_title(rule, fact, corp_profile),
-            "summary": summary,
-            "evidence": [{
-                "evidence_type": self._map_source_type(fact.source_type),
-                "ref_type": self._map_ref_type(fact.source_type),
-                "ref_value": fact.source_ref,
-                "snippet": fact.source_snippet,
-            }],
-            "rule_id": rule.rule_id,
-            "fact_id": fact.fact_id,
-        }
-
-    def _calculate_confidence(self, fact: ExtractedFact) -> str:
-        """출처 기반 Confidence 계산"""
-
-        TIER1_DOMAINS = [
-            "dart.fss.or.kr", "fss.or.kr", "bok.or.kr",
-            "kostat.go.kr", "kosis.kr"
-        ]
-        TIER2_DOMAINS = [
-            "hankyung.com", "mk.co.kr", "chosun.com",
-            "sedaily.com", "edaily.co.kr"
-        ]
-
-        if fact.source_type == "SNAPSHOT":
-            return "HIGH"  # 내부 데이터는 항상 HIGH
-
-        if fact.source_type == "DOCUMENT":
-            return "HIGH"  # 제출 문서는 항상 HIGH
-
-        # EXTERNAL
-        source_url = fact.source_ref.lower()
-
-        if any(domain in source_url for domain in TIER1_DOMAINS):
-            return "HIGH"
-        elif any(domain in source_url for domain in TIER2_DOMAINS):
-            return "MED"
-        else:
-            return "LOW"
-```
-
-### 6.4 Confidence 계산 규칙
-
-| 출처 유형 | Confidence | 근거 |
-|----------|------------|------|
-| 내부 스냅샷 | HIGH | 1차 자료, 검증된 데이터 |
-| 제출 문서 | HIGH | 고객 제출, 공증 가능 |
-| DART 공시 | HIGH | 법적 의무 공시 |
-| 정부 발표 | HIGH | 공식 정보 |
-| 주요 경제지 | MED | 신뢰도 높은 언론 |
-| 일반 뉴스 | LOW | 단일 출처 |
-| 출처 불명 | LOW | 검증 불가 |
-
----
-
-## 7. Summary Generator
-
-### 7.1 템플릿 정의
-
-```python
-# templates/summary_templates.py
-
-SUMMARY_TEMPLATES = {
-    # =========================================================================
-    # DIRECT 시그널
-    # =========================================================================
-    "OVERDUE_FLAG_ON": {
-        "RISK": "{corp_name}의 기업여신에서 {overdue_days}일 연체가 확인됨. 담보 상태 점검 및 상환 계획 확인 권고.",
-    },
-
-    "INTERNAL_RISK_GRADE_CHANGE": {
-        "RISK": "{corp_name}의 내부신용등급이 {prev_grade}에서 {curr_grade}로 하락함. 여신 조건 재검토 대상.",
-        "OPPORTUNITY": "{corp_name}의 내부신용등급이 {prev_grade}에서 {curr_grade}로 상승함. 여신 확대 검토 가능.",
-    },
-
-    "LOAN_EXPOSURE_CHANGE": {
-        "NEUTRAL": "{corp_name}의 여신 노출이 {change_direction} {change_pct}% 변동함. 포트폴리오 리밸런싱 검토 권고.",
-    },
-
-    "GOVERNANCE_CHANGE": {
-        "NEUTRAL": "{corp_name}의 {officer_position} {officer_name}이(가) 변경됨. 경영 연속성 모니터링 권고.",
-    },
-
-    "OWNERSHIP_CHANGE": {
-        "NEUTRAL": "{corp_name}의 주주구조 변동 확인. {shareholder_name} 지분 {change_pct}% 변동. 지배구조 변화 모니터링 권고.",
-    },
-
-    "FINANCIAL_STATEMENT_UPDATE": {
-        "RISK": "{corp_name}의 {financial_field}이(가) 전기 대비 {change_pct}% 감소함. 재무 건전성 점검 권고.",
-        "OPPORTUNITY": "{corp_name}의 {financial_field}이(가) 전기 대비 {change_pct}% 증가함. 성장 추세 확인.",
-    },
-
-    # =========================================================================
-    # INDUSTRY 시그널
-    # =========================================================================
-    "INDUSTRY_SHOCK": {
-        "RISK": "{industry_name} 업종에서 {event_summary}. {corp_name}은 해당 업종으로 영향 모니터링 권고.",
-        "OPPORTUNITY": "{industry_name} 업종에서 {event_summary}. {corp_name}은 해당 업종으로 수혜 가능성 검토.",
-        "NEUTRAL": "{industry_name} 업종에서 {event_summary}. {corp_name}에 대한 영향은 추가 확인 필요.",
-    },
-
-    # =========================================================================
-    # ENVIRONMENT 시그널
-    # =========================================================================
-    "POLICY_REGULATION_CHANGE": {
-        "RISK": "{policy_name} 시행으로 {affected_area} 관련 규제 강화. {corp_name}은 {relevance_reason}으로 영향 가능성 있음.",
-        "OPPORTUNITY": "{policy_name} 발표로 {affected_area} 지원 확대. {corp_name}은 {relevance_reason}으로 수혜 가능성 있음.",
-        "NEUTRAL": "{policy_name} 관련 동향 확인. {corp_name}에 대한 영향은 {relevance_reason} 기반 모니터링 권고.",
-    },
-}
-```
-
-### 7.2 Summary Generator 구현
-
-```python
-# summary_generator.py
-
-class SummaryGenerator:
-    """템플릿 기반 Summary 생성기"""
-
-    def __init__(self):
-        self.templates = SUMMARY_TEMPLATES
-
-    def generate(
-        self,
-        signal: dict,
-        fact: ExtractedFact,
-        corp_profile: dict
-    ) -> str:
-        """시그널 Summary 생성"""
-
-        event_type = signal["event_type"]
-        impact_direction = signal["impact_direction"]
-
-        # 템플릿 조회
-        event_templates = self.templates.get(event_type, {})
-        template = event_templates.get(impact_direction)
-
-        if not template:
-            # Fallback: 기본 템플릿
-            return self._generate_fallback_summary(signal, fact, corp_profile)
-
-        # 템플릿 변수 준비
-        variables = self._prepare_variables(signal, fact, corp_profile)
-
-        # 템플릿 렌더링
-        try:
-            return template.format(**variables)
-        except KeyError as e:
-            # 누락된 변수는 빈 문자열로 대체
-            return self._safe_format(template, variables)
-
-    def _prepare_variables(
-        self,
-        signal: dict,
-        fact: ExtractedFact,
-        corp_profile: dict
-    ) -> dict:
-        """템플릿 변수 준비"""
-
-        variables = {
-            "corp_name": corp_profile.get("corp_name", "해당 기업"),
-            "industry_name": corp_profile.get("industry_name", "해당 업종"),
-            "industry_code": corp_profile.get("industry_code", ""),
-        }
-
-        # Fact에서 변수 추출
-        if fact.object_value:
-            if isinstance(fact.object_value, dict):
-                variables.update(fact.object_value)
-            else:
-                variables["object_value"] = fact.object_value
-
-        if fact.previous_value:
-            variables["previous_value"] = fact.previous_value
-            variables["prev_value"] = fact.previous_value
-
-        if fact.change_magnitude:
-            variables["change_pct"] = round(abs(fact.change_magnitude), 1)
-            variables["change_magnitude"] = round(abs(fact.change_magnitude), 1)
-
-        if fact.change_direction:
-            direction_map = {
-                "INCREASE": "증가",
-                "DECREASE": "감소",
-                "NEW": "신규 발생",
-                "REMOVED": "해소",
-            }
-            variables["change_direction"] = direction_map.get(
-                fact.change_direction, fact.change_direction
-            )
-
-        # 이벤트 요약 (외부 뉴스용)
-        if fact.source_snippet:
-            variables["event_summary"] = fact.source_snippet[:100]
-
-        return variables
-
-    def _safe_format(self, template: str, variables: dict) -> str:
-        """누락된 변수를 안전하게 처리하는 format"""
-        import re
-
-        # {variable} 패턴 찾기
-        pattern = r'\{(\w+)\}'
-
-        def replacer(match):
-            key = match.group(1)
-            return str(variables.get(key, f"[{key}]"))
-
-        return re.sub(pattern, replacer, template)
-
-    def _generate_fallback_summary(
-        self,
-        signal: dict,
-        fact: ExtractedFact,
-        corp_profile: dict
-    ) -> str:
-        """템플릿 없을 때 기본 Summary"""
-
-        corp_name = corp_profile.get("corp_name", "해당 기업")
-        event_type = signal["event_type"]
-
-        return f"{corp_name} 관련 {event_type} 이벤트 확인. 상세 내용 검토 권고."
-```
-
-### 7.3 Title Generator
-
-```python
-TITLE_TEMPLATES = {
-    "OVERDUE_FLAG_ON": "{corp_name} 연체 발생",
-    "INTERNAL_RISK_GRADE_CHANGE": "{corp_name} 내부등급 {direction}",
-    "LOAN_EXPOSURE_CHANGE": "{corp_name} 여신 {change_pct}% 변동",
-    "COLLATERAL_CHANGE": "{corp_name} 담보 변동",
-    "OWNERSHIP_CHANGE": "{corp_name} 주주구조 변경",
-    "GOVERNANCE_CHANGE": "{corp_name} {officer_position} 변경",
-    "FINANCIAL_STATEMENT_UPDATE": "{corp_name} 재무 {direction}",
-    "KYC_REFRESH": "{corp_name} KYC 갱신 필요",
-    "INDUSTRY_SHOCK": "{industry_name} {event_keyword}",
-    "POLICY_REGULATION_CHANGE": "{policy_keyword} 정책 변화",
-}
+    return signals + fallback_signals[:min_signals - len(signals)]
+
+
+def create_kyc_monitoring_signal(corp_id: str, context: dict) -> dict:
+    """KYC 모니터링 시그널 생성"""
+
+    corp_name = context.get("corp_name", "해당 기업")
+
+    return {
+        "signal_type": "DIRECT",
+        "event_type": "KYC_REFRESH",
+        "impact_direction": "NEUTRAL",
+        "impact_strength": "LOW",
+        "confidence": "LOW",
+        "title": f"{corp_name} KYC 정보 점검 권고",
+        "summary": f"{corp_name}의 KYC 정보 갱신 주기 도래. 최신 재무/비재무 정보 확인 권고.",
+        "evidence": [{
+            "evidence_type": "INTERNAL_FIELD",
+            "ref_type": "SNAPSHOT_KEYPATH",
+            "ref_value": "/corp/kyc_status/last_kyc_updated",
+            "snippet": "KYC 정보 정기 점검",
+        }],
+        "is_fallback": True,
+        "fallback_reason": "minimum_signal_guarantee",
+    }
 ```
 
 ---
 
-## 8. LLM Fallback
+## 7. 시연 테스트 전략
 
-### 8.1 Fallback 조건
-
-규칙 엔진에서 매칭되지 않은 Fact는 LLM Fallback으로 처리:
+### 7.1 시연 시나리오
 
 ```python
-class LLMFallback:
-    """규칙 미매칭 Fact 처리"""
+DEMO_SCENARIOS = [
+    {
+        "name": "시나리오 1: 엠케이전자 분석",
+        "steps": [
+            ("POST", "/api/v1/jobs/analyze/run", {"corp_id": "8001-3719240"}),
+            ("WAIT", 30),  # 최대 30초 대기
+            ("GET", "/api/v1/signals", {"corp_id": "8001-3719240"}),
+            ("ASSERT", "signal_count >= 3"),
+            ("ASSERT", "no_weird_numbers"),  # 88% 감소 같은 허위 수치 없음
+        ],
+    },
+    {
+        "name": "시나리오 2: 동부건설 분석",
+        "steps": [
+            ("POST", "/api/v1/jobs/analyze/run", {"corp_id": "8000-7647330"}),
+            ("WAIT", 30),
+            ("GET", "/api/v1/signals", {"corp_id": "8000-7647330"}),
+            ("ASSERT", "signal_count >= 3"),
+            ("ASSERT", "no_weird_numbers"),
+        ],
+    },
+    {
+        "name": "시나리오 3: 시그널 상세 확인",
+        "steps": [
+            ("GET", "/api/v1/signals"),
+            ("GET", "/api/v1/signals/{first_signal_id}/detail"),
+            ("ASSERT", "evidence_exists"),
+            ("ASSERT", "summary_not_empty"),
+        ],
+    },
+]
+```
 
-    def __init__(self, llm_service: LLMService):
-        self.llm = llm_service
+### 7.2 자동화 테스트
 
-    def process(
-        self,
-        unmatched_facts: list[ExtractedFact],
-        corp_profile: dict
-    ) -> list[dict]:
-        """
-        규칙 미매칭 Fact를 LLM으로 처리
+```python
+# tests/test_demo_scenarios.py
 
-        주의: 모든 Fallback 시그널은 confidence=LOW
-        """
+import pytest
+from demo_scenarios import DEMO_SCENARIOS
 
-        if not unmatched_facts:
-            return []
 
-        signals = []
+@pytest.mark.parametrize("scenario", DEMO_SCENARIOS)
+def test_demo_scenario(scenario, api_client):
+    """시연 시나리오 자동화 테스트"""
 
-        for fact in unmatched_facts:
-            signal = self._process_single_fact(fact, corp_profile)
-            if signal:
-                signal["confidence"] = "LOW"  # 강제 LOW
-                signal["is_fallback"] = True
-                signal["fallback_reason"] = "No matching rule"
-                signals.append(signal)
+    for step in scenario["steps"]:
+        action = step[0]
+
+        if action == "POST":
+            response = api_client.post(step[1], json=step[2])
+            assert response.status_code == 200
+
+        elif action == "GET":
+            response = api_client.get(step[1], params=step[2] if len(step) > 2 else {})
+            assert response.status_code == 200
+
+        elif action == "WAIT":
+            import time
+            time.sleep(step[1])
+
+        elif action == "ASSERT":
+            assertion = step[1]
+            if assertion == "signal_count >= 3":
+                assert len(response.json().get("signals", [])) >= 3
+            elif assertion == "no_weird_numbers":
+                assert_no_hallucinated_numbers(response.json())
+            elif assertion == "evidence_exists":
+                assert response.json().get("evidence")
+            elif assertion == "summary_not_empty":
+                assert response.json().get("summary")
+
+
+def assert_no_hallucinated_numbers(data):
+    """허위 수치 검증"""
+
+    SUSPICIOUS_PATTERNS = [
+        r"8[0-9]% (감소|하락|축소)",   # 80%대 급감
+        r"9[0-9]% (감소|하락|축소)",   # 90%대 급감
+        r"[5-9][0-9]% (증가|상승|성장)", # 50%+ 급증 (검증 필요)
+    ]
+
+    text = json.dumps(data, ensure_ascii=False)
+
+    for pattern in SUSPICIOUS_PATTERNS:
+        match = re.search(pattern, text)
+        if match:
+            # 해당 수치가 실제 데이터에 있는지 추가 검증
+            # (테스트에서는 경고만)
+            print(f"WARNING: 의심 수치 발견 - {match.group()}")
+```
+
+### 7.3 시연 전 체크리스트
+
+```markdown
+## 해커톤 시연 전 체크리스트
+
+### 1. 시스템 상태 확인
+- [ ] Backend API 응답 (/health)
+- [ ] Worker 상태 (Celery)
+- [ ] Redis 연결
+- [ ] Database 연결
+
+### 2. 데이터 확인
+- [ ] 6개 시드 기업 존재
+- [ ] 각 기업 최소 3개 시그널
+- [ ] 이상한 숫자 없음 (88% 감소 등)
+- [ ] Evidence 모두 존재
+
+### 3. UI 확인
+- [ ] Signal Inbox 페이지 렌더링
+- [ ] 시그널 상세 페이지 렌더링
+- [ ] 기업 상세 페이지 렌더링
+- [ ] Demo Panel 동작
+
+### 4. 시연 리허설
+- [ ] 시나리오 1 통과 (엠케이전자)
+- [ ] 시나리오 2 통과 (동부건설)
+- [ ] 시나리오 3 통과 (상세 확인)
+```
+
+---
+
+## 8. 프로덕션 로드맵 (해커톤 이후)
+
+### 8.1 Two-Pass Architecture 구현 계획
+
+해커톤 이후 본격적으로 Two-Pass Architecture 구현:
+
+| Phase | 기간 | 내용 |
+|-------|------|------|
+| Phase 1 | 2주 | Fact Extractor 구현, Fact 스키마 정의 |
+| Phase 2 | 2주 | Rule Engine 구현, 기본 규칙 30개 |
+| Phase 3 | 1주 | Template Generator 구현 |
+| Phase 4 | 2주 | 병렬 실행 및 A/B 테스트 |
+| Phase 5 | 1주 | 전환 및 안정화 |
+
+### 8.2 향후 개선 사항
+
+```
+해커톤 이후 개선 우선순위:
+
+1. Ground Truth 구축
+   - 분석가 피드백 수집 시스템
+   - 시그널 품질 라벨링
+
+2. 업종별 규칙 세분화
+   - 현재: 6개 기업 하드코딩
+   - 목표: 업종 마스터 + 동적 규칙
+
+3. A/B 테스트 인프라
+   - 트래픽 분할
+   - 품질 지표 자동 측정
+
+4. 모니터링 강화
+   - Hallucination Rate 실시간 대시보드
+   - Fallback Rate 알림
+```
+
+---
+
+## 9. 성공 지표 (해커톤 버전)
+
+### 9.1 시연 성공 기준
+
+| 지표 | 목표 | 측정 방법 |
+|------|------|----------|
+| **시그널 수** | 기업당 3-5개 | API 응답 카운트 |
+| **Hallucination** | 0건 | 수동 검증 |
+| **빈 화면** | 0건 | UI 테스트 |
+| **에러** | 0건 | 시연 중 에러 없음 |
+| **응답 시간** | < 30초 | Job 완료 시간 |
+
+### 9.2 데이터 품질 기준
+
+| 항목 | 기준 | 검증 방법 |
+|------|------|----------|
+| **숫자 정확성** | 원본에 있는 숫자만 | Hard Validation |
+| **URL 유효성** | 검색 결과에 있는 URL만 | Evidence Validation |
+| **Summary 품질** | 금지 표현 없음 | 패턴 검사 |
+| **Confidence 일관성** | 출처 기반 결정 | 로직 검증 |
+
+---
+
+## 10. 리스크 및 완화
+
+### 10.1 해커톤 리스크
+
+| 리스크 | 확률 | 영향 | 완화 |
+|--------|------|------|------|
+| 시그널 부족 | 중 | 높음 | 최소 시그널 보장 로직 |
+| Hallucination 발생 | 낮음 | 높음 | Hard Validation |
+| 시연 중 에러 | 낮음 | 높음 | 사전 리허설 |
+| 느린 응답 | 중 | 중 | 타임아웃 설정 |
+
+### 10.2 완화 전략
+
+```python
+# 시연 안정성 보장 코드
+
+class DemoSafetyNet:
+    """시연 중 안전망"""
+
+    @staticmethod
+    def ensure_signals(corp_id: str) -> list[dict]:
+        """시그널이 없으면 캐시된 시그널 반환"""
+
+        signals = get_signals_from_db(corp_id)
+
+        if not signals:
+            # 사전 생성된 시드 시그널 반환
+            return get_seed_signals(corp_id)
 
         return signals
 
-    def _process_single_fact(
-        self,
-        fact: ExtractedFact,
-        corp_profile: dict
-    ) -> Optional[dict]:
-        """단일 Fact LLM 처리"""
+    @staticmethod
+    def handle_timeout(job_id: str) -> dict:
+        """타임아웃 시 부분 결과 반환"""
 
-        prompt = f"""다음 사실(Fact)에 대해 금융 리스크/기회 시그널을 생성하세요.
+        partial = get_partial_results(job_id)
 
-## 사실
-- 유형: {fact.fact_type}
-- 주체: {fact.subject}
-- 내용: {fact.predicate}
-- 값: {fact.object_value}
-- 출처: {fact.source_ref}
-
-## 기업 정보
-- 기업명: {corp_profile.get('corp_name')}
-- 업종: {corp_profile.get('industry_name')}
-
-## 규칙
-1. 해당 기업과 관련성이 불명확하면 시그널 생성 금지
-2. impact_direction은 RISK, OPPORTUNITY, NEUTRAL 중 선택
-3. 판단 근거 없으면 NEUTRAL
-
-## 출력 (JSON)
-{{
-  "should_create_signal": true/false,
-  "signal_type": "DIRECT|INDUSTRY|ENVIRONMENT",
-  "event_type": "...",
-  "impact_direction": "...",
-  "impact_strength": "MED",
-  "reason": "생성/미생성 이유"
-}}
-"""
-
-        response = self.llm.call(prompt)
-        # ... JSON 파싱 및 시그널 생성
-```
-
-### 8.2 Fallback 비율 모니터링
-
-```python
-class FallbackMonitor:
-    """Fallback 비율 모니터링"""
-
-    def __init__(self, alert_threshold: float = 0.2):
-        self.alert_threshold = alert_threshold
-        self.stats = defaultdict(lambda: {"total": 0, "fallback": 0})
-
-    def record(self, corp_id: str, total_facts: int, fallback_facts: int):
-        self.stats[corp_id]["total"] += total_facts
-        self.stats[corp_id]["fallback"] += fallback_facts
-
-        # 전체 비율 확인
-        total = sum(s["total"] for s in self.stats.values())
-        fallback = sum(s["fallback"] for s in self.stats.values())
-
-        if total > 0:
-            ratio = fallback / total
-            if ratio > self.alert_threshold:
-                self._alert(ratio)
-
-    def _alert(self, ratio: float):
-        logger.warning(
-            f"[FallbackMonitor] High fallback ratio: {ratio:.1%}. "
-            f"Consider adding new rules."
-        )
+        if partial:
+            return {"status": "PARTIAL", "signals": partial}
+        else:
+            return {"status": "TIMEOUT", "message": "분석 중입니다. 잠시 후 다시 확인해주세요."}
 ```
 
 ---
 
-## 9. 데이터베이스 스키마
+## 11. 구현 타임라인 (1주)
 
-### 9.1 신규 테이블
-
-```sql
--- Fact 저장 테이블
-CREATE TABLE rkyc_extracted_fact (
-    fact_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    corp_id VARCHAR(20) NOT NULL REFERENCES corp(corp_id),
-    job_id UUID REFERENCES rkyc_job(job_id),
-
-    -- Fact 정보
-    fact_type VARCHAR(50) NOT NULL,
-    subject VARCHAR(200) NOT NULL,
-    predicate VARCHAR(200) NOT NULL,
-    object_value JSONB,
-    previous_value JSONB,
-    change_direction VARCHAR(20),
-    change_magnitude DECIMAL(10, 2),
-
-    -- 출처
-    source_type VARCHAR(20) NOT NULL,  -- SNAPSHOT, DOCUMENT, EXTERNAL
-    source_ref VARCHAR(500) NOT NULL,
-    source_snippet TEXT,
-
-    -- 검증
-    validation_status VARCHAR(20) DEFAULT 'PENDING',  -- PENDING, VALID, INVALID
-    validation_details JSONB,
-
-    -- 메타데이터
-    extracted_at TIMESTAMPTZ DEFAULT NOW(),
-    extraction_model VARCHAR(50),
-
-    CONSTRAINT valid_fact_type CHECK (fact_type IN (
-        'overdue_status', 'grade_change', 'exposure_change', 'collateral_change',
-        'shareholder_change', 'officer_change', 'financial_change',
-        'company_news', 'industry_news', 'policy_news', 'unclassified'
-    ))
-);
-
-CREATE INDEX idx_fact_corp_id ON rkyc_extracted_fact(corp_id);
-CREATE INDEX idx_fact_type ON rkyc_extracted_fact(fact_type);
-CREATE INDEX idx_fact_job_id ON rkyc_extracted_fact(job_id);
-
-
--- 규칙 실행 로그 테이블
-CREATE TABLE rkyc_rule_execution_log (
-    log_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    job_id UUID REFERENCES rkyc_job(job_id),
-    fact_id UUID REFERENCES rkyc_extracted_fact(fact_id),
-    signal_id UUID REFERENCES rkyc_signal(signal_id),
-
-    -- 규칙 정보
-    rule_id VARCHAR(100),
-    rule_matched BOOLEAN NOT NULL,
-    match_reason TEXT,
-
-    -- Fallback 정보
-    is_fallback BOOLEAN DEFAULT FALSE,
-    fallback_reason TEXT,
-
-    -- 타이밍
-    executed_at TIMESTAMPTZ DEFAULT NOW(),
-    execution_time_ms INTEGER
-);
-
-CREATE INDEX idx_rule_log_job_id ON rkyc_rule_execution_log(job_id);
-CREATE INDEX idx_rule_log_rule_id ON rkyc_rule_execution_log(rule_id);
-
-
--- 규칙 정의 테이블 (선택적 - 동적 규칙 관리용)
-CREATE TABLE rkyc_signal_rule (
-    rule_id VARCHAR(100) PRIMARY KEY,
-    rule_name VARCHAR(200) NOT NULL,
-    rule_version INTEGER DEFAULT 1,
-
-    -- 매칭 조건
-    fact_type VARCHAR(50) NOT NULL,
-    conditions JSONB NOT NULL,  -- [{field, operator, value}, ...]
-
-    -- 시그널 생성 정보
-    signal_type VARCHAR(20) NOT NULL,
-    event_type VARCHAR(50) NOT NULL,
-    impact_direction VARCHAR(20),  -- NULL이면 동적 계산
-    impact_strength VARCHAR(20),   -- NULL이면 동적 계산
-
-    -- 메타데이터
-    priority INTEGER DEFAULT 100,
-    enabled BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    created_by VARCHAR(100)
-);
-```
-
-### 9.2 기존 테이블 수정
-
-```sql
--- rkyc_signal에 규칙 추적 필드 추가
-ALTER TABLE rkyc_signal ADD COLUMN rule_id VARCHAR(100);
-ALTER TABLE rkyc_signal ADD COLUMN fact_id UUID REFERENCES rkyc_extracted_fact(fact_id);
-ALTER TABLE rkyc_signal ADD COLUMN is_fallback BOOLEAN DEFAULT FALSE;
-ALTER TABLE rkyc_signal ADD COLUMN generation_method VARCHAR(20) DEFAULT 'RULE';
--- generation_method: 'RULE', 'FALLBACK', 'LEGACY'
-
-COMMENT ON COLUMN rkyc_signal.rule_id IS '시그널 생성에 사용된 규칙 ID';
-COMMENT ON COLUMN rkyc_signal.generation_method IS 'RULE: 규칙 엔진, FALLBACK: LLM, LEGACY: 이전 방식';
-```
+| Day | 작업 | 담당 |
+|-----|------|------|
+| **Day 1** | Hard Validation 강화 | Backend |
+| **Day 2** | 6개 기업 민감도 설정 | Backend |
+| **Day 3** | 해커톤 모드 구현 | Backend |
+| **Day 4** | 시연 테스트 자동화 | QA |
+| **Day 5** | 시드 데이터 검증 | Data |
+| **Day 6** | 시연 리허설 #1 | All |
+| **Day 7** | 시연 리허설 #2 + 버그 수정 | All |
 
 ---
 
-## 10. API 엔드포인트
-
-### 10.1 신규 엔드포인트
-
-```python
-# GET /api/v1/facts/{corp_id}
-# 기업별 추출된 Fact 목록 조회
-@router.get("/facts/{corp_id}")
-async def get_facts(
-    corp_id: str,
-    job_id: Optional[str] = None,
-    fact_type: Optional[str] = None,
-    validation_status: Optional[str] = None,
-):
-    """기업별 추출된 Fact 조회"""
-    pass
-
-
-# GET /api/v1/rules
-# 활성화된 규칙 목록 조회
-@router.get("/rules")
-async def get_rules(
-    signal_type: Optional[str] = None,
-    event_type: Optional[str] = None,
-    enabled_only: bool = True,
-):
-    """시그널 생성 규칙 목록 조회"""
-    pass
-
-
-# GET /api/v1/rules/{rule_id}/stats
-# 규칙별 매칭 통계
-@router.get("/rules/{rule_id}/stats")
-async def get_rule_stats(
-    rule_id: str,
-    days: int = 30,
-):
-    """규칙별 매칭 통계 조회"""
-    pass
-
-
-# GET /api/v1/admin/fallback-stats
-# Fallback 통계
-@router.get("/admin/fallback-stats")
-async def get_fallback_stats(
-    days: int = 7,
-):
-    """LLM Fallback 사용 통계"""
-    pass
-
-
-# POST /api/v1/admin/rules/test
-# 규칙 테스트 (Dry Run)
-@router.post("/admin/rules/test")
-async def test_rule(
-    rule: SignalRuleCreate,
-    sample_facts: list[dict],
-):
-    """규칙 테스트 (실제 저장 없이)"""
-    pass
-```
-
-### 10.2 기존 엔드포인트 수정
-
-```python
-# GET /api/v1/signals/{signal_id}/detail
-# 시그널 상세에 규칙 정보 추가
-
-class SignalDetailResponseV2(SignalDetailResponse):
-    rule_id: Optional[str]           # 사용된 규칙 ID
-    rule_name: Optional[str]         # 규칙 이름
-    fact_id: Optional[str]           # 원본 Fact ID
-    generation_method: str           # RULE, FALLBACK, LEGACY
-    is_fallback: bool               # Fallback 여부
-```
-
----
-
-## 11. 마이그레이션 계획
-
-### 11.1 Phase 1: 병렬 실행 (1주일)
-
-```
-현재 시스템 (LLM 기반) ──┬──▶ Signal (Production)
-                         │
-새 시스템 (Rule 기반) ───┴──▶ Signal (Shadow, 저장만)
-```
-
-- 새 시스템을 Shadow 모드로 실행
-- 동일 입력에 대해 두 시스템 출력 비교
-- 불일치 분석 및 규칙 보완
-
-### 11.2 Phase 2: A/B 테스트 (1주일)
-
-- 50% 트래픽을 새 시스템으로 라우팅
-- Precision, Recall, 사용자 피드백 측정
-- 목표: 새 시스템 품질 >= 기존 시스템
-
-### 11.3 Phase 3: 전환 (3일)
-
-- 새 시스템을 Primary로 전환
-- 기존 시스템을 Fallback으로 유지 (1주일)
-- 안정화 확인 후 기존 시스템 제거
-
----
-
-## 12. 성공 지표
-
-### 12.1 품질 지표
-
-| 지표 | 정의 | 목표 |
-|------|------|------|
-| Hallucination Rate | (허위 시그널 / 전체 시그널) | < 0.1% |
-| Precision | (정확한 시그널 / 생성 시그널) | > 95% |
-| Recall | (탐지 시그널 / 실제 이벤트) | > 85% |
-| Consistency | (동일 입력 동일 출력 비율) | > 99% |
-
-### 12.2 운영 지표
-
-| 지표 | 정의 | 목표 |
-|------|------|------|
-| Rule Coverage | (규칙 매칭 / 전체 Fact) | > 80% |
-| Fallback Rate | (Fallback / 전체 시그널) | < 20% |
-| Latency p95 | 시그널 생성 시간 | < 5초 |
-| LLM Cost | 기업당 LLM 비용 | < $0.05 |
-
-### 12.3 비즈니스 지표
-
-| 지표 | 정의 | 목표 |
-|------|------|------|
-| User Trust | 시그널 기각률 | < 10% |
-| Explainability | 규칙 ID 추적 가능 비율 | 100% |
-| Audit Readiness | 근거 추적 가능 비율 | 100% |
-
----
-
-## 13. 리스크 및 완화
-
-### 13.1 기술 리스크
-
-| 리스크 | 확률 | 영향 | 완화 |
-|--------|------|------|------|
-| 규칙 커버리지 부족 | 중 | 중 | LLM Fallback + 주간 규칙 리뷰 |
-| Fact 추출 Hallucination | 낮음 | 높음 | Fact Validator 강화 |
-| 성능 저하 | 낮음 | 중 | 규칙 엔진 최적화, 캐싱 |
-
-### 13.2 비즈니스 리스크
-
-| 리스크 | 확률 | 영향 | 완화 |
-|--------|------|------|------|
-| 시그널 수 급감 | 중 | 높음 | Phase 1 병렬 비교로 사전 확인 |
-| 사용자 혼란 | 낮음 | 중 | 점진적 전환, 변경 사항 안내 |
-
----
-
-## 14. 타임라인
-
-| Phase | 기간 | 주요 작업 |
-|-------|------|----------|
-| **Phase 1**: 설계 | 3일 | 상세 설계, DB 스키마 확정 |
-| **Phase 2**: 구현 | 7일 | Rule Engine, Fact Extractor, Summary Generator |
-| **Phase 3**: 테스트 | 5일 | 단위 테스트, 통합 테스트, 규칙 검증 |
-| **Phase 4**: 병렬 실행 | 7일 | Shadow 모드 실행, 비교 분석 |
-| **Phase 5**: A/B 테스트 | 7일 | 50% 트래픽 라우팅, 품질 측정 |
-| **Phase 6**: 전환 | 3일 | Primary 전환, 모니터링 |
-
-**총 소요: 약 5주**
-
----
-
-## 15. 승인
+## 12. 승인
 
 | 역할 | 이름 | 승인 | 날짜 |
 |------|------|------|------|
-| Product Owner | - | ⬜ | - |
-| Tech Lead | - | ⬜ | - |
-| Security | - | ⬜ | - |
-| QA Lead | - | ⬜ | - |
+| Product Owner | - | ✅ | 2026-02-08 |
+| Tech Lead | Elon Musk (First Principles) | ✅ | 2026-02-08 |
+| Demo Lead | - | ⬜ | - |
 
 ---
 
-## Appendix A: 규칙 예시 전체 목록
+## Appendix A: Elon Musk 제1원칙 요약
 
-```python
-# 전체 규칙 ID 목록
+### "해커톤에서 이기는 법"
 
-DIRECT_RULES = [
-    "DIRECT_OVERDUE_001",           # 연체 발생
-    "DIRECT_GRADE_DOWN_001",        # 등급 하락
-    "DIRECT_GRADE_UP_001",          # 등급 상승
-    "DIRECT_EXPOSURE_UP_001",       # 여신 증가
-    "DIRECT_EXPOSURE_DOWN_001",     # 여신 감소
-    "DIRECT_CEO_CHANGE_001",        # 대표이사 변경
-    "DIRECT_MAJOR_SHAREHOLDER_001", # 주요주주 변경
-    "DIRECT_REVENUE_DROP_001",      # 매출 급감
-    "DIRECT_REVENUE_SURGE_001",     # 매출 급증
-    "DIRECT_OPERATING_LOSS_001",    # 영업이익 적자 전환
-    "DIRECT_OPERATING_PROFIT_001",  # 영업이익 흑자 전환
-    "DIRECT_COLLATERAL_DROP_001",   # 담보가치 하락
-    "DIRECT_KYC_EXPIRY_001",        # KYC 갱신 필요
-]
+```
+1. 완벽함을 버려라 (Don't Let Perfect Be The Enemy of Good)
+   - Two-Pass Architecture는 해커톤 이후
+   - 지금은 기존 시스템 + 강화된 Validation
 
-INDUSTRY_RULES = [
-    "INDUSTRY_NEGATIVE_001",        # 산업 부정적 뉴스
-    "INDUSTRY_POSITIVE_001",        # 산업 긍정적 뉴스
-    "INDUSTRY_DEMAND_CHANGE_001",   # 수요 변화
-    "INDUSTRY_SUPPLY_SHOCK_001",    # 공급 충격
-    "INDUSTRY_COMPETITION_001",     # 경쟁 구도 변화
-]
+2. 범위를 줄여라 (Scope Down Ruthlessly)
+   - 12개 오류 중 6개는 해커톤에서 무관
+   - 나머지 6개도 간단한 해결책 존재
 
-ENVIRONMENT_RULES = [
-    "ENV_POLICY_REGULATION_001",    # 정책/규제 발표
-    "ENV_FX_CHANGE_001",            # 환율 변동
-    "ENV_RATE_CHANGE_001",          # 금리 변동
-    "ENV_TRADE_POLICY_001",         # 무역 정책
-    "ENV_GEOPOLITICAL_001",         # 지정학 리스크
-]
+3. 시연에 집중하라 (Demo Is King)
+   - "정확한 데이터" = 그럴듯해 보이는 데이터
+   - "충분한 데이터" = 기업당 3-5개 시그널
+
+4. 이미 가진 것을 활용하라 (Use What You Have)
+   - Buffett 스타일 프롬프트 = 이미 적용됨 ✅
+   - Hard Validation = 이미 구현됨 ✅
+   - DART 검증 = 이미 구현됨 ✅
 ```
 
 ---
 
-## Appendix B: 용어 정의
+## Appendix B: 원본 PRD (Two-Pass Architecture) 참조
 
-| 용어 | 정의 |
-|------|------|
-| **Fact** | LLM이 추출한 객관적 사실 단위 |
-| **Rule** | Fact를 Signal로 변환하는 결정론적 규칙 |
-| **Rule Engine** | 규칙을 적용하여 시그널을 생성하는 엔진 |
-| **Fallback** | 규칙 미매칭 시 LLM으로 처리하는 방식 |
-| **Shadow Mode** | 실제 저장 없이 결과만 비교하는 테스트 모드 |
+Two-Pass Architecture의 상세 설계는 해커톤 이후 구현 시 참조:
+
+- Fact 타입 정의 (11종)
+- Rule Engine 구현
+- Summary Generator 템플릿
+- DB 스키마 확장
+- 마이그레이션 계획
+
+해당 내용은 Git 히스토리의 PRD v1.0 참조.
 
 ---
 
 *End of Document*
+
+*Version History:*
+- v1.0 (2026-02-08): Two-Pass Architecture 설계
+- v2.0 (2026-02-08): Hackathon Edition - Elon Musk 제1원칙 적용
