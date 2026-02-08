@@ -2373,5 +2373,63 @@ backend/app/worker/llm/search_providers.py
 | 단순함이 최고 | 20개 필드 → 6개 필드, LLM 부담 감소 |
 | 코드가 검증 | source_tier, hallucination은 코드에서 처리 |
 
+### 세션 29 (2026-02-08) - DART Context Injection + Gemini 전체 Fact-Check ✅
+**목표**: 더 정확하고 풍부한 LLM 결과를 위한 2가지 개선 구현
+
+**배경**: 해커톤 시연에서 1개 기업만 분석, $10 예산 허용, 단 시간은 빨라야 함
+
+**완료 항목**:
+
+#### 1. DART 데이터 LLM 컨텍스트 주입
+- `DARTContext` 데이터클래스: 공시 데이터 구조화 (CEO, 설립일, 본사, 주주, 임원)
+- `fetch_dart_context()`: DART API에서 검증용 컨텍스트 조회
+- `to_prompt_context()`: LLM 프롬프트에 주입할 텍스트 생성
+- **검증 기준 제공**: "⚠️ 위 정보와 불일치하는 검색 결과는 의심하세요"
+
+#### 2. Gemini Grounding 전체 Fact-Check
+- `_fact_check_all_events()`: 모든 Perplexity 검색 결과 팩트체크
+- 병렬 처리: `max_concurrent=10` (3~5초 내 완료)
+- FALSE 판정 → 제외, VERIFIED/PARTIAL → 유지
+- 메타데이터: `fact_check.verified_count`, `rejected_count`, `partial_count`
+
+#### 3. 병렬/순차 모드 모두 DART 컨텍스트 주입
+- `_execute_parallel()`: dart_prompt를 async 메서드에 전달
+- `_execute_sequential()`: dart_prompt를 sync 메서드에 전달
+- `_search_direct_events_async()`: dart_context 파라미터 추가
+
+**수정된 파일**:
+```
+backend/app/worker/pipelines/external_search.py
+  - DARTContext 데이터클래스 (lines 66-105)
+  - fetch_dart_context() 함수 (lines 108-143)
+  - execute() DART 컨텍스트 + Fact-check 통합
+  - _execute_parallel() dart_prompt 전달
+  - _execute_sequential() dart_prompt 전달
+  - _search_direct_events() dart_context 사용
+  - _search_direct_events_async() dart_context 파라미터 추가
+  - _fact_check_all_events() Gemini 팩트체크 (lines 1949-2089)
+```
+
+**아키텍처 흐름**:
+```
+execute()
+  → Step 1: fetch_dart_context(corp_name)
+    → DART API에서 CEO, 주주, 임원 정보 조회
+  → Step 2: Perplexity 검색 (DART 컨텍스트 주입)
+    → 프롬프트에 "DART 공시 데이터 (100% Fact)" 섹션 추가
+    → LLM이 검색 시 검증 기준으로 활용
+  → Step 3: Gemini 팩트체크 (모든 결과)
+    → _fact_check_all_events()로 FALSE 필터링
+    → VERIFIED/PARTIAL 결과만 반환
+```
+
+**예상 효과**:
+| 항목 | 이전 | 이후 |
+|------|------|------|
+| 검색 정확도 | Perplexity만 의존 | DART 기준 + Gemini 검증 |
+| Hallucination | Soft Guardrails만 | Hard Fact-Check |
+| 추가 지연 | 0초 | +3~5초 (병렬 처리) |
+| 비용 | Perplexity만 | +Gemini (해커톤 $10 허용) |
+
 ---
-*Last Updated: 2026-02-08 (세션 28 - Perplexity P0 Critical Fix)*
+*Last Updated: 2026-02-08 (세션 29 - DART Context Injection + Gemini 전체 Fact-Check)*

@@ -33,6 +33,8 @@ Buffett Enhancement (2026-02-08):
 import asyncio
 import json
 import logging
+import time
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
 
@@ -40,8 +42,105 @@ import httpx
 
 from app.core.config import settings
 from app.worker.llm.key_rotator import get_key_rotator
+from app.worker.llm.fact_checker import get_fact_checker, FactCheckResult
+
+# DART API for Fact-based verification context
+try:
+    from app.services.dart_api import (
+        get_extended_fact_profile,
+        get_company_info_by_name,
+        ExtendedFactProfile,
+    )
+    DART_AVAILABLE = True
+except ImportError:
+    DART_AVAILABLE = False
+    ExtendedFactProfile = None
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# DART Context for LLM Verification
+# =============================================================================
+
+@dataclass
+class DARTContext:
+    """DART 공시 데이터 컨텍스트 (100% Fact)"""
+    corp_code: Optional[str] = None
+    ceo_name: Optional[str] = None
+    established_date: Optional[str] = None
+    headquarters: Optional[str] = None
+    employee_count: Optional[int] = None
+    shareholders: Optional[list] = None
+    executives: Optional[list] = None
+
+    def to_prompt_context(self) -> str:
+        """LLM 프롬프트에 주입할 컨텍스트 생성"""
+        if not any([self.ceo_name, self.headquarters, self.shareholders]):
+            return ""
+
+        lines = ["## DART 공시 데이터 (100% Fact - 검증 기준)"]
+
+        if self.ceo_name:
+            lines.append(f"- 대표이사: {self.ceo_name}")
+        if self.established_date:
+            lines.append(f"- 설립일: {self.established_date}")
+        if self.headquarters:
+            lines.append(f"- 본사: {self.headquarters}")
+        if self.employee_count:
+            lines.append(f"- 임직원: {self.employee_count}명")
+        if self.shareholders:
+            sh_str = ", ".join([f"{s.get('name', '')}({s.get('ratio', '')}%)"
+                               for s in self.shareholders[:5]])
+            lines.append(f"- 주요주주: {sh_str}")
+        if self.executives:
+            exec_str = ", ".join([f"{e.get('name', '')}({e.get('title', '')})"
+                                  for e in self.executives[:3]])
+            lines.append(f"- 임원: {exec_str}")
+
+        lines.append("")
+        lines.append("⚠️ 위 정보와 불일치하는 검색 결과는 의심하세요.")
+        lines.append("")
+
+        return "\n".join(lines)
+
+
+def fetch_dart_context(corp_name: str) -> DARTContext:
+    """DART API에서 검증용 컨텍스트 조회"""
+    if not DART_AVAILABLE:
+        logger.debug("DART API not available")
+        return DARTContext()
+
+    try:
+        # Extended Fact Profile 조회 (임원 포함)
+        profile = get_extended_fact_profile(corp_name)
+
+        if profile:
+            return DARTContext(
+                corp_code=profile.corp_code,
+                ceo_name=profile.ceo_name,
+                established_date=profile.established_date,
+                headquarters=profile.headquarters,
+                shareholders=[{"name": s.name, "ratio": s.ratio}
+                             for s in (profile.shareholders or [])],
+                executives=[{"name": e.name, "title": e.title}
+                           for e in (profile.executives or [])[:5]],
+            )
+
+        # Fallback: 기본 회사 정보만
+        company_info = get_company_info_by_name(corp_name)
+        if company_info:
+            return DARTContext(
+                corp_code=company_info.get("corp_code"),
+                ceo_name=company_info.get("ceo_nm"),
+                established_date=company_info.get("est_dt"),
+                headquarters=company_info.get("adres"),
+            )
+
+    except Exception as e:
+        logger.warning(f"[DART] Failed to fetch context for {corp_name}: {e}")
+
+    return DARTContext()
 
 
 # =============================================================================
@@ -310,9 +409,14 @@ class ExternalSearchPipeline:
         corp_id: str,
         profile_data: Optional[dict] = None,
         corp_reg_no: Optional[str] = None,
+        enable_fact_check: bool = True,
     ) -> dict:
         """
         Execute external search stage with 3-track search.
+
+        개선사항 (2026-02-08):
+        1. DART 데이터 LLM 컨텍스트 주입 - 검증 기준 제공
+        2. Gemini Grounding 전체 팩트체크 - 모든 검색 결과 검증
 
         ADR-009 Enhancement:
         - parallel_mode=True: 3-Track 동시 실행 (40% speedup)
@@ -324,6 +428,7 @@ class ExternalSearchPipeline:
             corp_id: Corporation ID for logging
             profile_data: Optional profile data with selected_queries
             corp_reg_no: Optional corporate registration number
+            enable_fact_check: Enable Gemini fact-checking for all results
 
         Returns:
             dict with categorized events and metadata
@@ -332,7 +437,7 @@ class ExternalSearchPipeline:
         logger.info(
             f"EXTERNAL stage starting for corp_id={corp_id}, "
             f"corp_name={corp_name}, industry={industry_name}, "
-            f"parallel_mode={self.parallel_mode}"
+            f"parallel_mode={self.parallel_mode}, fact_check={enable_fact_check}"
         )
 
         if not self.enabled:
@@ -340,20 +445,34 @@ class ExternalSearchPipeline:
             return self._empty_result("disabled")
 
         try:
+            # Step 1: DART 컨텍스트 조회 (검증 기준)
+            dart_context = fetch_dart_context(corp_name)
+            if dart_context.ceo_name:
+                logger.info(f"[DART] Context loaded: CEO={dart_context.ceo_name}")
+            else:
+                logger.info("[DART] No context available")
+
             selected_queries = []
             if profile_data and profile_data.get("selected_queries"):
                 selected_queries = profile_data["selected_queries"]
 
+            # Step 2: Perplexity 검색 (DART 컨텍스트 주입)
             if self.parallel_mode:
-                return self._execute_parallel(
+                result = self._execute_parallel(
                     corp_name, industry_name, industry_code,
-                    corp_reg_no, selected_queries
+                    corp_reg_no, selected_queries, dart_context
                 )
             else:
-                return self._execute_sequential(
+                result = self._execute_sequential(
                     corp_name, industry_name, industry_code,
-                    corp_reg_no, selected_queries
+                    corp_reg_no, selected_queries, dart_context
                 )
+
+            # Step 3: Gemini 팩트체크 (모든 결과)
+            if enable_fact_check and result.get("events"):
+                result = self._fact_check_all_events(result, corp_name)
+
+            return result
 
         except Exception as e:
             logger.error(f"External search failed: {e}")
@@ -366,6 +485,7 @@ class ExternalSearchPipeline:
         industry_code: str,
         corp_reg_no: Optional[str],
         selected_queries: list[str],
+        dart_context: Optional[DARTContext] = None,
     ) -> dict:
         """
         병렬 모드: 3-Track 동시 실행
@@ -373,15 +493,21 @@ class ExternalSearchPipeline:
         ADR-009 Sprint 1 구현:
         - asyncio.gather()로 3개 API 동시 호출
         - 개별 실패는 빈 리스트로 처리 (Graceful Degradation)
+
+        개선사항 (2026-02-08):
+        - DART 컨텍스트를 프롬프트에 주입하여 검증 기준 제공
         """
-        import time
         start_time = time.time()
+
+        # DART 컨텍스트 프롬프트 생성
+        dart_prompt = dart_context.to_prompt_context() if dart_context else ""
 
         async def run_parallel():
             async with httpx.AsyncClient(timeout=self.TIMEOUT) as client:
                 tasks = [
                     self._search_direct_events_async(
-                        client, corp_name, industry_name, corp_reg_no
+                        client, corp_name, industry_name, corp_reg_no,
+                        dart_context=dart_prompt
                     ),
                     self._search_industry_events_async(
                         client, corp_name, industry_name, industry_code
@@ -475,14 +601,17 @@ class ExternalSearchPipeline:
         industry_code: str,
         corp_reg_no: Optional[str],
         selected_queries: list[str],
+        dart_context: Optional[DARTContext] = None,
     ) -> dict:
         """순차 모드: 기존 방식"""
-        import time
         start_time = time.time()
+
+        # DART 컨텍스트 프롬프트 생성
+        dart_prompt = dart_context.to_prompt_context() if dart_context else ""
 
         # Track 1: DIRECT - Company-specific credit risk signals
         direct_events = self._search_direct_events(
-            corp_name, industry_name, corp_reg_no
+            corp_name, industry_name, corp_reg_no, dart_context=dart_prompt
         )
         logger.info(f"DIRECT search: found {len(direct_events)} events")
 
@@ -548,6 +677,7 @@ class ExternalSearchPipeline:
         corp_reg_no: Optional[str] = None,
         biz_no: Optional[str] = None,
         headquarters: Optional[str] = None,
+        dart_context: str = "",
     ) -> list[dict]:
         """
         Track 1: Search for company-specific credit risk signals.
@@ -557,28 +687,39 @@ class ExternalSearchPipeline:
         - source_sentence 강제 제거 (Perplexity는 요약 AI)
         - 스키마 단순화 (20개 → 6개 핵심 필드)
         - YoY 필수 → 선택적
+
+        개선 (2026-02-08):
+        - DART 컨텍스트 주입: 공시 데이터 기반 검증 기준 제공
         """
         today = datetime.now().strftime("%Y-%m-%d")
+
+        # DART 컨텍스트가 있으면 프롬프트에 추가
+        dart_section = ""
+        if dart_context:
+            dart_section = f"""
+{dart_context}
+"""
 
         prompt = f"""## 검색 대상
 - 기업명: {corp_name}
 - 업종: {industry_name}
 - 검색일: {today}
 - 검색기간: 최근 90일
-
+{dart_section}
 ## 검색 요청
 "{corp_name}" 관련 뉴스에서 아래 항목을 찾아주세요.
 
-### 찾아야 할 정보
+### 찾아야 할 정보 (우선순위)
 1. **부정적 이벤트**: 연체, 부도, 소송, 과징금, 행정처분
 2. **경영 변화**: 대표이사 교체, 대주주 변경, 대규모 인력 변동
-3. **재무 뉴스**: 실적 발표, 신용등급 변경, 대규모 투자/차입
+3. **재무 뉴스**: 실적 발표 (매출/영업이익 금액과 전년비), 신용등급 변경
 4. **사업 변화**: 주요 계약 체결/해지, 사업 철수/확장
 
 ### 주의사항
 ⚠️ 동명이인 주의: "{corp_name}" ({industry_name} 업종)만 해당
 ⚠️ 다른 회사 뉴스 포함 금지
 ⚠️ 추측/전망 기사 제외, 확정된 사실만
+⚠️ 위 DART 공시 정보와 불일치하면 재확인 필요
 
 ### 출력 형식 (간결한 JSON)
 {{
@@ -586,7 +727,7 @@ class ExternalSearchPipeline:
   "facts": [
     {{
       "title": "뉴스 제목 또는 사실 요약 (50자 이내)",
-      "summary": "핵심 내용 2-3문장",
+      "summary": "핵심 내용 2-3문장 (숫자+단위 포함)",
       "source_url": "기사 URL (필수)",
       "date": "YYYY-MM-DD (기사 날짜)",
       "impact": "RISK | OPPORTUNITY | NEUTRAL"
@@ -1589,6 +1730,7 @@ class ExternalSearchPipeline:
         corp_reg_no: Optional[str] = None,
         biz_no: Optional[str] = None,
         headquarters: Optional[str] = None,
+        dart_context: str = "",
     ) -> list[dict]:
         """
         Async version of DIRECT search.
@@ -1597,28 +1739,39 @@ class ExternalSearchPipeline:
         - entity_verified 제거 (Perplexity로 불가능, 코드에서 DART API로 검증)
         - source_sentence 강제 제거 (Perplexity는 요약 AI)
         - 스키마 단순화 (20개 → 6개 핵심 필드)
+
+        개선 (2026-02-08):
+        - DART 컨텍스트 주입: 공시 데이터 기반 검증 기준 제공
         """
         today = datetime.now().strftime("%Y-%m-%d")
+
+        # DART 컨텍스트가 있으면 프롬프트에 추가
+        dart_section = ""
+        if dart_context:
+            dart_section = f"""
+{dart_context}
+"""
 
         prompt = f"""## 검색 대상
 - 기업명: {corp_name}
 - 업종: {industry_name}
 - 검색일: {today}
 - 검색기간: 최근 90일
-
+{dart_section}
 ## 검색 요청
 "{corp_name}" 관련 뉴스에서 아래 항목을 찾아주세요.
 
-### 찾아야 할 정보
+### 찾아야 할 정보 (우선순위)
 1. **부정적 이벤트**: 연체, 부도, 소송, 과징금, 행정처분
 2. **경영 변화**: 대표이사 교체, 대주주 변경, 대규모 인력 변동
-3. **재무 뉴스**: 실적 발표, 신용등급 변경, 대규모 투자/차입
+3. **재무 뉴스**: 실적 발표 (매출/영업이익 금액과 전년비), 신용등급 변경
 4. **사업 변화**: 주요 계약 체결/해지, 사업 철수/확장
 
 ### 주의사항
 ⚠️ 동명이인 주의: "{corp_name}" ({industry_name} 업종)만 해당
 ⚠️ 다른 회사 뉴스 포함 금지
 ⚠️ 추측/전망 기사 제외, 확정된 사실만
+⚠️ 위 DART 공시 정보와 불일치하면 재확인 필요
 
 ### 출력 형식 (간결한 JSON)
 {{
@@ -1626,7 +1779,7 @@ class ExternalSearchPipeline:
   "facts": [
     {{
       "title": "뉴스 제목 또는 사실 요약 (50자 이내)",
-      "summary": "핵심 내용 2-3문장",
+      "summary": "핵심 내용 2-3문장 (숫자+단위 포함)",
       "source_url": "기사 URL (필수)",
       "date": "YYYY-MM-DD (기사 날짜)",
       "impact": "RISK | OPPORTUNITY | NEUTRAL"
@@ -1804,3 +1957,149 @@ class ExternalSearchPipeline:
             event["event_category"] = "ENVIRONMENT"
 
         return events
+
+    # =========================================================================
+    # Gemini Grounding Fact-Check (모든 검색 결과 검증)
+    # =========================================================================
+
+    def _fact_check_all_events(
+        self,
+        result: dict,
+        corp_name: str,
+        max_concurrent: int = 10,
+    ) -> dict:
+        """
+        모든 Perplexity 검색 결과를 Gemini Grounding으로 팩트체크
+
+        해커톤 최적화 (2026-02-08):
+        - max_concurrent=10: 병렬 처리로 3~5초 내 완료
+        - FALSE 판정 → 제외, PARTIALLY_VERIFIED → confidence 표시
+
+        Args:
+            result: Perplexity 검색 결과
+            corp_name: 기업명
+            max_concurrent: 최대 동시 요청 수
+
+        Returns:
+            팩트체크 완료된 결과 (fact_check 필드 추가, FALSE 이벤트 제외)
+        """
+        events = result.get("events", [])
+        if not events:
+            return result
+
+        fact_checker = get_fact_checker()
+        if not fact_checker.is_available():
+            logger.warning("[FACT_CHECK] Gemini not available, skipping")
+            return result
+
+        start_time = time.time()
+        logger.info(f"[FACT_CHECK] Starting for {len(events)} events (max_concurrent={max_concurrent})")
+
+        # 이벤트를 시그널 형태로 변환 (fact_checker 호환)
+        signals = []
+        for event in events:
+            signals.append({
+                "title": event.get("title", ""),
+                "summary": event.get("summary", ""),
+                "signal_type": event.get("event_category", "DIRECT"),
+                "event_type": event.get("event_category", "UNKNOWN"),
+                "impact_direction": event.get("impact_direction", "NEUTRAL"),
+                "impact_strength": "MED",
+            })
+
+        # 비동기 팩트체크 실행
+        try:
+            import concurrent.futures
+
+            def run_fact_check():
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    return loop.run_until_complete(
+                        fact_checker.check_signals_batch(
+                            signals=signals,
+                            corp_name=corp_name,
+                            max_concurrent=max_concurrent,
+                        )
+                    )
+                finally:
+                    loop.close()
+
+            # 별도 스레드에서 실행 (Celery 호환)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(run_fact_check)
+                fact_results = future.result(timeout=60.0)
+
+        except Exception as e:
+            logger.error(f"[FACT_CHECK] Failed: {e}")
+            # 팩트체크 실패 시 원본 반환 (서비스 중단 방지)
+            return result
+
+        # 결과 병합 및 필터링
+        verified_events = []
+        rejected_count = 0
+        partial_count = 0
+
+        for i, (signal, fact_response) in enumerate(fact_results):
+            if i >= len(events):
+                break
+
+            event = events[i]
+            fact_result = fact_response.result
+
+            if fact_result == FactCheckResult.FALSE:
+                # FALSE → 제외
+                logger.warning(
+                    f"[FACT_CHECK][REJECTED] {event.get('title', '')[:40]} - "
+                    f"{fact_response.explanation[:100]}"
+                )
+                rejected_count += 1
+                continue
+
+            # 팩트체크 결과 첨부
+            event["fact_check"] = {
+                "result": fact_result.value,
+                "confidence": fact_response.confidence,
+                "explanation": fact_response.explanation[:200],
+                "sources": fact_response.sources[:3],
+            }
+
+            if fact_result == FactCheckResult.PARTIALLY_VERIFIED:
+                event["_partially_verified"] = True
+                partial_count += 1
+
+            verified_events.append(event)
+
+        elapsed_ms = int((time.time() - start_time) * 1000)
+
+        logger.info(
+            f"[FACT_CHECK] Completed in {elapsed_ms}ms: "
+            f"verified={len(verified_events)}, rejected={rejected_count}, "
+            f"partial={partial_count}"
+        )
+
+        # 카테고리별 재분류
+        direct_events = [e for e in verified_events if e.get("event_category") == "DIRECT"]
+        industry_events = [e for e in verified_events if e.get("event_category") == "INDUSTRY"]
+        environment_events = [e for e in verified_events if e.get("event_category") == "ENVIRONMENT"]
+
+        # 메타데이터 업데이트
+        result["events"] = verified_events
+        result["direct_events"] = direct_events
+        result["industry_events"] = industry_events
+        result["environment_events"] = environment_events
+        result["metadata"]["fact_check"] = {
+            "enabled": True,
+            "verified_count": len(verified_events),
+            "rejected_count": rejected_count,
+            "partial_count": partial_count,
+            "execution_time_ms": elapsed_ms,
+        }
+        result["metadata"]["events_count"] = {
+            "direct": len(direct_events),
+            "industry": len(industry_events),
+            "environment": len(environment_events),
+            "total": len(verified_events),
+        }
+
+        return result
