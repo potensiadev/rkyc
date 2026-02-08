@@ -2222,10 +2222,9 @@ class CorpProfilingPipeline:
         # P0: Gemini Grounding Fact-Check (프로파일 저장 전 검증)
         # P1: Orchestrator에서 이미 팩트체크된 필드는 스킵 (Gemini 호출 통합)
         fact_check_hints = {}
-        if orchestrator_result and hasattr(orchestrator_result, 'profile'):
-            # Gemini Validation 결과에서 fact_check_hints 추출
-            gemini_result = orchestrator_result.profile.get("_gemini_validation", {})
-            fact_check_hints = gemini_result.get("fact_check_hints", {})
+        if orchestrator_result and hasattr(orchestrator_result, 'provenance'):
+            # Gemini Validation 결과에서 fact_check_hints 추출 (provenance에 저장됨)
+            fact_check_hints = orchestrator_result.provenance.get("gemini_fact_check_hints", {})
         profile = await self._fact_check_profile(profile, corp_name, fact_check_hints)
 
         # Save to DB

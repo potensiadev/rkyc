@@ -159,6 +159,11 @@ export function DemoPanel() {
       // 시그널 목록 자동 새로고침
       queryClient.invalidateQueries({ queryKey: ['signals'] });
       queryClient.invalidateQueries({ queryKey: ['signalStats'] });
+      // P0: 프로필 캐시도 무효화 (PROFILING 단계 결과 반영)
+      queryClient.invalidateQueries({ queryKey: ['corporation', selectedCorpId, 'profile'] });
+      queryClient.invalidateQueries({ queryKey: ['corporation', selectedCorpId, 'profile', 'detail'] });
+      // Loan Insight도 갱신
+      queryClient.invalidateQueries({ queryKey: ['loan-insight', selectedCorpId] });
       toast.success('분석 완료! 시그널 목록이 업데이트되었습니다.');
     }
 
