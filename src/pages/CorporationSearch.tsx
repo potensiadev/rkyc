@@ -122,9 +122,9 @@ export default function CorporationSearch() {
           className="text-center pt-8 pb-4"
         >
           <h1 className="text-4xl font-bold text-slate-900 tracking-tight mb-3">기업 인텔리전스</h1>
-          <p className="text-slate-500 text-lg max-w-2xl mx-auto word-keep-all">
-            {corporations.length}개 기업의 상세 프로필, 실시간 리스크 시그널, 그리고 여신 한도 분석에 접근하세요.
-          </p>
+          {/* <p className="text-slate-500 text-lg max-w-2xl mx-auto word-keep-all">
+            기업의 상세 프로필, 실시간 리스크 시그널, 그리고 여신 한도 분석에 접근하세요.
+          </p> */}
         </motion.div>
 
         {/* Search Bar */}
