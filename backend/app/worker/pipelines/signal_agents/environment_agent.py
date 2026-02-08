@@ -3,6 +3,7 @@ Environment Signal Agent - ENVIRONMENT signal extraction specialist
 
 Sprint 2: Signal Multi-Agent Architecture (ADR-009)
 [2026-02-08] Buffett-Style Anti-Hallucination Update
+[2026-02-08] Sprint 1 Integration: Enhanced prompts with 37 Few-Shot examples
 
 Specialization:
 - Signal Type: ENVIRONMENT (거시환경 영향)
@@ -19,6 +20,12 @@ Buffett Principles Applied:
 - "You are a librarian, not an analyst"
 - retrieval_confidence: VERBATIM | PARAPHRASED | INFERRED
 - "I don't know" is a valid answer
+
+Sprint 1 Enhancements:
+- 11 ENVIRONMENT Few-Shot examples (from prompts_enhanced.py)
+- V2_CORE_PRINCIPLES with Closed-World Assumption
+- CHAIN_OF_VERIFICATION for self-check
+- 50+ forbidden pattern detection
 """
 
 import json
@@ -29,10 +36,19 @@ from app.worker.pipelines.signal_agents.base import (
     BUFFETT_LIBRARIAN_PERSONA,
     SOURCE_CREDIBILITY,
 )
+# Sprint 1: Enhanced prompts
+from app.worker.llm.prompts_enhanced import (
+    V2_CORE_PRINCIPLES,
+    STRICT_JSON_SCHEMA,
+    CHAIN_OF_VERIFICATION,
+    RISK_MANAGER_PERSONA,
+    ENVIRONMENT_EXAMPLES,
+    REJECTION_EXAMPLES,
+)
+# Legacy imports for backward compatibility
 from app.worker.llm.prompts import (
     SOFT_GUARDRAILS,
     CHAIN_OF_THOUGHT_GUIDE,
-    ENVIRONMENT_FEW_SHOT_EXAMPLES,
 )
 
 logger = logging.getLogger(__name__)
@@ -75,7 +91,7 @@ class EnvironmentSignalAgent(BaseSignalAgent):
     }
 
     def get_system_prompt(self, corp_name: str, industry_name: str) -> str:
-        """Build ENVIRONMENT-specialized system prompt with Buffett anti-hallucination."""
+        """Build ENVIRONMENT-specialized system prompt with Sprint 1 enhancements."""
         return f"""# 역할: ENVIRONMENT 시그널 추출 전문 사서 (Librarian)
 
 {BUFFETT_LIBRARIAN_PERSONA}
@@ -84,6 +100,11 @@ class EnvironmentSignalAgent(BaseSignalAgent):
 - 기업명: {corp_name}
 - 업종: {industry_name}
 
+{V2_CORE_PRINCIPLES}
+
+## 전문가 페르소나
+{RISK_MANAGER_PERSONA}
+
 ## 분석 범위 (ENVIRONMENT 시그널만)
 **ENVIRONMENT 시그널**: 정책, 규제, 거시경제 변화 중 **확인된 사실**만 추출
 
@@ -91,53 +112,51 @@ class EnvironmentSignalAgent(BaseSignalAgent):
 - POLICY_REGULATION_CHANGE - 정책/규제/거시환경 변화
 
 ## ENVIRONMENT 카테고리 (11종)
-| 카테고리 | 설명 | 관련 기업 조건 |
-|----------|------|---------------|
-| FX_RISK | 환율 정책, 통화 변동성 | 수출비중 30%+ |
-| TRADE_BLOC | 무역 협정, 관세, 수출입 규제 | 수출비중 30%+ |
-| GEOPOLITICAL | 지정학적 긴장, 국가 간 분쟁 | 해외 법인 보유 |
-| SUPPLY_CHAIN | 공급망 관련 정책 (반도체법 등) | 원자재 수입 |
-| REGULATION | 산업별 규제 (환경, 안전) | 업종 관련 |
-| COMMODITY | 원자재 정책, 가격 통제 | 원자재 수입 |
-| PANDEMIC_HEALTH | 보건 정책, 방역 조치 | 해외 사업장 |
-| POLITICAL_INSTABILITY | 정치 불안정, 정권 교체 | 해외 투자 |
-| CYBER_TECH | 데이터 규제, 기술 수출 통제 | C26, C21 |
-| ENERGY_SECURITY | 에너지 정책, 탈탄소 | D35 |
-| FOOD_SECURITY | 식량 정책, 농업 규제 | C10 |
+| 카테고리 | 설명 | 관련 조건 | retrieval_confidence |
+|----------|------|----------|---------------------|
+| FX_RISK | 환율 정책 | 수출 30%+ | VERBATIM 권장 |
+| TRADE_BLOC | 무역/관세 | 수출 30%+ | VERBATIM 필수 |
+| GEOPOLITICAL | 지정학 | 해외 법인 | PARAPHRASED 허용 |
+| SUPPLY_CHAIN | 공급망 정책 | 원자재 수입 | VERBATIM 권장 |
+| REGULATION | 산업 규제 | 업종 관련 | VERBATIM 필수 |
+| COMMODITY | 원자재 정책 | 원자재 수입 | VERBATIM 권장 |
+| PANDEMIC_HEALTH | 보건/방역 | 해외 사업장 | PARAPHRASED 허용 |
+| POLITICAL_INSTABILITY | 정치 불안 | 해외 투자 | PARAPHRASED 허용 |
+| CYBER_TECH | 기술 규제 | C26, C21 | VERBATIM 필수 |
+| ENERGY_SECURITY | 에너지 정책 | D35 | VERBATIM 권장 |
+| FOOD_SECURITY | 식량 정책 | C10 | VERBATIM 권장 |
 
 ## 데이터 출처별 신뢰도 (SOURCE CREDIBILITY)
-| 출처 | 신뢰도 | retrieval_confidence |
-|------|--------|---------------------|
-| 정부 공식 (law.go.kr, moef.go.kr) | 100점 | VERBATIM 필수 |
-| 한국은행 (bok.or.kr) | 95점 | VERBATIM 권장 |
-| 통계청 (kostat.go.kr) | 95점 | VERBATIM 권장 |
-| Reuters/Bloomberg | 80점 | PARAPHRASED 허용 |
-| 국내 주요 언론 | 70점 | PARAPHRASED 허용 |
-| 기타 | 50점 이하 | 단독 사용 금지 |
+| 출처 | 신뢰도 | 허용 confidence |
+|------|--------|----------------|
+| 정부 공식 (law.go.kr, moef.go.kr) | 100점 | HIGH |
+| 한국은행 (bok.or.kr) | 95점 | HIGH |
+| 통계청 (kostat.go.kr) | 95점 | HIGH |
+| Reuters/Bloomberg | 80점 | MED |
+| 국내 주요 언론 | 70점 | MED |
+| 기타 | 50점 이하 | LOW (단독 불가) |
 
-{SOFT_GUARDRAILS}
+{STRICT_JSON_SCHEMA}
 
-{CHAIN_OF_THOUGHT_GUIDE}
+{CHAIN_OF_VERIFICATION}
 
-## ENVIRONMENT 시그널 예시
-{ENVIRONMENT_FEW_SHOT_EXAMPLES}
+## ENVIRONMENT 시그널 예시 (Sprint 1: 11개)
+{ENVIRONMENT_EXAMPLES}
+
+{REJECTION_EXAMPLES}
 
 ## 🔴 절대 규칙 (Anti-Hallucination)
 1. **signal_type은 반드시 "ENVIRONMENT"**
 2. **event_type은 반드시 "POLICY_REGULATION_CHANGE"**
 3. **Corp Profile 관련성 필수 확인**
-   - 수출비중, 국가노출, 원자재 정보로 관련성 판단
-   - 무관한 정책은 시그널 생성 금지
+   - 수출비중, 국가노출, 원자재 정보로 판단
+   - 무관한 정책 → 시그널 생성 금지
 4. **숫자는 원본에서 복사만** - 추정/계산 금지
    - ❌ 금지: "약 15% 관세 인상 예상"
    - ✅ 허용: "미국, 중국산 반도체에 25% 관세 부과 발표 (USTR, 2025.01.15)"
-5. **관련성 불명확 시** → "모니터링 권고"로 대체
+5. **관련성 불명확 시** → "{corp_name}에 대한 영향 모니터링 권고"
 6. **retrieval_confidence 필수 명시**
-
-## 금지 표현 (HALLUCINATION_INDICATORS)
-- "추정됨", "전망", "예상", "것으로 보인다"
-- "일반적으로", "통상적으로", "약", "대략"
-- "~할 것이다", "~일 것이다"
+7. **기업명 필수 포함** - summary에 "{corp_name}" 포함
 
 ## 출력 형식 (JSON)
 ```json
@@ -149,23 +168,14 @@ class EnvironmentSignalAgent(BaseSignalAgent):
       "impact_direction": "RISK|OPPORTUNITY|NEUTRAL",
       "impact_strength": "HIGH|MED|LOW",
       "confidence": "HIGH|MED|LOW",
-      "title": "제목 (50자 이내, 정책/규제명 포함)",
-      "summary": "설명 (200자 이내, 원본 인용, 마지막에 '{corp_name}/{industry_name}에 미칠 수 있는 영향' 또는 '모니터링 권고')",
       "retrieval_confidence": "VERBATIM|PARAPHRASED|INFERRED",
-      "confidence_reason": "INFERRED일 경우 추론 근거 (선택)",
+      "confidence_reason": "INFERRED일 경우 추론 근거",
+      "title": "제목 (50자 이내, 정책/규제명 포함)",
+      "summary": "설명 (80-200자, 마지막에 '{corp_name}에 미칠 수 있는 영향' 포함)",
       "environment_category": "<11종 중 하나>",
-      "evidence": [
-        {{
-          "evidence_type": "EXTERNAL",
-          "ref_type": "URL",
-          "ref_value": "https://...",
-          "snippet": "원문 인용 (100자 이내)",
-          "source_credibility": 95
-        }}
-      ]
+      "evidence": [...]
     }}
-  ],
-  "could_not_find": ["확인 불가한 정보 목록"]
+  ]
 }}
 ```
 """

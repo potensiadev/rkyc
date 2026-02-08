@@ -3,6 +3,7 @@ Direct Signal Agent - DIRECT signal extraction specialist
 
 Sprint 2: Signal Multi-Agent Architecture (ADR-009)
 [2026-02-08] Buffett-Style Anti-Hallucination Update
+[2026-02-08] Sprint 1 Integration: Enhanced prompts with 37 Few-Shot examples
 
 Specialization:
 - Signal Type: DIRECT (기업 직접 영향)
@@ -25,6 +26,12 @@ Buffett Principles Applied:
 - "You are a librarian, not an analyst"
 - retrieval_confidence: VERBATIM | PARAPHRASED | INFERRED
 - "I don't know" is a valid answer
+
+Sprint 1 Enhancements:
+- 16 DIRECT Few-Shot examples (from prompts_enhanced.py)
+- V2_CORE_PRINCIPLES with Closed-World Assumption
+- CHAIN_OF_VERIFICATION for self-check
+- 50+ forbidden pattern detection
 """
 
 import json
@@ -35,10 +42,19 @@ from app.worker.pipelines.signal_agents.base import (
     BUFFETT_LIBRARIAN_PERSONA,
     SOURCE_CREDIBILITY,
 )
+# Sprint 1: Enhanced prompts
+from app.worker.llm.prompts_enhanced import (
+    V2_CORE_PRINCIPLES,
+    STRICT_JSON_SCHEMA,
+    CHAIN_OF_VERIFICATION,
+    RISK_MANAGER_PERSONA,
+    DIRECT_EXAMPLES,
+    REJECTION_EXAMPLES,
+)
+# Legacy imports for backward compatibility
 from app.worker.llm.prompts import (
     SOFT_GUARDRAILS,
     CHAIN_OF_THOUGHT_GUIDE,
-    DIRECT_FEW_SHOT_EXAMPLES,
 )
 
 logger = logging.getLogger(__name__)
@@ -68,7 +84,7 @@ class DirectSignalAgent(BaseSignalAgent):
     }
 
     def get_system_prompt(self, corp_name: str, industry_name: str) -> str:
-        """Build DIRECT-specialized system prompt with Buffett anti-hallucination."""
+        """Build DIRECT-specialized system prompt with Sprint 1 enhancements."""
         return f"""# 역할: DIRECT 시그널 추출 전문 사서 (Librarian)
 
 {BUFFETT_LIBRARIAN_PERSONA}
@@ -77,18 +93,25 @@ class DirectSignalAgent(BaseSignalAgent):
 - 기업명: {corp_name}
 - 업종: {industry_name}
 
+{V2_CORE_PRINCIPLES}
+
+## 전문가 페르소나
+{RISK_MANAGER_PERSONA}
+
 ## 분석 범위 (DIRECT 시그널만)
 **DIRECT 시그널**: 해당 기업에 직접적으로 영향을 미치는 **확인된 사실**만 추출
 
 ## 허용된 event_type (8종)
-1. KYC_REFRESH - KYC 갱신 시점 도래 또는 정보 변경
-2. INTERNAL_RISK_GRADE_CHANGE - 내부 신용등급 변동
-3. OVERDUE_FLAG_ON - 연체 발생 (30일 이상)
-4. LOAN_EXPOSURE_CHANGE - 여신 노출 금액 변화 (±10% 이상)
-5. COLLATERAL_CHANGE - 담보 가치/유형 변화
-6. OWNERSHIP_CHANGE - 대주주/지분구조 변경
-7. GOVERNANCE_CHANGE - 대표이사/이사회 변경
-8. FINANCIAL_STATEMENT_UPDATE - 재무제표 변동 (매출/영업이익 ±20%)
+| event_type | 설명 | 주요 Evidence 소스 |
+|------------|------|-------------------|
+| KYC_REFRESH | KYC 갱신 시점 도래 | 내부 스냅샷 |
+| INTERNAL_RISK_GRADE_CHANGE | 내부 신용등급 변동 | 내부 스냅샷 |
+| OVERDUE_FLAG_ON | 연체 발생 (30일+) | 내부 스냅샷 |
+| LOAN_EXPOSURE_CHANGE | 여신 노출 변화 (±10%+) | 내부 스냅샷 |
+| COLLATERAL_CHANGE | 담보 가치/유형 변화 | 내부 스냅샷 |
+| OWNERSHIP_CHANGE | 대주주/지분구조 변경 | DART 공시 |
+| GOVERNANCE_CHANGE | 대표이사/이사회 변경 | DART 공시 |
+| FINANCIAL_STATEMENT_UPDATE | 재무제표 변동 | DART 공시 |
 
 ## 데이터 출처별 신뢰도 (SOURCE CREDIBILITY)
 | 출처 | 신뢰도 | retrieval_confidence |
@@ -99,12 +122,14 @@ class DirectSignalAgent(BaseSignalAgent):
 | 주요 언론 | 70-80점 | PARAPHRASED 허용 |
 | 기타 | 50점 이하 | 단독 사용 금지 |
 
-{SOFT_GUARDRAILS}
+{STRICT_JSON_SCHEMA}
 
-{CHAIN_OF_THOUGHT_GUIDE}
+{CHAIN_OF_VERIFICATION}
 
-## DIRECT 시그널 예시
-{DIRECT_FEW_SHOT_EXAMPLES}
+## DIRECT 시그널 예시 (Sprint 1: 16개)
+{DIRECT_EXAMPLES}
+
+{REJECTION_EXAMPLES}
 
 ## 🔴 절대 규칙 (Anti-Hallucination)
 1. **signal_type은 반드시 "DIRECT"**
@@ -115,13 +140,7 @@ class DirectSignalAgent(BaseSignalAgent):
 4. **Evidence 없으면 시그널 생성 금지** - 빈 배열 []이 hallucination보다 낫다
 5. **retrieval_confidence 필수 명시**
    - INFERRED 사용 시 confidence_reason 필수
-6. **could_not_find 필드 사용** - 찾지 못한 정보 명시
-
-## 금지 표현 (HALLUCINATION_INDICATORS)
-다음 표현이 포함되면 시그널 거부:
-- "추정됨", "전망", "예상", "것으로 보인다"
-- "일반적으로", "통상적으로", "약", "대략"
-- "~할 것이다", "~일 것이다"
+6. **기업명 필수 포함** - title과 summary에 "{corp_name}" 포함
 
 ## 출력 형식 (JSON)
 ```json
@@ -133,22 +152,13 @@ class DirectSignalAgent(BaseSignalAgent):
       "impact_direction": "RISK|OPPORTUNITY|NEUTRAL",
       "impact_strength": "HIGH|MED|LOW",
       "confidence": "HIGH|MED|LOW",
-      "title": "제목 (50자 이내, 사실만)",
-      "summary": "설명 (200자 이내, 원본 인용)",
       "retrieval_confidence": "VERBATIM|PARAPHRASED|INFERRED",
-      "confidence_reason": "INFERRED일 경우 추론 근거 (선택)",
-      "evidence": [
-        {{
-          "evidence_type": "INTERNAL_FIELD|DOC|EXTERNAL",
-          "ref_type": "SNAPSHOT_KEYPATH|DOC_PAGE|URL",
-          "ref_value": "/경로 또는 URL",
-          "snippet": "원문 인용 (100자 이내)",
-          "source_credibility": 100
-        }}
-      ]
+      "confidence_reason": "INFERRED일 경우 추론 근거",
+      "title": "제목 (50자 이내, 기업명 포함)",
+      "summary": "설명 (80-200자, 정량정보 포함)",
+      "evidence": [...]
     }}
-  ],
-  "could_not_find": ["확인 불가한 정보 목록"]
+  ]
 }}
 ```
 """

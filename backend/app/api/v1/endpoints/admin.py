@@ -20,6 +20,7 @@ from app.worker.llm.circuit_breaker import (
 )
 from app.worker.llm.cache import get_llm_cache, CacheOperation
 from app.worker.llm.fact_checker import get_fact_checker, FactCheckResult
+from app.worker.llm.usage_tracker import get_usage_tracker, reset_usage_tracker
 from app.core.database import get_db
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -1431,6 +1432,106 @@ async def disable_fact_checker():
     fact_checker = get_fact_checker()
     fact_checker.disable()
     return {"success": True, "message": "Fact checker disabled"}
+
+
+# ============================================================================
+# LLM Usage Tracking API (Sprint 1 Task 3)
+# ============================================================================
+
+
+class LLMUsageSummaryResponse(BaseModel):
+    """LLM 사용량 요약 응답"""
+    period_start: str
+    period_end: str
+    total_calls: int
+    total_tokens: int
+    total_cost_usd: float
+    by_provider: dict
+    by_agent: dict
+    by_operation: dict
+
+
+class LLMUsageTotalsResponse(BaseModel):
+    """LLM 전체 사용량 응답"""
+    calls: int
+    tokens: int
+    cost_usd: float
+    by_provider: dict
+    by_agent: dict
+
+
+@router.get(
+    "/llm-usage/summary",
+    response_model=LLMUsageSummaryResponse,
+    summary="LLM 사용량 요약 (기간별)",
+    description="지정된 기간 동안의 LLM 사용량 통계를 조회합니다.",
+)
+async def get_llm_usage_summary(
+    last_n_minutes: int = Query(default=60, ge=1, le=10080, description="조회 기간 (분)")
+):
+    """
+    LLM 사용량 요약 조회 (기간별)
+
+    Args:
+        last_n_minutes: 조회할 기간 (분, 기본 60분, 최대 7일)
+
+    Returns:
+        LLMUsageSummaryResponse: 기간별 사용량 통계
+    """
+    tracker = get_usage_tracker()
+    summary = tracker.get_summary(last_n_minutes=last_n_minutes)
+
+    return LLMUsageSummaryResponse(
+        period_start=summary.period_start,
+        period_end=summary.period_end,
+        total_calls=summary.total_calls,
+        total_tokens=summary.total_tokens,
+        total_cost_usd=round(summary.total_cost_usd, 4),
+        by_provider=summary.by_provider,
+        by_agent=summary.by_agent,
+        by_operation=summary.by_operation,
+    )
+
+
+@router.get(
+    "/llm-usage/totals",
+    response_model=LLMUsageTotalsResponse,
+    summary="LLM 전체 사용량",
+    description="서버 시작 이후 전체 LLM 사용량을 조회합니다.",
+)
+async def get_llm_usage_totals():
+    """
+    LLM 전체 사용량 조회
+
+    Returns:
+        LLMUsageTotalsResponse: 전체 사용량 통계
+    """
+    tracker = get_usage_tracker()
+    totals = tracker.get_totals()
+
+    return LLMUsageTotalsResponse(
+        calls=totals.get("calls", 0),
+        tokens=totals.get("tokens", 0),
+        cost_usd=round(totals.get("cost_usd", 0.0), 4),
+        by_provider=totals.get("by_provider", {}),
+        by_agent=totals.get("by_agent", {}),
+    )
+
+
+@router.post(
+    "/llm-usage/reset",
+    summary="LLM 사용량 통계 리셋",
+    description="LLM 사용량 통계를 초기화합니다 (테스트용).",
+)
+async def reset_llm_usage():
+    """
+    LLM 사용량 통계 리셋 (테스트용)
+
+    Returns:
+        dict: 리셋 결과
+    """
+    reset_usage_tracker()
+    return {"success": True, "message": "LLM usage statistics reset"}
 
 
 @router.post(

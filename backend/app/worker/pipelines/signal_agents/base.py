@@ -2,6 +2,7 @@
 Base Signal Agent - Abstract base class for all signal agents
 
 Sprint 2: Signal Multi-Agent Architecture (ADR-009)
+Sprint 1 Integration: Enhanced prompts and strict validation (2026-02-08)
 
 Features:
 - Shared validation logic
@@ -9,6 +10,7 @@ Features:
 - Agent-specific LLM tracking
 - Forbidden word detection
 - [2026-02-08] Buffett-style anti-hallucination guardrails
+- [2026-02-08] Sprint 1: Enhanced validation with schemas_strict
 """
 
 import hashlib
@@ -21,6 +23,19 @@ from typing import Optional
 from app.worker.llm.service import LLMService
 from app.worker.llm.usage_tracker import log_llm_usage
 from app.worker.llm.exceptions import AllProvidersFailedError
+
+# Sprint 1 Integration: Enhanced prompts and strict schemas
+from app.worker.llm.prompts_enhanced import (
+    check_forbidden_patterns,
+    validate_signal_strict,
+    ForbiddenCategory,
+    ALL_FORBIDDEN_LITERALS,
+)
+from app.worker.llm.schemas_strict import (
+    validate_signal_dict,
+    SignalStrictSchema,
+    RetrievalConfidence,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +125,7 @@ SOURCE_CREDIBILITY = {
 # Shared Validation Constants
 # =============================================================================
 
+# Legacy forbidden words (still used for basic validation)
 FORBIDDEN_WORDS = [
     "반드시",
     "즉시",
@@ -126,8 +142,12 @@ FORBIDDEN_WORDS = [
 
 FORBIDDEN_PATTERNS = [re.compile(re.escape(word)) for word in FORBIDDEN_WORDS]
 
+# Sprint 1 Integration: Use enhanced 50+ forbidden patterns
+# ALL_FORBIDDEN_LITERALS is imported from prompts_enhanced.py (50+ patterns)
+# check_forbidden_patterns() provides categorized detection
+
 MAX_TITLE_LENGTH = 50
-MAX_SUMMARY_LENGTH = 200
+MAX_SUMMARY_LENGTH = 200  # prompts_enhanced uses 300, but keep 200 for stricter validation
 
 
 class BaseSignalAgent(ABC):
@@ -371,10 +391,30 @@ class BaseSignalAgent(ABC):
             )
             return None
 
-        # 5. Forbidden words check
+        # 5. Forbidden words check (Enhanced with Sprint 1 patterns - 50+)
         summary = signal.get("summary", "")
         title = signal.get("title", "")
 
+        # Use enhanced forbidden pattern checking from prompts_enhanced.py
+        title_forbidden = check_forbidden_patterns(title)
+        if title_forbidden:
+            categories = list(set([f["category"] for f in title_forbidden]))
+            logger.warning(
+                f"[{self.AGENT_NAME}] Sprint1: Forbidden patterns in title: "
+                f"categories={categories}, patterns={[f['pattern'] for f in title_forbidden[:3]]}"
+            )
+            return None
+
+        summary_forbidden = check_forbidden_patterns(summary)
+        if summary_forbidden:
+            categories = list(set([f["category"] for f in summary_forbidden]))
+            logger.warning(
+                f"[{self.AGENT_NAME}] Sprint1: Forbidden patterns in summary: "
+                f"categories={categories}, patterns={[f['pattern'] for f in summary_forbidden[:3]]}"
+            )
+            return None
+
+        # Legacy pattern check (backup)
         for pattern in FORBIDDEN_PATTERNS:
             if pattern.search(summary):
                 logger.warning(
@@ -401,6 +441,17 @@ class BaseSignalAgent(ABC):
                 f"[{self.AGENT_NAME}] Summary too long, truncating"
             )
             signal["summary"] = summary[:MAX_SUMMARY_LENGTH]
+
+        # Sprint 1 Integration: Additional strict validation using schemas_strict.py
+        is_valid, errors = validate_signal_strict(signal, context)
+        if not is_valid:
+            logger.warning(
+                f"[{self.AGENT_NAME}] Sprint1 strict validation failed: "
+                f"errors={errors[:3]}"  # Log first 3 errors
+            )
+            # Mark for review instead of rejecting (soft validation)
+            signal["needs_review"] = True
+            signal["review_reason"] = f"Sprint1 validation: {', '.join(errors[:2])}"
 
         # Add metadata
         signal["corp_id"] = context.get("corp_id", "")
