@@ -140,6 +140,62 @@ export const EVENT_CLASSIFICATION_CONFIG: Record<EventClassification, { label: s
   competitive_action: { label: "경쟁사 동향", description: "경쟁사의 주요 전략적 행동 등" },
 };
 
+// ============================================================
+// API 응답값 (대문자) → 한글 변환 설정
+// ============================================================
+
+// signal_type (API: DIRECT, INDUSTRY, ENVIRONMENT)
+export const SIGNAL_TYPE_LABEL: Record<string, string> = {
+  DIRECT: "직접 시그널",
+  INDUSTRY: "산업 시그널",
+  ENVIRONMENT: "환경 시그널",
+};
+
+// event_type (API: 10종)
+export const EVENT_TYPE_LABEL: Record<string, string> = {
+  KYC_REFRESH: "KYC 갱신",
+  INTERNAL_RISK_GRADE_CHANGE: "내부 등급 변경",
+  OVERDUE_FLAG_ON: "연체 발생",
+  LOAN_EXPOSURE_CHANGE: "여신 변동",
+  COLLATERAL_CHANGE: "담보 변동",
+  OWNERSHIP_CHANGE: "소유구조 변경",
+  GOVERNANCE_CHANGE: "지배구조 변경",
+  FINANCIAL_STATEMENT_UPDATE: "재무제표 업데이트",
+  INDUSTRY_SHOCK: "산업 이슈",
+  POLICY_REGULATION_CHANGE: "정책/규제 변화",
+};
+
+// impact_direction (API: RISK, OPPORTUNITY, NEUTRAL)
+export const IMPACT_DIRECTION_LABEL: Record<string, string> = {
+  RISK: "위험",
+  OPPORTUNITY: "기회",
+  NEUTRAL: "중립",
+};
+
+// impact_strength & confidence (API: HIGH, MED, LOW)
+export const STRENGTH_LABEL: Record<string, string> = {
+  HIGH: "높음",
+  MED: "중간",
+  LOW: "낮음",
+};
+
+// 헬퍼 함수들
+export function getSignalTypeLabel(type: string): string {
+  return SIGNAL_TYPE_LABEL[type?.toUpperCase()] || type;
+}
+
+export function getEventTypeLabel(type: string): string {
+  return EVENT_TYPE_LABEL[type?.toUpperCase()] || type?.replace(/_/g, ' ') || type;
+}
+
+export function getImpactDirectionLabel(direction: string): string {
+  return IMPACT_DIRECTION_LABEL[direction?.toUpperCase()] || direction;
+}
+
+export function getStrengthLabel(strength: string): string {
+  return STRENGTH_LABEL[strength?.toUpperCase()] || strength;
+}
+
 export interface Evidence {
   id: string;
   sourceType: EvidenceSourceType;

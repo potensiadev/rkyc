@@ -1,80 +1,46 @@
+#!/usr/bin/env python
 """
-P0 Hallucination Deletion Script
-2026-02-08
-
-탐지된 hallucination 시그널을 삭제(DISMISSED)합니다.
+Delete hallucinated signals from database
 """
 
 import asyncio
+import asyncpg
 import ssl
 
-import asyncpg
-
-
-HALLUCINATED_SIGNAL_IDS = [
-    "3be62814-7d20-4d15-8950-5824923d71b6",  # 엠케이전자 88% 감소
-]
-
-
-async def main():
-    # DB 연결 설정
-    db_url = "postgresql://postgres.jvvhfylycswfedppmkld:aMgngVn1YKhb8iki@aws-1-ap-northeast-1.pooler.supabase.com:6543/postgres"
-
-    # SSL 설정
+async def delete_hallucinated_signals():
+    # Create SSL context
     ssl_context = ssl.create_default_context()
     ssl_context.check_hostname = False
     ssl_context.verify_mode = ssl.CERT_NONE
 
-    # 연결
     conn = await asyncpg.connect(
-        db_url,
+        'postgresql://postgres.jvvhfylycswfedppmkld:aMgngVn1YKhb8iki@aws-1-ap-northeast-1.pooler.supabase.com:6543/postgres',
         ssl=ssl_context,
-        statement_cache_size=0,
+        statement_cache_size=0
     )
 
-    print("=" * 70)
-    print("P0 Hallucination Deletion")
-    print("=" * 70)
+    # Hallucinated signal IDs - 엠케이전자 상장폐지 허위 정보
+    hallucinated_ids = [
+        'daacd2dc-ccdd-4b24-871d-de4e257714a6',  # GOVERNANCE_CHANGE - 상장폐지
+        '8dbdc882-ee52-42de-bd1a-d3d29142af85',  # FINANCIAL_STATEMENT_UPDATE - 상장폐지
+    ]
 
-    for signal_id in HALLUCINATED_SIGNAL_IDS:
-        print(f"\nDeleting signal: {signal_id}")
+    for signal_id in hallucinated_ids:
+        # Delete evidence first (FK constraint)
+        ev_result = await conn.execute('DELETE FROM rkyc_evidence WHERE signal_id = $1', signal_id)
+        print(f'Deleted evidence for {signal_id}: {ev_result}')
 
-        # rkyc_signal 테이블에서 삭제
-        try:
-            result = await conn.execute("""
-                DELETE FROM rkyc_signal
-                WHERE signal_id = $1
-            """, signal_id)
-            print(f"  rkyc_signal: {result}")
-        except Exception as e:
-            print(f"  rkyc_signal error: {e}")
+        # Delete from signal_index
+        idx_result = await conn.execute('DELETE FROM rkyc_signal_index WHERE signal_id = $1', signal_id)
+        print(f'Deleted signal_index for {signal_id}: {idx_result}')
 
-        # rkyc_signal_index는 CASCADE로 자동 삭제되어야 하지만 확인
-        try:
-            result = await conn.execute("""
-                DELETE FROM rkyc_signal_index
-                WHERE signal_id = $1
-            """, signal_id)
-            print(f"  rkyc_signal_index: {result}")
-        except Exception as e:
-            print(f"  rkyc_signal_index error: {e}")
-
-    # 남은 시그널 확인
-    remaining = await conn.fetch("""
-        SELECT signal_id, title, corp_name
-        FROM rkyc_signal_index
-    """)
-
-    print("\n" + "=" * 70)
-    print(f"Remaining signals: {len(remaining)}")
-    print("=" * 70)
-
-    for sig in remaining:
-        print(f"  - {sig['corp_name']}: {sig['title']}")
+        # Delete signal
+        sig_result = await conn.execute('DELETE FROM rkyc_signal WHERE signal_id = $1', signal_id)
+        print(f'Deleted signal {signal_id}: {sig_result}')
+        print('---')
 
     await conn.close()
-    print("\nDone!")
+    print('Done - hallucinated signals removed')
 
-
-if __name__ == "__main__":
-    asyncio.run(main())
+if __name__ == '__main__':
+    asyncio.run(delete_hallucinated_signals())

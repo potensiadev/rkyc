@@ -62,6 +62,11 @@ import {
   ContextualHighlight,
 } from "@/components/premium";
 import { motion } from "framer-motion";
+import {
+  getSignalTypeLabel,
+  getImpactDirectionLabel,
+  getStrengthLabel,
+} from "@/types/signal";
 
 // Signal Status Config
 const STATUS_CONFIG: Record<string, { label: string; variant: "brand" | "neutral" | "danger" | "warning" | "success" }> = {
@@ -221,7 +226,7 @@ export default function SignalDetailPage() {
                 {signal.corp_name}
               </Link>
               <span>·</span>
-              <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-500 font-medium text-xs">{signal.signal_type}</span>
+              <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-500 font-medium text-xs">{getSignalTypeLabel(signal.signal_type)}</span>
             </div>
           </div>
 
@@ -268,7 +273,7 @@ export default function SignalDetailPage() {
                     </h2>
                     {signal.impact_direction && (
                       <Tag className={signal.impact_direction === 'RISK' ? 'bg-rose-50 text-rose-600 border-rose-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'}>
-                        {signal.impact_direction} {impactStrength && `· ${impactStrength}`}
+                        {getImpactDirectionLabel(signal.impact_direction)} {impactStrength && `· ${getStrengthLabel(impactStrength)}`}
                       </Tag>
                     )}
                   </div>
@@ -566,27 +571,27 @@ function CorpContextCard({ context }: { context: ApiCorpContext }) {
 
       <div className="pt-4 border-t border-slate-100 space-y-3">
         <div className="flex items-center justify-between">
-          <span className="text-xs text-slate-500 font-medium">Internal Grade</span>
+          <span className="text-xs text-slate-500 font-medium">내부 등급</span>
           <StatusBadge variant={context.internal_risk_grade === "HIGH" ? "danger" : context.internal_risk_grade === "MED" ? "warning" : "success"} className="h-5 text-[10px] px-2">
-            {context.internal_risk_grade || "-"}
+            {getStrengthLabel(context.internal_risk_grade) || "-"}
           </StatusBadge>
         </div>
         <div className="flex items-center justify-between">
-          <span className="text-xs text-slate-500 font-medium">Supply Chain</span>
+          <span className="text-xs text-slate-500 font-medium">공급망 리스크</span>
           <StatusBadge variant={context.supply_chain_risk === "HIGH" ? "danger" : context.supply_chain_risk === "MED" ? "warning" : "neutral"} className="h-5 text-[10px] px-2">
-            {context.supply_chain_risk || "-"}
+            {getStrengthLabel(context.supply_chain_risk) || "-"}
           </StatusBadge>
         </div>
         {context.overdue_flag && (
           <div className="flex items-center gap-2 p-2 bg-rose-50 rounded text-xs text-rose-600 font-bold border border-rose-100">
-            <AlertCircle className="w-3.5 h-3.5" /> Overdue History
+            <AlertCircle className="w-3.5 h-3.5" /> 연체 이력
           </div>
         )}
       </div>
 
       {context.country_exposure && context.country_exposure.length > 0 && (
         <div className="pt-2">
-          <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-2 font-semibold">Country Exposure</p>
+          <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-2 font-semibold">국가별 노출</p>
           <div className="flex flex-wrap gap-1.5">
             {context.country_exposure.slice(0, 5).map((country) => (
               <Tag key={country} className="text-[10px] py-0.5 border-slate-200">
@@ -628,7 +633,7 @@ function RelatedSignalItem({ signal }: { signal: ApiRelatedSignal }) {
           {signal.title}
         </span>
         <Tag className={signal.impact_direction === "RISK" ? "bg-rose-50 text-rose-600 border-rose-100 text-[9px] h-5 py-0 px-1.5" : "bg-emerald-50 text-emerald-600 border-emerald-100 text-[9px] h-5 py-0 px-1.5"}>
-          {signal.impact_direction === "RISK" ? "RISK" : "OPP"}
+          {signal.impact_direction === "RISK" ? "위험" : "기회"}
         </Tag>
       </div>
       <div className="flex items-center gap-2 mt-2">
@@ -651,11 +656,11 @@ function SimpleRelatedSignalItem({ signal }: { signal: any }) {
           {signal.title}
         </span>
         <Tag className={signal.impact === "risk" ? "bg-rose-50 text-rose-600 border-rose-100 text-[9px] h-5 py-0 px-1.5" : "bg-emerald-50 text-emerald-600 border-emerald-100 text-[9px] h-5 py-0 px-1.5"}>
-          {signal.impact === "risk" ? "RISK" : "OPP"}
+          {signal.impact === "risk" ? "위험" : "기회"}
         </Tag>
       </div>
       <div className="flex items-center gap-2 mt-2">
-        <span className="text-[9px] font-bold text-slate-500 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">Related</span>
+        <span className="text-[9px] font-bold text-slate-500 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">관련</span>
         <span className="text-[10px] text-slate-300">|</span>
         <span className="text-[10px] text-slate-500 font-medium">{signal.corporationName}</span>
       </div>

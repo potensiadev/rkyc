@@ -34,7 +34,7 @@ import type {
   ApiCorpProfileResponse,
   ApiCorpProfileDetailResponse,
 } from '@/types/profile';
-import { Signal, SignalCategory, SignalStatus, SignalImpact, SignalStrength } from '@/types/signal';
+import { Signal, SignalCategory, SignalStatus, SignalImpact, SignalStrength, getEventTypeLabel } from '@/types/signal';
 import { Corporation, getIndustryName } from '@/data/corporations';
 
 // API 응답 → Frontend 타입 변환 함수
@@ -107,7 +107,7 @@ function mapApiSignalToFrontend(api: ApiSignal): Signal {
     summary: api.summary_short,
     source: 'rKYC System',
     detectedAt: api.detected_at,
-    detailCategory: api.event_type.replace(/_/g, ' '),
+    detailCategory: getEventTypeLabel(api.event_type),
     impact,
     impactStrength,
     evidenceCount: api.evidence_count,

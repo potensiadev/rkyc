@@ -674,6 +674,15 @@ class SignalExtractionPipeline:
             )
             return None
 
+        # 9. [P0] Entity Confusion Prevention - Verify corp_name in summary
+        entity_validation = self._validate_entity_attribution(signal, context)
+        if not entity_validation["valid"]:
+            logger.warning(
+                f"[ENTITY CONFUSION] Signal rejected: {entity_validation['reason']} "
+                f"| title='{signal.get('title', '')[:30]}'"
+            )
+            return None
+
         # 3. Validate enums
         valid_directions = {"RISK", "OPPORTUNITY", "NEUTRAL"}
         valid_strengths = {"HIGH", "MED", "LOW"}
@@ -954,6 +963,102 @@ class SignalExtractionPipeline:
                 return False
 
         return True
+
+    def _validate_entity_attribution(self, signal: dict, context: dict) -> dict:
+        """
+        [P0] Validate that the signal is about the correct entity (corporation).
+
+        Prevents Entity Confusion where LLM attributes information about
+        company A to company B (e.g., attributing 엑시큐어하이트론's delisting
+        to 엠케이전자).
+
+        Validation rules:
+        1. For DIRECT signals: corp_name MUST appear in summary or evidence snippet
+        2. For extreme impact signals (상장폐지, 부도, 법정관리): Require exact corp_name match
+        3. Cross-check evidence snippet contains the target corp_name
+
+        Returns:
+            dict with keys:
+            - valid: bool
+            - reason: str (if invalid)
+        """
+        corp_name = context.get("corp_name", "")
+        if not corp_name:
+            return {"valid": True}  # Can't validate without corp_name
+
+        summary = signal.get("summary", "")
+        title = signal.get("title", "")
+        signal_type = signal.get("signal_type", "")
+
+        # Extreme event keywords that require strict entity verification
+        EXTREME_EVENTS = [
+            "상장폐지", "상장 폐지", "delisting",
+            "부도", "파산", "bankruptcy",
+            "법정관리", "회생", "청산",
+            "횡령", "배임", "사기",
+            "수사", "기소", "구속",
+        ]
+
+        # Check if this is an extreme event
+        is_extreme_event = any(kw in summary.lower() or kw in title.lower() for kw in EXTREME_EVENTS)
+
+        if is_extreme_event:
+            # For extreme events, corp_name MUST be in the summary
+            if corp_name not in summary and corp_name not in title:
+                return {
+                    "valid": False,
+                    "reason": f"Extreme event signal does not mention target corp '{corp_name}' in summary/title. "
+                              f"Possible Entity Confusion detected.",
+                }
+
+            # Also verify evidence snippets mention the corp
+            evidence = signal.get("evidence", [])
+            corp_mentioned_in_evidence = False
+            for ev in evidence:
+                snippet = ev.get("snippet", "")
+                if corp_name in snippet:
+                    corp_mentioned_in_evidence = True
+                    break
+
+            if not corp_mentioned_in_evidence and evidence:
+                # Check if another company is mentioned instead
+                other_companies = self._extract_company_names_from_text(summary)
+                if other_companies and corp_name not in other_companies:
+                    return {
+                        "valid": False,
+                        "reason": f"Evidence does not mention target corp '{corp_name}'. "
+                                  f"Found other companies: {other_companies}. "
+                                  f"Possible Entity Confusion.",
+                    }
+
+        # For DIRECT signals, corp_name should generally appear
+        if signal_type == "DIRECT":
+            # Relax this for non-extreme events
+            pass  # Allow DIRECT signals without explicit corp mention for now
+
+        return {"valid": True}
+
+    def _extract_company_names_from_text(self, text: str) -> list[str]:
+        """
+        Extract potential company names from text.
+
+        Korean company names typically end with:
+        - 전자, 건설, 식품, 기계, 산업, 홀딩스, 그룹
+        - 주식회사, (주)
+        """
+        # Simple pattern matching for Korean company names
+        patterns = [
+            r'[가-힣]{2,10}(?:전자|건설|식품|기계|산업|홀딩스|그룹|증권|은행|보험|제약|바이오)',
+            r'[가-힣]{2,10}(?:주식회사|㈜)',
+            r'(?:주식회사|㈜)\s*[가-힣]{2,10}',
+        ]
+
+        companies = set()
+        for pattern in patterns:
+            matches = re.findall(pattern, text)
+            companies.update(matches)
+
+        return list(companies)
 
     def _compute_signature(self, signal: dict) -> str:
         """

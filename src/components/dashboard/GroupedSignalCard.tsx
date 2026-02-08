@@ -118,7 +118,7 @@ export function GroupedSignalCard({
                   <StatusBadge variant={stanceVariant as any} className="h-5 px-1.5 text-[10px]">{stanceLabel}</StatusBadge>
                 )}
                 {hasHighRisk && (
-                  <StatusBadge variant="danger" className="animate-pulse h-5 px-1.5 text-[10px]">HIGH RISK</StatusBadge>
+                  <StatusBadge variant="danger" className="animate-pulse h-5 px-1.5 text-[10px]">고위험</StatusBadge>
                 )}
               </div>
               <p className="text-[10px] text-slate-400 font-mono mt-0.5">{corporationId}</p>

@@ -300,13 +300,13 @@ export function EvidenceMap({
           {hasProvenanceData && (
             <div className="flex items-center gap-4 text-[10px] text-muted-foreground pt-2 border-t border-border">
               <span className="flex items-center gap-1">
-                <CheckCircle className="w-3 h-3 text-green-600" /> HIGH: 공시/IR 자료
+                <CheckCircle className="w-3 h-3 text-green-600" /> 높음: 공시/IR 자료
               </span>
               <span className="flex items-center gap-1">
-                <Info className="w-3 h-3 text-yellow-600" /> MED: 뉴스/기사
+                <Info className="w-3 h-3 text-yellow-600" /> 중간: 뉴스/기사
               </span>
               <span className="flex items-center gap-1">
-                <AlertTriangle className="w-3 h-3 text-orange-600" /> LOW: AI 추정
+                <AlertTriangle className="w-3 h-3 text-orange-600" /> 낮음: AI 추정
               </span>
             </div>
           )}

@@ -327,6 +327,16 @@ class BaseSignalAgent(ABC):
             )
             return None
 
+        # 9. [P0] Entity Confusion Prevention - Verify corp_name in summary
+        entity_validation = self._validate_entity_attribution(signal, context)
+        if not entity_validation["valid"]:
+            logger.warning(
+                f"[{self.AGENT_NAME}][ENTITY CONFUSION] Signal rejected: "
+                f"{entity_validation['reason']} | "
+                f"title='{signal.get('title', '')[:30]}'"
+            )
+            return None
+
         # 3. Enum validation
         valid_directions = {"RISK", "OPPORTUNITY", "NEUTRAL"}
         valid_strengths = {"HIGH", "MED", "LOW"}
@@ -586,6 +596,82 @@ class BaseSignalAgent(ABC):
                 return False
 
         return True
+
+    def _validate_entity_attribution(self, signal: dict, context: dict) -> dict:
+        """
+        [P0] Validate that the signal is about the correct entity (corporation).
+
+        Prevents Entity Confusion where LLM attributes information about
+        company A to company B (e.g., attributing 엑시큐어하이트론's delisting
+        to 엠케이전자).
+
+        Returns:
+            dict with keys:
+            - valid: bool
+            - reason: str (if invalid)
+        """
+        corp_name = context.get("corp_name", "")
+        if not corp_name:
+            return {"valid": True}
+
+        summary = signal.get("summary", "")
+        title = signal.get("title", "")
+
+        # Extreme event keywords requiring strict entity verification
+        EXTREME_EVENTS = [
+            "상장폐지", "상장 폐지", "delisting",
+            "부도", "파산", "bankruptcy",
+            "법정관리", "회생", "청산",
+            "횡령", "배임", "사기",
+            "수사", "기소", "구속",
+        ]
+
+        is_extreme_event = any(
+            kw in summary.lower() or kw in title.lower()
+            for kw in EXTREME_EVENTS
+        )
+
+        if is_extreme_event:
+            # For extreme events, corp_name MUST be in summary
+            if corp_name not in summary and corp_name not in title:
+                return {
+                    "valid": False,
+                    "reason": f"Extreme event does not mention target corp "
+                              f"'{corp_name}'. Possible Entity Confusion.",
+                }
+
+            # Verify evidence snippets mention the corp
+            evidence = signal.get("evidence", [])
+            corp_in_evidence = any(
+                corp_name in ev.get("snippet", "")
+                for ev in evidence
+            )
+
+            if not corp_in_evidence and evidence:
+                # Extract other company names to detect confusion
+                other_companies = self._extract_company_names(summary)
+                if other_companies and corp_name not in other_companies:
+                    return {
+                        "valid": False,
+                        "reason": f"Evidence does not mention '{corp_name}'. "
+                                  f"Found: {other_companies}. Entity Confusion.",
+                    }
+
+        return {"valid": True}
+
+    def _extract_company_names(self, text: str) -> list[str]:
+        """Extract potential company names from text."""
+        patterns = [
+            r'[가-힣]{2,10}(?:전자|건설|식품|기계|산업|홀딩스|그룹|증권|은행|보험|제약|바이오)',
+            r'[가-힣]{2,10}(?:주식회사|㈜)',
+        ]
+
+        companies = set()
+        for pattern in patterns:
+            matches = re.findall(pattern, text)
+            companies.update(matches)
+
+        return list(companies)
 
     def _compute_signature(self, signal: dict) -> str:
         """
