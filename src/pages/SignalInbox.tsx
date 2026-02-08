@@ -98,6 +98,9 @@ export default function SignalInbox() {
     return signals.filter(s => s.status === statusFilter);
   }, [signals, statusFilter]);
 
+  // 최근 분석한 기업 ID (해커톤 시연용 우선 표시)
+  const lastAnalyzedCorpId = sessionStorage.getItem('lastAnalyzedCorpId');
+
   // 기업별로 시그널 그룹핑
   const groupedSignals = useMemo(() => {
     const groups = new Map<string, typeof filteredSignals>();
@@ -121,10 +124,18 @@ export default function SignalInbox() {
           if (s.impact === 'risk' && s.impactStrength === 'high') w = 20;
           if (s.impact === 'opportunity') w = 5;
           return Math.max(max, w);
-        }, 0)
+        }, 0),
+        // 최근 분석한 기업은 맨 위에 표시 (해커톤 시연용)
+        isLastAnalyzed: corpId === lastAnalyzedCorpId
       }))
-      .sort((a, b) => b.sortWeight - a.sortWeight || b.signals.length - a.signals.length); // Sort by risk then count
-  }, [filteredSignals]);
+      .sort((a, b) => {
+        // 최근 분석한 기업 우선
+        if (a.isLastAnalyzed && !b.isLastAnalyzed) return -1;
+        if (!a.isLastAnalyzed && b.isLastAnalyzed) return 1;
+        // 그 다음 risk, 시그널 수로 정렬
+        return b.sortWeight - a.sortWeight || b.signals.length - a.signals.length;
+      });
+  }, [filteredSignals, lastAnalyzedCorpId]);
 
   const counts = useMemo(() => ({
     todayNew: stats?.new || signals.filter(s => s.status === "new").length,
@@ -316,7 +327,16 @@ export default function SignalInbox() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 + (index * 0.05) }}
+              className={group.isLastAnalyzed ? "ring-2 ring-amber-400 ring-offset-2 rounded-xl" : ""}
             >
+              {group.isLastAnalyzed && (
+                <div className="flex items-center gap-2 mb-2 px-1">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700 border border-amber-200">
+                    <Lightbulb className="w-3 h-3" />
+                    방금 분석 완료
+                  </span>
+                </div>
+              )}
               <GroupedSignalCard
                 corporationId={group.corporationId}
                 corporationName={group.corporationName}

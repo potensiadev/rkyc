@@ -374,11 +374,12 @@ null 필드만 포함하세요. 기존 값이 있는 필드는 수정하지 마�
             return {}
 
     def _build_validation_prompt(self) -> str:
-        """검증 시스템 프롬프트 생성"""
+        """검증 시스템 프롬프트 생성 (P1: 팩트체크 통합)"""
         return """당신은 금융기관 기업심사 전문가입니다.
 
 ## 역할
 Perplexity 검색 결과를 검증하고 보완합니다.
+**추가: 핵심 필드에 대한 사실 확인(Fact-Check)도 함께 수행합니다.**
 
 ## 검증 규칙
 1. 논리적 일관성 검사 (수출비중 + 국내비중 = 100%)
@@ -390,6 +391,12 @@ Perplexity 검색 결과를 검증하고 보완합니다.
 1. 누락된 필드는 공개 정보 기반으로 추론 가능한 경우에만 보완
 2. 보완된 값은 반드시 `source: "GEMINI_INFERRED"` 표시
 3. 불확실한 경우 null 유지
+
+## 팩트체크 규칙 (P1 통합)
+핵심 필드(매출, 수출비중, 임직원수, 주주)에 대해:
+1. 값이 상식적으로 타당한지 검증
+2. 극단적인 수치(50% 이상 변동)는 의심 플래그
+3. 팩트체크 결과: VERIFIED (확인됨) / UNVERIFIED (미확인) / SUSPICIOUS (의심)
 
 ## 불일치(discrepancy) 처리
 - 범위 초과 값
@@ -415,6 +422,12 @@ Perplexity 검색 결과를 검증하고 보완합니다.
       "suggested_action": "수정 권고"
     }
   ],
+  "fact_check_hints": {
+    "field_name": {
+      "status": "VERIFIED" | "UNVERIFIED" | "SUSPICIOUS",
+      "reason": "판단 근거 (1문장)"
+    }
+  },
   "validation_notes": "전반적인 검증 소견"
 }"""
 

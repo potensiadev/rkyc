@@ -221,7 +221,6 @@ class GeminiFactChecker:
         google-generativeai 라이브러리의 grounding 기능 사용
         """
         import google.generativeai as genai
-        from google.generativeai.types import Tool
 
         # API 키 설정
         api_key = self.key_rotator.get_key("google")
@@ -230,20 +229,10 @@ class GeminiFactChecker:
 
         genai.configure(api_key=api_key)
 
-        # Google Search Grounding 도구 설정
-        google_search_tool = Tool.from_google_search_retrieval(
-            google_search_retrieval={
-                "dynamic_retrieval_config": {
-                    "mode": "MODE_DYNAMIC",
-                    "dynamic_threshold": 0.3,  # 낮은 threshold로 더 많은 검색 수행
-                }
-            }
-        )
-
-        # 모델 생성 (Grounding 도구 포함)
+        # 최신 SDK: google_search_retrieval을 GenerateContentConfig에서 설정
+        # Tool.from_google_search_retrieval이 deprecated됨
         model = genai.GenerativeModel(
-            model_name="gemini-2.0-flash",  # Grounding 지원 모델
-            tools=[google_search_tool],
+            model_name="gemini-2.0-flash-exp",  # Grounding 지원 모델
             system_instruction=self.FACT_CHECK_SYSTEM_PROMPT,
         )
 

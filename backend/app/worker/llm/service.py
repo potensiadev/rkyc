@@ -75,12 +75,12 @@ class LLMService:
             "max_tokens": 8192,
         },
         {
-            "model": "claude-3-5-sonnet-20241022",  # Claude Sonnet Fallback
+            "model": "claude-sonnet-4-20250514",  # Claude Sonnet 4 Fallback
             "provider": "anthropic",
             "max_tokens": 8192,
         },
         {
-            "model": "gemini/gemini-3-pro-preview",  # Gemini 3 Pro Preview
+            "model": "gemini/gemini-2.0-flash",  # Gemini 2.0 Flash
             "provider": "google",
             "max_tokens": 8192,
         },

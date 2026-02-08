@@ -401,6 +401,15 @@ class MultiAgentOrchestrator:
             gemini_ok = gemini_validation and gemini_validation.get("enriched_fields")
             layer1_both_failed = not perplexity_ok and not gemini_ok
 
+        # P1: Gemini Validation 결과를 provenance에 저장 (Fact-Check 통합용)
+        if gemini_validation:
+            fact_check_hints = gemini_validation.get("fact_check_hints", {})
+            if fact_check_hints:
+                provenance["gemini_fact_check_hints"] = fact_check_hints
+                logger.info(
+                    f"[Orchestrator] P1 Fact-check hints from Layer 1.5: {len(fact_check_hints)} fields"
+                )
+
         # [핵심 수정] Layer 1 둘 다 실패 시 → Layer 4 직행 (Layer 2, 3 스킵)
         if layer1_both_failed:
             logger.warning(

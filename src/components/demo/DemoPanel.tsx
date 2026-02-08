@@ -4,7 +4,7 @@
  * 8단계 파이프라인 시각화 포함
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useAnalyzeJob, useJobStatus, useCorporations } from '@/hooks/useApi';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
@@ -39,10 +39,10 @@ import { cn } from '@/lib/utils';
 const PIPELINE_STEPS = [
   { id: 'SNAPSHOT', label: '데이터 수집', icon: Database, description: '내부 스냅샷 로드' },
   { id: 'DOC_INGEST', label: '문서 분석', icon: FileText, description: 'KYC 문서 파싱' },
-  { id: 'PROFILING', label: '기업 프로파일링', icon: Building2, description: 'Perplexity + Gemini' },
+  { id: 'PROFILING', label: '기업 프로파일링', icon: Building2, description: '외부 정보 수집' },
   { id: 'EXTERNAL', label: '외부 검색', icon: Globe, description: '뉴스/공시 수집' },
   { id: 'CONTEXT', label: '컨텍스트 구성', icon: Layers, description: '통합 컨텍스트 생성' },
-  { id: 'SIGNAL', label: '시그널 추출', icon: Zap, description: '3-Agent 병렬 분석' },
+  { id: 'SIGNAL', label: '시그널 추출', icon: Zap, description: 'rKYC Agent 병렬 분석' },
   { id: 'VALIDATION', label: '검증', icon: Shield, description: 'Cross-Validation' },
   { id: 'INSIGHT', label: '인사이트 생성', icon: Brain, description: 'AI 분석 리포트' },
 ];
@@ -141,6 +141,29 @@ export function DemoPanel() {
   });
 
   const isDemoMode = import.meta.env.VITE_DEMO_MODE?.toLowerCase() === 'true';
+
+  // 이전 상태 추적 (중복 새로고침 방지)
+  const prevStatusRef = useRef<string | null>(null);
+
+  // 분석 완료 시 자동 새로고침
+  useEffect(() => {
+    const currentStatus = jobStatus?.status;
+    const prevStatus = prevStatusRef.current;
+
+    // DONE으로 변경된 경우에만 자동 새로고침
+    if (currentStatus === 'DONE' && prevStatus !== 'DONE' && prevStatus !== null) {
+      // 분석 완료된 기업 ID를 sessionStorage에 저장 (시그널 목록에서 우선 표시용)
+      if (selectedCorpId) {
+        sessionStorage.setItem('lastAnalyzedCorpId', selectedCorpId);
+      }
+      // 시그널 목록 자동 새로고침
+      queryClient.invalidateQueries({ queryKey: ['signals'] });
+      queryClient.invalidateQueries({ queryKey: ['signalStats'] });
+      toast.success('분석 완료! 시그널 목록이 업데이트되었습니다.');
+    }
+
+    prevStatusRef.current = currentStatus || null;
+  }, [jobStatus?.status, queryClient]);
 
   // 각 단계의 상태 계산
   const stepStatuses = useMemo(() => {
@@ -311,7 +334,7 @@ export function DemoPanel() {
               <div className="flex items-center gap-2 text-green-700 bg-green-50 px-3 py-2 rounded-lg">
                 <CheckCircle className="w-4 h-4" />
                 <span className="text-sm font-medium">
-                  분석 완료! "새로고침" 버튼을 눌러 시그널을 확인하세요.
+                  분석 완료! 시그널 목록이 자동으로 업데이트되었습니다.
                 </span>
               </div>
             )}
