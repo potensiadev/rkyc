@@ -1,11 +1,11 @@
 -- ============================================
--- rKYC Demo Data Reset Script (v2)
+-- rKYC Demo Data Reset Script (v3)
 -- Purpose: 해커톤 시연을 위한 데이터 초기화
 -- Date: 2026-02-08
--- Updated: 모든 마이그레이션 테이블 포함
+-- Updated: 모든 마이그레이션 테이블 포함 + 원천데이터 보존
 -- ============================================
 --
--- 보존 대상 (기업 마스터 데이터):
+-- 보존 대상 (원천 데이터 - 절대 삭제 금지):
 --   - corp (6개 기업 + DART 필드)
 --   - rkyc_internal_snapshot (내부 스냅샷)
 --   - rkyc_internal_snapshot_latest (최신 포인터)

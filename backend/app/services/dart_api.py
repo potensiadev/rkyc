@@ -1068,6 +1068,47 @@ async def get_major_events_by_name(corp_name: str) -> list[MajorEvent]:
 
 
 # ============================================================================
+# P4: Executive Dataclass (임원현황) - ExtendedFactProfile에서 사용하므로 먼저 정의
+# ============================================================================
+
+@dataclass
+class Executive:
+    """임원 정보 (100% Fact - DART 공시)"""
+    nm: str  # 성명
+    sexdstn: Optional[str] = None  # 성별 (남, 여)
+    birth_ym: Optional[str] = None  # 출생년월 (YYYY년 MM월)
+    ofcps: Optional[str] = None  # 직위
+    rgist_exctv_at: Optional[str] = None  # 등기임원여부 (등기임원, 미등기임원)
+    fte_at: Optional[str] = None  # 상근여부 (상근, 비상근)
+    chrg_job: Optional[str] = None  # 담당업무
+    main_career: Optional[str] = None  # 주요약력
+    mxmm_shrholdr_relate: Optional[str] = None  # 최대주주와의 관계
+    tenure_start: Optional[str] = None  # 임기 시작일
+    tenure_end: Optional[str] = None  # 임기 종료일
+    report_date: Optional[str] = None  # 보고서 기준일
+    source: str = "DART"
+    confidence: str = "HIGH"
+
+    def to_dict(self) -> dict:
+        return {
+            "name": self.nm,
+            "gender": self.sexdstn,
+            "birth_ym": self.birth_ym,
+            "position": self.ofcps,
+            "is_registered": self.rgist_exctv_at == "등기임원",
+            "is_fulltime": self.fte_at == "상근",
+            "job": self.chrg_job,
+            "career": self.main_career,
+            "relation_to_largest_shareholder": self.mxmm_shrholdr_relate,
+            "tenure_start": self.tenure_start,
+            "tenure_end": self.tenure_end,
+            "report_date": self.report_date,
+            "source": self.source,
+            "confidence": self.confidence,
+        }
+
+
+# ============================================================================
 # P2/P3: Extended Fact-Based Profile (재무 + 주요이벤트 포함)
 # ============================================================================
 
@@ -1632,45 +1673,9 @@ async def get_verified_shareholders(
 
 
 # ============================================================================
-# P4: Executive API (임원현황)
+# P4: Executive API (임원현황 조회 함수)
+# Executive dataclass는 상단에 정의됨 (ExtendedFactProfile에서 사용)
 # ============================================================================
-
-@dataclass
-class Executive:
-    """임원 정보 (100% Fact - DART 공시)"""
-    nm: str  # 성명
-    sexdstn: Optional[str] = None  # 성별 (남, 여)
-    birth_ym: Optional[str] = None  # 출생년월 (YYYY년 MM월)
-    ofcps: Optional[str] = None  # 직위
-    rgist_exctv_at: Optional[str] = None  # 등기임원여부 (등기임원, 미등기임원)
-    fte_at: Optional[str] = None  # 상근여부 (상근, 비상근)
-    chrg_job: Optional[str] = None  # 담당업무
-    main_career: Optional[str] = None  # 주요약력
-    mxmm_shrholdr_relate: Optional[str] = None  # 최대주주와의 관계
-    tenure_start: Optional[str] = None  # 임기 시작일
-    tenure_end: Optional[str] = None  # 임기 종료일
-    report_date: Optional[str] = None  # 보고서 기준일
-    source: str = "DART"
-    confidence: str = "HIGH"
-
-    def to_dict(self) -> dict:
-        return {
-            "name": self.nm,
-            "gender": self.sexdstn,
-            "birth_ym": self.birth_ym,
-            "position": self.ofcps,
-            "is_registered": self.rgist_exctv_at == "등기임원",
-            "is_fulltime": self.fte_at == "상근",
-            "job": self.chrg_job,
-            "career": self.main_career,
-            "relation_to_largest_shareholder": self.mxmm_shrholdr_relate,
-            "tenure_start": self.tenure_start,
-            "tenure_end": self.tenure_end,
-            "report_date": self.report_date,
-            "source": self.source,
-            "confidence": self.confidence,
-        }
-
 
 async def get_executives(
     corp_code: str,
