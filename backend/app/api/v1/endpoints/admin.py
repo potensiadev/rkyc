@@ -1448,7 +1448,7 @@ class LLMUsageSummaryResponse(BaseModel):
     total_cost_usd: float
     by_provider: dict
     by_agent: dict
-    by_operation: dict
+    by_stage: dict
 
 
 class LLMUsageTotalsResponse(BaseModel):
@@ -1489,7 +1489,7 @@ async def get_llm_usage_summary(
         total_cost_usd=round(summary.total_cost_usd, 4),
         by_provider=summary.by_provider,
         by_agent=summary.by_agent,
-        by_operation=summary.by_operation,
+        by_stage=summary.by_stage,
     )
 
 
