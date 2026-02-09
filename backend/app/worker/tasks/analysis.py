@@ -26,6 +26,7 @@ from app.worker.pipelines import (
     NoSnapshotError,
     NoCorporationError,
 )
+from app.worker.pipelines.bank_interpretation import BankInterpretationPipeline
 from app.worker.llm.exceptions import (
     RateLimitError,
     TimeoutError as LLMTimeoutError,
@@ -291,6 +292,7 @@ def run_analysis_pipeline(self, job_id: str, corp_id: str, skip_cache: bool = Fa
     signal_pipeline = SignalExtractionPipeline(use_multi_agent=False)
     validation_pipeline = ValidationPipeline()
     dedup_pipeline = DeduplicationPipeline()
+    bank_interpretation_pipeline = BankInterpretationPipeline()  # MVP: 은행 관점 재해석
     index_pipeline = IndexPipeline()
     insight_pipeline = InsightPipeline()
 
@@ -426,7 +428,20 @@ def run_analysis_pipeline(self, job_id: str, corp_id: str, skip_cache: bool = Fa
         validated_signals = validation_pipeline.execute(deduped_batch)
         # 6c. Remove duplicates against existing DB signals
         validated_signals = dedup_pipeline.execute(validated_signals, corp_id)
-        update_job_progress(job_id, JobStatus.RUNNING, ProgressStep.VALIDATION, 80)
+        update_job_progress(job_id, JobStatus.RUNNING, ProgressStep.VALIDATION, 78)
+
+        # Stage 6.5: BANK_INTERPRETATION (MVP: 은행 관점 재해석)
+        # 검증된 시그널에 은행 관점 해석 추가
+        try:
+            validated_signals = bank_interpretation_pipeline.execute(validated_signals, context)
+            logger.info(
+                f"BANK_INTERPRETATION completed: "
+                f"signals_interpreted={sum(1 for s in validated_signals if s.get('bank_interpretation'))}"
+            )
+        except Exception as e:
+            # Bank Interpretation 실패 시 기존 시그널 유지 (non-fatal)
+            logger.warning(f"BANK_INTERPRETATION stage failed (non-fatal): {e}")
+        update_job_progress(job_id, JobStatus.RUNNING, ProgressStep.VALIDATION, 82)
 
         # Stage 7: INDEX
         update_job_progress(job_id, JobStatus.RUNNING, ProgressStep.INDEX, 85)

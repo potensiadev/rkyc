@@ -43,6 +43,11 @@ _LAZY_IMPORTS = {
     "IndustrySignalAgent": "app.worker.pipelines.signal_agents",
     "EnvironmentSignalAgent": "app.worker.pipelines.signal_agents",
     "SignalAgentOrchestrator": "app.worker.pipelines.signal_agents",
+    # bank_interpretation.py (MVP)
+    "BankInterpretationPipeline": "app.worker.pipelines.bank_interpretation",
+    "BankInterpretationService": "app.worker.pipelines.bank_interpretation",
+    "BankContext": "app.worker.pipelines.bank_interpretation",
+    "BankInterpretation": "app.worker.pipelines.bank_interpretation",
 }
 
 
@@ -88,4 +93,9 @@ __all__ = [
     "IndustrySignalAgent",
     "EnvironmentSignalAgent",
     "SignalAgentOrchestrator",
+    # MVP: Bank Interpretation (은행 관점 시그널 재해석)
+    "BankInterpretationPipeline",
+    "BankInterpretationService",
+    "BankContext",
+    "BankInterpretation",
 ]

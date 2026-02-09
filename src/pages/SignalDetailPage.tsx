@@ -38,6 +38,9 @@ import {
   Sparkles,
   AlertCircle,
   History,
+  Landmark,
+  Target,
+  ClipboardList,
 } from "lucide-react";
 import {
   useSignalDetail,
@@ -318,6 +321,65 @@ export default function SignalDetailPage() {
                 </div>
               </div>
             </GlassCard>
+
+            {/* Bank Interpretation (MVP) - 은행 관점 재해석 */}
+            {signal.bank_interpretation && (
+              <GlassCard className="p-7 border-l-4 border-l-blue-500 bg-gradient-to-br from-blue-50/50 to-white">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wide flex items-center gap-2">
+                    <Landmark className="w-4 h-4 text-blue-600" />
+                    당행 관점 분석
+                  </h3>
+                  {signal.portfolio_impact && (
+                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
+                      signal.portfolio_impact === 'HIGH' ? 'bg-rose-100 text-rose-700' :
+                      signal.portfolio_impact === 'MED' ? 'bg-amber-100 text-amber-700' :
+                      'bg-slate-100 text-slate-600'
+                    }`}>
+                      포트폴리오 영향: {signal.portfolio_impact}
+                    </span>
+                  )}
+                </div>
+
+                <p className="text-slate-700 leading-relaxed text-base mb-4">
+                  {signal.bank_interpretation}
+                </p>
+
+                {signal.recommended_action && (
+                  <div className="flex items-start gap-3 p-4 rounded-xl bg-white border border-blue-100">
+                    <div className={`p-2 rounded-lg ${
+                      signal.action_priority === 'URGENT' ? 'bg-rose-100' :
+                      signal.action_priority === 'NORMAL' ? 'bg-amber-100' :
+                      'bg-slate-100'
+                    }`}>
+                      {signal.action_priority === 'URGENT' ? (
+                        <AlertCircle className="w-4 h-4 text-rose-600" />
+                      ) : signal.action_priority === 'NORMAL' ? (
+                        <Target className="w-4 h-4 text-amber-600" />
+                      ) : (
+                        <ClipboardList className="w-4 h-4 text-slate-500" />
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">권고 조치</span>
+                        {signal.action_priority && (
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                            signal.action_priority === 'URGENT' ? 'bg-rose-600 text-white' :
+                            signal.action_priority === 'NORMAL' ? 'bg-amber-500 text-white' :
+                            'bg-slate-400 text-white'
+                          }`}>
+                            {signal.action_priority === 'URGENT' ? '긴급' :
+                             signal.action_priority === 'NORMAL' ? '일반' : '참고'}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-slate-700 font-medium">{signal.recommended_action}</p>
+                    </div>
+                  </div>
+                )}
+              </GlassCard>
+            )}
 
             {/* AI Reasoning */}
             {signal.analysis_reasoning && (

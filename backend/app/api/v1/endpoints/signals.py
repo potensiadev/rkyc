@@ -268,6 +268,11 @@ async def get_signal_detail(
             )
             for e in evidences
         ],
+        # Bank Interpretation (MVP)
+        bank_interpretation=signal.bank_interpretation if signal else None,
+        portfolio_impact=signal.portfolio_impact if signal else None,
+        recommended_action=signal.recommended_action if signal else None,
+        action_priority=signal.action_priority if signal else None,
     )
 
 

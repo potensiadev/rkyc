@@ -130,6 +130,11 @@ class SignalDetailResponse(BaseModel):
     dismissed_at: Optional[datetime] = None
     dismiss_reason: Optional[str] = None
     evidences: List[EvidenceResponse] = []
+    # 은행 관점 재해석 (MVP)
+    bank_interpretation: Optional[str] = None
+    portfolio_impact: Optional[str] = None  # HIGH/MED/LOW
+    recommended_action: Optional[str] = None
+    action_priority: Optional[str] = None  # URGENT/NORMAL/LOW
 
     class Config:
         from_attributes = True

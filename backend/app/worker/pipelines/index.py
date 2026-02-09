@@ -219,6 +219,16 @@ Summary: {sig.get('summary', '')}
 
         # Create Signal with explicit enum conversion
         signal_id = uuid4()
+
+        # Parse interpretation_generated_at if present
+        interpretation_generated_at = None
+        if signal_data.get("interpretation_generated_at"):
+            try:
+                from dateutil.parser import parse as parse_datetime
+                interpretation_generated_at = parse_datetime(signal_data["interpretation_generated_at"])
+            except Exception:
+                interpretation_generated_at = datetime.now(UTC)
+
         signal = Signal(
             signal_id=signal_id,
             corp_id=corp_id,
@@ -230,6 +240,12 @@ Summary: {sig.get('summary', '')}
             impact_strength=_safe_enum_convert(ImpactStrength, signal_data["impact_strength"], ImpactStrength.MED),
             confidence=_safe_enum_convert(ConfidenceLevel, signal_data["confidence"], ConfidenceLevel.MED),
             summary=signal_data["summary"],
+            # Bank Interpretation (MVP)
+            bank_interpretation=signal_data.get("bank_interpretation"),
+            portfolio_impact=signal_data.get("portfolio_impact"),
+            recommended_action=signal_data.get("recommended_action"),
+            action_priority=signal_data.get("action_priority"),
+            interpretation_generated_at=interpretation_generated_at,
         )
         db.add(signal)
         db.flush()  # Get signal_id

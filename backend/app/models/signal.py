@@ -162,6 +162,13 @@ class Signal(Base):
     last_updated_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
     created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
 
+    # Bank Interpretation (MVP)
+    bank_interpretation = Column(Text, nullable=True, comment="은행 관점 재해석 텍스트")
+    portfolio_impact = Column(String(10), nullable=True, comment="포트폴리오 영향도 (HIGH/MED/LOW)")
+    recommended_action = Column(Text, nullable=True, comment="권고 조치")
+    action_priority = Column(String(10), nullable=True, comment="조치 우선순위 (URGENT/NORMAL/LOW)")
+    interpretation_generated_at = Column(TIMESTAMP(timezone=True), nullable=True)
+
     def __repr__(self):
         return f"<Signal(corp_id='{self.corp_id}', event_type='{self.event_type}')>"
 
