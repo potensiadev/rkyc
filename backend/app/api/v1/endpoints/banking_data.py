@@ -538,10 +538,10 @@ async def get_banking_insights(
 
     # 2. Signals 조회
     signals_query = text("""
-        SELECT id, signal_type, event_type, title, summary, impact_direction, impact_strength
+        SELECT signal_id, signal_type, event_type, summary, impact_direction, impact_strength
         FROM rkyc_signal
         WHERE corp_id = :corp_id
-        ORDER BY detected_at DESC
+        ORDER BY created_at DESC
         LIMIT 50
     """)
     signals_result = await db.execute(signals_query, {"corp_id": corp_id})
@@ -550,10 +550,10 @@ async def get_banking_insights(
             "id": str(row[0]),
             "signal_type": row[1],
             "event_type": row[2],
-            "title": row[3],
-            "summary": row[4],
-            "impact_direction": row[5],
-            "impact_strength": row[6],
+            "title": (row[3] or "")[:50],  # summary의 앞 50자를 title로 사용
+            "summary": row[3],
+            "impact_direction": row[4],
+            "impact_strength": row[5],
         }
         for row in signals_result.fetchall()
     ]
