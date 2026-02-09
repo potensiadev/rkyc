@@ -1588,6 +1588,86 @@ export default function CorporateDetailPage() {
                             </ul>
                           </div>
                         )}
+
+                        {/* Detected Signals by Type */}
+                        {apiSignals && apiSignals.length > 0 && (
+                          <div>
+                            <div className="h-px bg-slate-200 w-full mb-6"></div>
+                            <h4 className="flex items-center gap-2.5 text-sm font-bold text-slate-700 mb-4">
+                              <div className="p-1 bg-slate-100 rounded-md">
+                                <Activity className="w-3.5 h-3.5 text-slate-600" />
+                              </div>
+                              탐지된 시그널 ({apiSignals.length}건)
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                              {/* DIRECT Signals */}
+                              <div className="bg-gradient-to-br from-indigo-50 to-white border border-indigo-100 rounded-xl p-4">
+                                <div className="flex items-center gap-2 mb-3">
+                                  <div className="w-2 h-2 rounded-full bg-indigo-500" />
+                                  <span className="text-xs font-bold text-indigo-700 uppercase tracking-wider">DIRECT</span>
+                                  <span className="ml-auto text-[10px] font-mono text-indigo-500 bg-indigo-100 px-1.5 py-0.5 rounded">
+                                    {apiSignals.filter(s => s.signalType === 'DIRECT').length}
+                                  </span>
+                                </div>
+                                <ul className="space-y-2">
+                                  {apiSignals.filter(s => s.signalType === 'DIRECT').slice(0, 3).map((signal, i) => (
+                                    <li key={i} className="text-[12px] text-slate-600 flex items-start gap-2">
+                                      <span className={`mt-1 w-1.5 h-1.5 rounded-full shrink-0 ${signal.impactDirection === 'RISK' ? 'bg-rose-400' : signal.impactDirection === 'OPPORTUNITY' ? 'bg-emerald-400' : 'bg-slate-300'}`} />
+                                      <span className="line-clamp-2">{signal.title || signal.summary?.slice(0, 50)}</span>
+                                    </li>
+                                  ))}
+                                  {apiSignals.filter(s => s.signalType === 'DIRECT').length === 0 && (
+                                    <li className="text-[11px] text-slate-400 italic">탐지된 시그널 없음</li>
+                                  )}
+                                </ul>
+                              </div>
+
+                              {/* INDUSTRY Signals */}
+                              <div className="bg-gradient-to-br from-violet-50 to-white border border-violet-100 rounded-xl p-4">
+                                <div className="flex items-center gap-2 mb-3">
+                                  <div className="w-2 h-2 rounded-full bg-violet-500" />
+                                  <span className="text-xs font-bold text-violet-700 uppercase tracking-wider">INDUSTRY</span>
+                                  <span className="ml-auto text-[10px] font-mono text-violet-500 bg-violet-100 px-1.5 py-0.5 rounded">
+                                    {apiSignals.filter(s => s.signalType === 'INDUSTRY').length}
+                                  </span>
+                                </div>
+                                <ul className="space-y-2">
+                                  {apiSignals.filter(s => s.signalType === 'INDUSTRY').slice(0, 3).map((signal, i) => (
+                                    <li key={i} className="text-[12px] text-slate-600 flex items-start gap-2">
+                                      <span className={`mt-1 w-1.5 h-1.5 rounded-full shrink-0 ${signal.impactDirection === 'RISK' ? 'bg-rose-400' : signal.impactDirection === 'OPPORTUNITY' ? 'bg-emerald-400' : 'bg-slate-300'}`} />
+                                      <span className="line-clamp-2">{signal.title || signal.summary?.slice(0, 50)}</span>
+                                    </li>
+                                  ))}
+                                  {apiSignals.filter(s => s.signalType === 'INDUSTRY').length === 0 && (
+                                    <li className="text-[11px] text-slate-400 italic">탐지된 시그널 없음</li>
+                                  )}
+                                </ul>
+                              </div>
+
+                              {/* ENVIRONMENT Signals */}
+                              <div className="bg-gradient-to-br from-teal-50 to-white border border-teal-100 rounded-xl p-4">
+                                <div className="flex items-center gap-2 mb-3">
+                                  <div className="w-2 h-2 rounded-full bg-teal-500" />
+                                  <span className="text-xs font-bold text-teal-700 uppercase tracking-wider">ENVIRONMENT</span>
+                                  <span className="ml-auto text-[10px] font-mono text-teal-500 bg-teal-100 px-1.5 py-0.5 rounded">
+                                    {apiSignals.filter(s => s.signalType === 'ENVIRONMENT').length}
+                                  </span>
+                                </div>
+                                <ul className="space-y-2">
+                                  {apiSignals.filter(s => s.signalType === 'ENVIRONMENT').slice(0, 3).map((signal, i) => (
+                                    <li key={i} className="text-[12px] text-slate-600 flex items-start gap-2">
+                                      <span className={`mt-1 w-1.5 h-1.5 rounded-full shrink-0 ${signal.impactDirection === 'RISK' ? 'bg-rose-400' : signal.impactDirection === 'OPPORTUNITY' ? 'bg-emerald-400' : 'bg-slate-300'}`} />
+                                      <span className="line-clamp-2">{signal.title || signal.summary?.slice(0, 50)}</span>
+                                    </li>
+                                  ))}
+                                  {apiSignals.filter(s => s.signalType === 'ENVIRONMENT').length === 0 && (
+                                    <li className="text-[11px] text-slate-400 italic">탐지된 시그널 없음</li>
+                                  )}
+                                </ul>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       {/* Metadata Footer */}
