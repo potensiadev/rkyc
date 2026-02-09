@@ -71,7 +71,9 @@ class SnapshotPipeline:
             latest = latest_result.scalar_one_or_none()
 
             if not latest:
-                raise NoSnapshotError(f"No snapshot found for corp_id={corp_id}")
+                # Auto-create minimal snapshot for new corporations
+                logger.warning(f"No snapshot found for corp_id={corp_id}, creating minimal snapshot")
+                return self._create_minimal_snapshot(corporation)
 
             # 3. Fetch actual snapshot data
             snapshot_query = select(InternalSnapshot).where(
@@ -93,22 +95,75 @@ class SnapshotPipeline:
                 "snapshot_id": str(snapshot.snapshot_id),
                 "snapshot_version": snapshot.snapshot_version,
                 "snapshot_json": snapshot.snapshot_json,
-                "corporation": {
-                    "corp_id": corporation.corp_id,
-                    "corp_name": corporation.corp_name,
-                    "corp_reg_no": corporation.corp_reg_no,
-                    "biz_no": corporation.biz_no,
-                    "industry_code": corporation.industry_code,
-                    "ceo_name": corporation.ceo_name,
-                    # DART 공시 기반 정보 (100% Fact 데이터)
-                    "dart_corp_code": getattr(corporation, 'dart_corp_code', None),
-                    "established_date": getattr(corporation, 'established_date', None),
-                    "headquarters": getattr(corporation, 'headquarters', None),
-                    "corp_class": getattr(corporation, 'corp_class', None),
-                    "homepage_url": getattr(corporation, 'homepage_url', None),
-                    "jurir_no": getattr(corporation, 'jurir_no', None),
-                    "corp_name_eng": getattr(corporation, 'corp_name_eng', None),
-                    "acc_mt": getattr(corporation, 'acc_mt', None),
-                    "dart_updated_at": str(corporation.dart_updated_at) if getattr(corporation, 'dart_updated_at', None) else None,
-                },
+                "corporation": self._build_corporation_dict(corporation),
             }
+
+    def _build_corporation_dict(self, corporation: Corporation) -> dict:
+        """Build corporation info dictionary"""
+        return {
+            "corp_id": corporation.corp_id,
+            "corp_name": corporation.corp_name,
+            "corp_reg_no": corporation.corp_reg_no,
+            "biz_no": corporation.biz_no,
+            "industry_code": corporation.industry_code,
+            "ceo_name": corporation.ceo_name,
+            # DART 공시 기반 정보 (100% Fact 데이터)
+            "dart_corp_code": getattr(corporation, 'dart_corp_code', None),
+            "established_date": getattr(corporation, 'established_date', None),
+            "headquarters": getattr(corporation, 'headquarters', None),
+            "corp_class": getattr(corporation, 'corp_class', None),
+            "homepage_url": getattr(corporation, 'homepage_url', None),
+            "jurir_no": getattr(corporation, 'jurir_no', None),
+            "corp_name_eng": getattr(corporation, 'corp_name_eng', None),
+            "acc_mt": getattr(corporation, 'acc_mt', None),
+            "dart_updated_at": str(corporation.dart_updated_at) if getattr(corporation, 'dart_updated_at', None) else None,
+        }
+
+    def _create_minimal_snapshot(self, corporation: Corporation) -> dict:
+        """
+        Create a minimal snapshot for corporations without existing snapshot data.
+
+        This allows new corporations to be analyzed without requiring
+        pre-existing internal snapshot data.
+        """
+        from datetime import datetime
+        import uuid
+
+        minimal_snapshot_json = {
+            "schema_version": "v1.0",
+            "corp": {
+                "corp_id": corporation.corp_id,
+                "corp_name": corporation.corp_name,
+                "kyc_status": {
+                    "is_kyc_completed": False,
+                    "last_kyc_updated": None,
+                    "internal_risk_grade": None,
+                },
+            },
+            "credit": {
+                "has_loan": False,
+                "loan_summary": None,
+            },
+            "collateral": {
+                "has_collateral": False,
+                "collateral_list": [],
+            },
+            "derived_hints": {
+                "note": "Auto-generated minimal snapshot for new corporation",
+                "generated_at": datetime.utcnow().isoformat(),
+            },
+        }
+
+        logger.info(
+            f"Created minimal snapshot for corp_id={corporation.corp_id}, "
+            f"corp_name={corporation.corp_name}"
+        )
+
+        return {
+            "corp_id": corporation.corp_id,
+            "snapshot_id": str(uuid.uuid4()),  # Temporary UUID
+            "snapshot_version": 0,  # Version 0 indicates auto-generated
+            "snapshot_json": minimal_snapshot_json,
+            "corporation": self._build_corporation_dict(corporation),
+            "is_minimal": True,  # Flag to indicate this is auto-generated
+        }
