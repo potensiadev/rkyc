@@ -4,7 +4,7 @@ Aggregates all API endpoints
 """
 
 from fastapi import APIRouter
-from app.api.v1.endpoints import corporations, signals, jobs, dashboard, documents, profiles, admin, signals_enriched, scheduler, diagnostics, reports, loan_insights, dart
+from app.api.v1.endpoints import corporations, signals, jobs, dashboard, documents, profiles, admin, signals_enriched, scheduler, diagnostics, reports, loan_insights, dart, banking_data
 # from app.api.v1.endpoints import new_kyc  # 신규 법인 KYC - 비활성화
 
 # Create main API router
@@ -27,3 +27,4 @@ api_router.include_router(diagnostics.router, prefix="/diagnostics", tags=["diag
 api_router.include_router(reports.router, prefix="/reports", tags=["reports"])  # Full reports with evidence
 api_router.include_router(loan_insights.router, prefix="/loan-insights", tags=["loan-insights"])  # Pre-generated Loan Insight
 api_router.include_router(dart.router, prefix="/dart", tags=["dart"])  # DART 주주 정보 검증 API
+api_router.include_router(banking_data.router, prefix="/banking-data", tags=["banking-data"])  # 은행 내부 거래 데이터

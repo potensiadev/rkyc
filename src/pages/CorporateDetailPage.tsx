@@ -40,14 +40,22 @@ import {
   ChevronRight,
   Brain,
   CheckCircle2,
-  BrainCircuit
+  BrainCircuit,
+  Clock,
+  TrendingDown,
+  DollarSign,
+  Activity,
+  MapPin,
+  CreditCard,
+  ArrowUpRight,
+  ShieldCheck
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import ReportPreviewModal from "@/components/reports/ReportPreviewModal";
-import { useCorporation, useSignals, useCorporationSnapshot, useCorpProfile, useCorpProfileDetail, useRefreshCorpProfile, useJobStatus, useLoanInsight } from "@/hooks/useApi";
+import { useCorporation, useSignals, useCorporationSnapshot, useCorpProfile, useCorpProfileDetail, useRefreshCorpProfile, useJobStatus, useLoanInsight, useBankingData, useBankingRiskAlerts } from "@/hooks/useApi";
 import { toast } from "sonner";
 import type { ProfileConfidence, CorpProfile } from "@/types/profile";
 import { useQueryClient } from "@tanstack/react-query";
@@ -56,7 +64,7 @@ import { EvidenceBackedField } from "@/components/profile/EvidenceBackedField";
 import { EvidenceMap } from "@/components/profile/EvidenceMap";
 import { RiskIndicators } from "@/components/profile/RiskIndicators";
 import { motion, AnimatePresence } from "framer-motion";
-import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
+import { PieChart, Pie, Cell, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LineChart, Line } from "recharts";
 
 // --- Icons ---
 const IconBuilding = ({ className }: { className?: string }) => (
@@ -221,6 +229,7 @@ const StickyCommandBar = () => (
 const TOC_ITEMS = [
   { id: "summary", label: "Executive Summary" },
   { id: "profile", label: "Corporate Profile" },
+  { id: "banking", label: "Banking Data" },
   { id: "financials", label: "Bank Relationship" },
   { id: "intelligence", label: "Intelligence & Flow" },
 ];
@@ -253,6 +262,9 @@ export default function CorporateDetailPage() {
   // Loan Insight (사전 생성된 AI 분석)
   const { data: loanInsightData, isLoading: isLoadingLoanInsight, error: loanInsightError } = useLoanInsight(corpId || "");
   const loanInsight = loanInsightData?.insight || null;
+  // Banking Data (PRD v1.1)
+  const { data: bankingData, isLoading: isLoadingBankingData } = useBankingData(corpId || "");
+  const { data: bankingRiskAlerts } = useBankingRiskAlerts(corpId || "");
   const refreshProfile = useRefreshCorpProfile();
   const [showDetailedView, setShowDetailedView] = useState(false);
   const [autoRefreshTriggered, setAutoRefreshTriggered] = useState(false);
@@ -642,6 +654,229 @@ export default function CorporateDetailPage() {
                         </div>
                       )}
                     </div>
+                  </div>
+                )}
+              </GlassCard>
+            </div>
+
+            {/* 2.5 Banking Data Section (PRD v1.1) - Visual Update */}
+            <div id="banking">
+              <GlassCard className="p-8">
+                <div className="flex items-center justify-between mb-6">
+                  <SectionHeader icon={IconBank} title="Banking Data" subtitle="Internal Transaction & Risk Analysis" />
+                  <div className="flex gap-2">
+                    <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                      <Clock className="w-3 h-3" /> Data as of: {bankingData?.data_date || new Date().toISOString().split('T')[0]}
+                    </span>
+                  </div>
+                </div>
+
+                {isLoadingBankingData ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="w-6 h-6 animate-spin text-indigo-500" />
+                    <span className="ml-2 text-slate-500">Loading banking data...</span>
+                  </div>
+                ) : bankingData ? (
+                  <div className="space-y-8">
+
+                    {/* 1. Risk & Opportunity Banners */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Risk Alerts */}
+                      {bankingRiskAlerts && bankingRiskAlerts.total > 0 && (
+                        <div className="bg-red-50 border border-red-100 rounded-xl p-4 relative overflow-hidden">
+                          <div className="absolute top-0 right-0 p-3 opacity-10"><AlertTriangle className="w-12 h-12 text-red-600" /></div>
+                          <div className="flex items-center gap-2 mb-2 relative z-10">
+                            <div className="p-1.5 bg-red-100 rounded-lg text-red-600"><AlertTriangle className="w-4 h-4" /></div>
+                            <h4 className="font-bold text-red-900 text-sm">Critical Risk Alerts ({bankingRiskAlerts.total})</h4>
+                          </div>
+                          <div className="space-y-2 relative z-10">
+                            {bankingRiskAlerts.alerts.slice(0, 2).map((alert) => (
+                              <div key={alert.id} className="flex items-start gap-2">
+                                <div className={`w-1.5 h-1.5 rounded-full mt-1.5 ${alert.severity === 'HIGH' ? 'bg-red-600' : 'bg-orange-500'}`} />
+                                <p className="text-xs text-red-800 leading-snug"><span className="font-semibold">{alert.title}:</span> {alert.description}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Opportunity Signals */}
+                      {bankingData.opportunity_signals.length > 0 && (
+                        <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 relative overflow-hidden">
+                          <div className="absolute top-0 right-0 p-3 opacity-10"><TrendingUp className="w-12 h-12 text-emerald-600" /></div>
+                          <div className="flex items-center gap-2 mb-2 relative z-10">
+                            <div className="p-1.5 bg-emerald-100 rounded-lg text-emerald-600"><TrendingUp className="w-4 h-4" /></div>
+                            <h4 className="font-bold text-emerald-900 text-sm">Detected Opportunities ({bankingData.opportunity_signals.length})</h4>
+                          </div>
+                          <div className="space-y-2 relative z-10">
+                            {bankingData.opportunity_signals.slice(0, 2).map((opp, idx) => (
+                              <div key={idx} className="flex items-start gap-2">
+                                <div className="w-1.5 h-1.5 rounded-full mt-1.5 bg-emerald-600" />
+                                <p className="text-xs text-emerald-800 leading-snug">
+                                  {typeof opp === 'string' ? opp : (opp as any)?.title || 'Opportunity Detected'}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 2. Main Dashboard Grid */}
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+                      {/* Left Column (2/3) */}
+                      <div className="lg:col-span-2 space-y-6">
+
+                        {/* Loan Exposure Chart */}
+                        <div className="bg-slate-50/50 rounded-2xl p-6 border border-slate-100">
+                          <div className="flex justify-between items-end mb-6">
+                            <div>
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Total Loan Exposure</p>
+                              <div className="flex items-baseline gap-2">
+                                <h3 className="text-2xl font-bold text-slate-900 font-mono">
+                                  {formatKRW((bankingData.loan_exposure as any)?.total_exposure_krw)}
+                                </h3>
+                                {(bankingData.loan_exposure as any)?.risk_indicators?.internal_grade && (
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-700">
+                                    Grade: {(bankingData.loan_exposure as any).risk_indicators.internal_grade}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            {/* Mock Legend */}
+                            <div className="flex gap-3 text-[10px] text-slate-500">
+                              <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-indigo-500" />Secured</div>
+                              <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-indigo-300" />Unsecured</div>
+                            </div>
+                          </div>
+
+                          <div className="h-[200px] w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <AreaChart data={(bankingData.loan_exposure as any)?.yearly_trend || []}>
+                                <defs>
+                                  <linearGradient id="colorSecured" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.1} />
+                                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                                  </linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                <XAxis dataKey="year" stroke="#cbd5e1" fontSize={10} tickLine={false} axisLine={false} />
+                                <YAxis hide />
+                                <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
+                                <Area type="monotone" dataKey="total" stroke="#6366f1" fill="url(#colorSecured)" strokeWidth={2} />
+                              </AreaChart>
+                            </ResponsiveContainer>
+                          </div>
+                        </div>
+
+                        {/* Trade Finance Grid */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="bg-slate-50/50 rounded-2xl p-5 border border-slate-100">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Trade: Export vs Import</p>
+                            <div className="flex justify-between items-center mb-4">
+                              <div>
+                                <p className="text-xs text-slate-500">Export Recv.</p>
+                                <p className="text-lg font-bold text-blue-600 font-mono">${((bankingData.trade_finance as any)?.export?.current_receivables_usd / 1000000)?.toFixed(1)}M</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-xs text-slate-500">Import Payables</p>
+                                <p className="text-lg font-bold text-rose-500 font-mono">${((bankingData.trade_finance as any)?.import?.current_payables_usd / 1000000)?.toFixed(1)}M</p>
+                              </div>
+                            </div>
+                            {/* Simple Bar Visual */}
+                            <div className="flex gap-1 h-2 rounded-full overflow-hidden bg-slate-100">
+                              <div className="bg-blue-500" style={{ width: '60%' }} />
+                              <div className="bg-rose-500" style={{ width: '40%' }} />
+                            </div>
+                          </div>
+
+                          <div className="bg-slate-50/50 rounded-2xl p-5 border border-slate-100">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">FX Hedge Ratio</p>
+                            <div className="flex items-end gap-2 mb-2">
+                              <p className="text-3xl font-bold text-slate-900 font-mono">{(bankingData.trade_finance as any)?.fx_exposure?.hedge_ratio}%</p>
+                              <p className="text-xs text-amber-500 font-medium mb-1.5 flex items-center gap-1">
+                                <AlertTriangle className="w-3 h-3" /> Below Target (50%)
+                              </p>
+                            </div>
+                            <Progress value={(bankingData.trade_finance as any)?.fx_exposure?.hedge_ratio || 0} className="h-2 bg-amber-100 text-amber-500" />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Right Column (1/3) */}
+                      <div className="lg:col-span-1 space-y-6">
+
+                        {/* Collateral & LTV */}
+                        <div className="bg-slate-50/50 rounded-2xl p-5 border border-slate-100">
+                          <div className="flex justify-between items-center mb-4">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Collateral & LTV</p>
+                            <span className="text-xs font-bold text-slate-900 font-mono">Avg LTV: {(bankingData.collateral_detail as any)?.avg_ltv}%</span>
+                          </div>
+                          <div className="space-y-4">
+                            {((bankingData.collateral_detail as any)?.collaterals || []).slice(0, 3).map((col: any, i: number) => (
+                              <div key={i} className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
+                                <div className="flex items-center gap-3 mb-2">
+                                  <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600">
+                                    <Building2 className="w-4 h-4" />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-bold text-slate-800 truncate">{col.description}</p>
+                                    <p className="text-[10px] text-slate-400">{col.type}</p>
+                                  </div>
+                                </div>
+                                <div className="space-y-1">
+                                  <div className="flex justify-between text-[10px] text-slate-500">
+                                    <span>LTV</span>
+                                    <span>{col.ltv_ratio}%</span>
+                                  </div>
+                                  <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                                    <div className={`h-full rounded-full ${col.ltv_ratio > 70 ? 'bg-red-500' : 'bg-green-500'}`} style={{ width: `${col.ltv_ratio}%` }} />
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Card Usage Donut */}
+                        <div className="bg-slate-50/50 rounded-2xl p-5 border border-slate-100 flex flex-col items-center">
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 w-full text-left">Internal Expense (Card)</p>
+                          <div className="h-[140px] w-full relative">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <PieChart>
+                                <Pie
+                                  data={[
+                                    { name: 'Travel', value: 35, fill: '#6366f1' },
+                                    { name: 'Ent.', value: 25, fill: '#8b5cf6' },
+                                    { name: 'Others', value: 40, fill: '#cbd5e1' },
+                                  ]}
+                                  cx="50%" cy="50%"
+                                  innerRadius={40} outerRadius={55}
+                                  paddingAngle={5}
+                                  dataKey="value"
+                                />
+                                <Tooltip />
+                              </PieChart>
+                            </ResponsiveContainer>
+                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                              <span className="text-lg font-bold text-slate-700">55M</span>
+                            </div>
+                          </div>
+                          <div className="flex gap-2 text-[10px] text-slate-500 mt-2">
+                            <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />Travel</span>
+                            <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-purple-500" />Ent.</span>
+                          </div>
+                        </div>
+
+                      </div>
+                    </div>
+
+                  </div>
+                ) : (
+                  <div className="text-center py-12 text-slate-400">
+                    <IconBank className="w-12 h-12 mx-auto mb-4 opacity-30" />
+                    <p>No banking data available</p>
                   </div>
                 )}
               </GlassCard>

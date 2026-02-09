@@ -568,6 +568,8 @@ class SignalExtractionPipeline:
             jurir_no=context.get("jurir_no"),
             corp_name_eng=context.get("corp_name_eng"),
             acc_mt=context.get("acc_mt"),
+            # PRD v1.1: Banking Data
+            banking_data=context.get("banking_data", {}),
         )
 
         logger.info(

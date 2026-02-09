@@ -638,7 +638,7 @@ SIGNAL_EXTRACTION_USER_TEMPLATE = """# 분석 대상 기업
 {dart_info}
 # 내부 스냅샷 데이터 (Internal Data)
 {snapshot_json}
-
+{banking_data}
 # 외부 이벤트 (External Events)
 
 ## 1. 기업 직접 관련 (→ DIRECT 시그널)
@@ -841,6 +841,118 @@ def sanitize_json_string(json_str: str, field_name: str = "json") -> str:
     return json_str
 
 
+def format_banking_data_context(banking_data: dict) -> str:
+    """
+    Format banking data for LLM context.
+
+    PRD v1.1 Banking Data Integration:
+    - 여신 현황: 연체, 등급, 한도 소진율 등 리스크 지표
+    - 수신 추이: 잔액 변동, 대규모 출금 알림
+    - 담보 현황: LTV, 재감정 필요 여부
+    - 무역금융: 환노출, 국가 집중도
+    - 재무제표: 부채비율, 매출 추이
+    - 리스크 알림: 자동 감지된 리스크
+    - 영업 기회: 자동 감지된 기회
+    """
+    if not banking_data:
+        return ""
+
+    parts = ["\n# 은행 내부 거래 데이터 (Banking Internal Data)"]
+
+    # 여신 현황
+    loan = banking_data.get("loan_exposure", {})
+    if loan:
+        parts.append("\n## 여신 현황")
+        parts.append(f"- 총 여신잔액: {loan.get('total_exposure_krw', 0):,}원")
+        risk = loan.get("risk_indicators", {})
+        if risk:
+            parts.append(f"- 연체 여부: {'연체' if risk.get('overdue_flag') else '정상'}")
+            if risk.get("overdue_flag"):
+                parts.append(f"- 연체일수: {risk.get('overdue_days', 0)}일")
+                parts.append(f"- 연체금액: {risk.get('overdue_amount', 0):,}원")
+            parts.append(f"- 내부등급: {risk.get('internal_grade', 'N/A')}")
+            if risk.get("watch_list"):
+                parts.append(f"- Watch List: {risk.get('watch_list_reason', '등재됨')}")
+
+    # 수신 추이
+    deposit = banking_data.get("deposit_trend", {})
+    if deposit:
+        parts.append("\n## 수신 추이")
+        parts.append(f"- 현재 잔액: {deposit.get('current_balance', 0):,}원")
+        parts.append(f"- 6개월 평균: {deposit.get('avg_balance_6m', 0):,}원")
+        parts.append(f"- 추세: {deposit.get('trend', 'N/A')}")
+        alerts = deposit.get("large_withdrawal_alerts", [])
+        if alerts:
+            parts.append(f"- 대규모 출금 알림: {len(alerts)}건")
+
+    # 담보 현황
+    collateral = banking_data.get("collateral_detail", {})
+    if collateral:
+        parts.append("\n## 담보 현황")
+        parts.append(f"- 총 담보가치: {collateral.get('total_collateral_value', 0):,}원")
+        parts.append(f"- 평균 LTV: {collateral.get('avg_ltv', 0):.1f}%")
+        high_ltv = collateral.get("high_ltv_collaterals", [])
+        if high_ltv:
+            parts.append(f"- 고LTV 담보: {len(high_ltv)}건 (주의 필요)")
+        expiring = collateral.get("expiring_appraisals", [])
+        if expiring:
+            parts.append(f"- 감정 만료 예정: {len(expiring)}건")
+
+    # 무역금융
+    trade = banking_data.get("trade_finance", {})
+    if trade:
+        export = trade.get("export", {})
+        fx = trade.get("fx_exposure", {})
+        if export or fx:
+            parts.append("\n## 무역금융")
+            if export.get("current_receivables_usd"):
+                parts.append(f"- 수출채권: ${export.get('current_receivables_usd', 0):,}")
+                major = export.get("major_countries", [])
+                if major:
+                    parts.append(f"- 주요 수출국: {', '.join(major[:3])}")
+            if fx:
+                parts.append(f"- 환헤지율: {fx.get('hedge_ratio', 0):.1f}%")
+
+    # 재무제표
+    fin = banking_data.get("financial_statements", {})
+    if fin:
+        parts.append("\n## 재무제표 (DART)")
+        years = fin.get("years", {})
+        if years:
+            latest_year = max(years.keys())
+            latest = years[latest_year]
+            parts.append(f"- {latest_year}년 매출: {latest.get('revenue', 0):,}원")
+            parts.append(f"- {latest_year}년 영업이익: {latest.get('operating_income', 0):,}원")
+            parts.append(f"- 부채비율: {latest.get('debt_ratio', 0):.1f}%")
+        health = fin.get("financial_health")
+        if health:
+            parts.append(f"- 재무건전성: {health}")
+
+    # 리스크 알림
+    risks = banking_data.get("risk_alerts", [])
+    if risks:
+        parts.append(f"\n## 리스크 알림 ({len(risks)}건)")
+        for r in risks[:5]:  # 최대 5건만
+            severity = r.get("severity", "MED")
+            title = r.get("title", "N/A")
+            parts.append(f"- [{severity}] {title}")
+
+    # 영업 기회
+    opps = banking_data.get("opportunity_signals", [])
+    if opps:
+        parts.append(f"\n## 영업 기회 ({len(opps)}건)")
+        for o in opps[:3]:  # 최대 3건만
+            if isinstance(o, str):
+                parts.append(f"- {o}")
+            elif isinstance(o, dict):
+                parts.append(f"- {o.get('title', o)}")
+
+    if len(parts) == 1:  # 헤더만 있는 경우
+        return ""
+
+    return "\n".join(parts) + "\n"
+
+
 def format_signal_extraction_prompt(
     corp_name: str,
     corp_reg_no: str,
@@ -858,6 +970,8 @@ def format_signal_extraction_prompt(
     jurir_no: str = None,
     corp_name_eng: str = None,
     acc_mt: str = None,
+    # PRD v1.1: Banking Data
+    banking_data: dict = None,
 ) -> str:
     """
     Format the signal extraction user prompt with context data.
@@ -880,6 +994,7 @@ def format_signal_extraction_prompt(
         jurir_no: 법인등록번호 (13자리)
         corp_name_eng: 영문 회사명
         acc_mt: 결산월 (MM)
+        banking_data: 은행 내부 거래 데이터 dict (PRD v1.1)
     """
     # Sanitize all inputs
     safe_corp_name = sanitize_input(corp_name, "corp_name", max_length=200)
@@ -920,6 +1035,9 @@ def format_signal_extraction_prompt(
     if dart_info_parts:
         dart_info = "\n# DART 공시 정보 (100% Fact)\n" + "\n".join(dart_info_parts) + "\n"
 
+    # PRD v1.1: Format banking data context
+    banking_data_str = format_banking_data_context(banking_data or {})
+
     return SIGNAL_EXTRACTION_USER_TEMPLATE.format(
         corp_name=safe_corp_name,
         corp_reg_no=safe_corp_reg_no or "N/A",
@@ -927,6 +1045,7 @@ def format_signal_extraction_prompt(
         industry_name=safe_industry_name,
         dart_info=dart_info,
         snapshot_json=safe_snapshot,
+        banking_data=banking_data_str,
         direct_events=safe_direct,
         industry_events=safe_industry,
         environment_events=safe_environment,

@@ -80,6 +80,11 @@ export interface ApiEvidence {
 export interface ApiSignalDetail extends ApiSignal {
   summary: string; // 전체 요약
   evidences: ApiEvidence[];
+  // 은행 관점 재해석 (MVP)
+  bank_interpretation: string | null;
+  portfolio_impact: 'HIGH' | 'MED' | 'LOW' | null;
+  recommended_action: string | null;
+  action_priority: 'URGENT' | 'NORMAL' | 'LOW' | null;
 }
 
 // Dashboard 요약 통계
@@ -827,4 +832,85 @@ export interface ApiLoanInsightSummariesResponse {
 
 export async function getAllLoanInsightSummaries(): Promise<ApiLoanInsightSummariesResponse> {
   return fetchApi<ApiLoanInsightSummariesResponse>(`/api/v1/loan-insights/`);
+}
+
+// ============================================================
+// Banking Data API (PRD v1.1)
+// ============================================================
+
+export interface ApiBankingDataRiskAlert {
+  id: string;
+  severity: 'HIGH' | 'MED' | 'LOW';
+  category: 'LOAN' | 'DEPOSIT' | 'CARD' | 'COLLATERAL' | 'TRADE' | 'FINANCIAL';
+  signal_type: string;
+  title: string;
+  description: string;
+  recommended_action: string;
+  detected_at: string;
+}
+
+export interface ApiBankingDataResponse {
+  id: string;
+  corp_id: string;
+  data_date: string;
+  created_at: string | null;
+  updated_at: string | null;
+  loan_exposure: Record<string, unknown> | null;
+  deposit_trend: Record<string, unknown> | null;
+  card_usage: Record<string, unknown> | null;
+  collateral_detail: Record<string, unknown> | null;
+  trade_finance: Record<string, unknown> | null;
+  financial_statements: Record<string, unknown> | null;
+  risk_alerts: ApiBankingDataRiskAlert[];
+  opportunity_signals: string[];
+}
+
+export interface ApiBankingDataSummary {
+  corp_id: string;
+  data_date: string;
+  total_exposure_krw: number | null;
+  deposit_balance: number | null;
+  risk_count: number;
+  opportunity_count: number;
+}
+
+export interface ApiBankingRiskAlertListResponse {
+  corp_id: string;
+  total: number;
+  high_count: number;
+  med_count: number;
+  low_count: number;
+  alerts: ApiBankingDataRiskAlert[];
+}
+
+export async function getBankingData(corpId: string): Promise<ApiBankingDataResponse> {
+  return fetchApi<ApiBankingDataResponse>(`/api/v1/banking-data/${corpId}`);
+}
+
+export async function getBankingDataHistory(corpId: string, limit: number = 12): Promise<ApiBankingDataSummary[]> {
+  return fetchApi<ApiBankingDataSummary[]>(`/api/v1/banking-data/${corpId}/history?limit=${limit}`);
+}
+
+export async function getBankingRiskAlerts(corpId: string): Promise<ApiBankingRiskAlertListResponse> {
+  return fetchApi<ApiBankingRiskAlertListResponse>(`/api/v1/banking-data/${corpId}/risk-alerts`);
+}
+
+export async function getBankingLoanExposure(corpId: string): Promise<Record<string, unknown>> {
+  return fetchApi<Record<string, unknown>>(`/api/v1/banking-data/${corpId}/loan-exposure`);
+}
+
+export async function getBankingDepositTrend(corpId: string): Promise<Record<string, unknown>> {
+  return fetchApi<Record<string, unknown>>(`/api/v1/banking-data/${corpId}/deposit-trend`);
+}
+
+export async function getBankingCollateral(corpId: string): Promise<Record<string, unknown>> {
+  return fetchApi<Record<string, unknown>>(`/api/v1/banking-data/${corpId}/collateral`);
+}
+
+export async function getBankingTradeFinance(corpId: string): Promise<Record<string, unknown>> {
+  return fetchApi<Record<string, unknown>>(`/api/v1/banking-data/${corpId}/trade-finance`);
+}
+
+export async function getBankingFinancialStatementsDart(corpId: string): Promise<Record<string, unknown>> {
+  return fetchApi<Record<string, unknown>>(`/api/v1/banking-data/${corpId}/financial-statements/dart`);
 }

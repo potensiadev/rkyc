@@ -19,6 +19,10 @@ import {
   getCorpProfile,
   getCorpProfileDetail,
   refreshCorpProfile,
+  // Banking Data API (PRD v1.1)
+  getBankingData,
+  getBankingDataHistory,
+  getBankingRiskAlerts,
   ApiCorporation,
   ApiSignal,
   ApiSignalDetail,
@@ -29,6 +33,9 @@ import {
   GetSignalsParams,
   JobStatusResponse,
   SignalStatusType,
+  ApiBankingDataResponse,
+  ApiBankingDataSummary,
+  ApiBankingRiskAlertListResponse,
 } from '@/lib/api';
 import type {
   ApiCorpProfileResponse,
@@ -571,6 +578,40 @@ export function useLoanInsightSummaries() {
     queryKey: ['loan-insight-summaries'],
     queryFn: () => getAllLoanInsightSummaries(),
     staleTime: 2 * 60 * 1000, // 2분 캐시
+  });
+}
+
+// ============================================================
+// Banking Data Hook (PRD v1.1)
+// ============================================================
+
+export function useBankingData(corpId: string) {
+  return useQuery({
+    queryKey: ['banking-data', corpId],
+    queryFn: () => getBankingData(corpId),
+    enabled: !!corpId,
+    staleTime: 5 * 60 * 1000, // 5분 캐시
+    retry: false,
+  });
+}
+
+export function useBankingDataHistory(corpId: string, limit: number = 12) {
+  return useQuery({
+    queryKey: ['banking-data-history', corpId, limit],
+    queryFn: () => getBankingDataHistory(corpId, limit),
+    enabled: !!corpId,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+}
+
+export function useBankingRiskAlerts(corpId: string) {
+  return useQuery({
+    queryKey: ['banking-risk-alerts', corpId],
+    queryFn: () => getBankingRiskAlerts(corpId),
+    enabled: !!corpId,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
   });
 }
 
