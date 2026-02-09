@@ -1209,32 +1209,6 @@ export default function CorporateDetailPage() {
                         )}
                       </div>
 
-                      {/* Action Items / Checklist */}
-                      <div>
-                        <h4 className="flex items-center gap-2 text-sm font-bold text-slate-800 mb-4 uppercase tracking-wider pl-1">
-                          <Search className="w-4 h-4 text-slate-400" />
-                          심사역 확인 체크리스트
-                        </h4>
-                        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                          {loanInsight?.action_items?.length && loanInsight.action_items.length > 0 ? (
-                            <div className="divide-y divide-slate-100">
-                              {loanInsight.action_items.map((item: string, i: number) => (
-                                <div key={i} className="flex items-start gap-4 p-4 hover:bg-slate-50 transition-all cursor-default group">
-                                  <div className="mt-0.5 w-5 h-5 rounded border-2 border-slate-300 group-hover:border-indigo-500 bg-white flex items-center justify-center shrink-0 transition-colors">
-                                    {/* Checkbox Placeholder */}
-                                  </div>
-                                  <span className="text-sm text-slate-600 group-hover:text-slate-900 font-medium leading-normal pt-0.5 transition-colors">
-                                    {item}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <div className="p-6 text-center text-slate-400 italic text-sm">추가 확인이 필요한 항목이 없습니다.</div>
-                          )}
-                        </div>
-                      </div>
-
                       {/* Metadata Footer */}
                       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pt-6 text-[11px] text-slate-400 font-medium border-t border-slate-100">
                         <div className="flex flex-wrap gap-x-4 gap-y-1">

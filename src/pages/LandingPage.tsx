@@ -58,28 +58,28 @@ const HeroSection = () => {
                 <FadeUp delay={0.1}>
                     <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-blue-300 text-xs font-medium tracking-wider mb-8 shadow-[0_0_20px_rgba(59,130,246,0.2)] backdrop-blur-md">
                         <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-                        Nano Gorilla Team
+                        rKYC Intelligence
                     </div>
                 </FadeUp>
 
                 <FadeUp delay={0.2}>
-                    <h1 className="text-6xl md:text-8xl lg:text-9xl font-bold tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white to-white/60 leading-[1.1] mb-8 word-keep-all">
-                        진짜로 고객을 알자,<br />
-                        <span className="text-blue-500">rKYC</span>
+                    <h1 className="text-5xl md:text-7xl lg:text-8xl font-bold tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white to-white/60 leading-[1.1] mb-8 word-keep-all">
+                        규제 대응을 넘어,<br />
+                        <span className="text-blue-500">가장 강력한 영업 자산</span>으로.
                     </h1>
                 </FadeUp>
 
                 <FadeUp delay={0.4}>
-                    <p className="text-xl md:text-3xl text-white/70 max-w-4xl mx-auto leading-relaxed font-light tracking-tight word-keep-all">
-                        지루한 오퍼레이션 업무가<br className="hidden md:block" />
-                        <span className="text-white font-semibold">290억 가치의 비즈니스</span>로 전환되는 순간.<br />
-                        나노고릴라가 그 변화를 시작합니다.
+                    <p className="text-xl md:text-2xl text-white/70 max-w-4xl mx-auto leading-relaxed font-light tracking-tight word-keep-all">
+                        KYC 데이터는 단순 보관용이 아닙니다.<br className="hidden md:block" />
+                        AI로 분석된 내부 데이터와 외부 시장 정보의 결합이<br className="hidden md:block" />
+                        <span className="text-white font-semibold">새로운 영업 기회</span>를 창출합니다.
                     </p>
                 </FadeUp>
 
                 <FadeUp delay={0.6} className="mt-12 flex flex-col sm:flex-row items-center justify-center gap-6">
                     <Button className="rounded-full h-14 px-8 text-lg bg-blue-600 hover:bg-blue-500 text-white transition-all hover:scale-105 shadow-[0_0_30px_rgba(37,99,235,0.4)]">
-                        분석 엔진 가동하기
+                        데모 시작하기
                         <ArrowRight className="ml-2 w-5 h-5" />
                     </Button>
                 </FadeUp>
@@ -94,30 +94,39 @@ const ProblemSection = () => {
             <div className="container mx-auto px-6 max-w-5xl">
                 <div className="grid md:grid-cols-2 gap-16 items-center">
                     <FadeUp>
-                        <h2 className="text-4xl md:text-6xl font-bold text-white mb-6 word-keep-all leading-tight">
-                            <span className="text-white/40">질문 하나 드립니다.</span><br />
-                            고객이 은행에 오면 가장 먼저 무엇을 합니까?
+                        <h2 className="text-4xl md:text-5xl font-bold text-white mb-6 word-keep-all leading-tight">
+                            <span className="text-white/40">The Problem</span><br />
+                            데이터의 <span className="text-red-400">무덤</span>이 된<br />
+                            KYC 프로세스
                         </h2>
                     </FadeUp>
                     <FadeUp delay={0.2} className="space-y-6">
                         <div className="p-6 rounded-2xl bg-white/5 border border-white/10">
-                            <h3 className="text-xl font-bold text-red-400 mb-3 flex items-center gap-2">
-                                <AlertTriangle className="w-5 h-5" />
-                                바로 KYC (Know Your Customer)
+                            <h3 className="text-xl font-bold text-white mb-3 flex items-center gap-2">
+                                <AlertTriangle className="w-5 h-5 text-red-400" />
+                                매년 반복되는 비효율
                             </h3>
                             <p className="text-white/60 leading-relaxed word-keep-all">
-                                이것 없이는 계좌 개설도, 여신도 불가능합니다.<br />
-                                하지만 현장에서는 어떻습니까?
+                                은행은 매년 수천억 원의 비용을 들여 서류를 징구하지만,<br />
+                                정작 그 안의 텍스트 데이터는 활용되지 못한 채<br />
+                                규제 준수(Compliance)를 끝으로 버려지고 있습니다.
                             </p>
                         </div>
-                        <div className="space-y-2">
-                            <p className="text-2xl font-light text-white/80 word-keep-all">
-                                "지루한 서류 작업, 버려지는 수많은 정보들..."
-                            </p>
-                            <p className="text-white/40 word-keep-all">
-                                사업자등록증, 주주명부, 재무제표... 수많은 서류를 징구하지만<br />
-                                영업점과 고객 모두에게 그저 <span className="text-red-400 font-medium">아까운 시간</span>일 뿐입니다.
-                            </p>
+                        <div className="space-y-4 pt-2">
+                            <div className="flex items-start gap-4">
+                                <div className="mt-1 p-2 bg-white/5 rounded-lg"><FileText className="w-5 h-5 text-white/40" /></div>
+                                <div>
+                                    <h4 className="text-white font-bold mb-1">정적인 서류 보관</h4>
+                                    <p className="text-sm text-white/50">사업자등록증, 주주명부 등 핵심 정보가 이미지로만 존재</p>
+                                </div>
+                            </div>
+                            <div className="flex items-start gap-4">
+                                <div className="mt-1 p-2 bg-white/5 rounded-lg"><Timer className="w-5 h-5 text-white/40" /></div>
+                                <div>
+                                    <h4 className="text-white font-bold mb-1">기회 비용 발생</h4>
+                                    <p className="text-sm text-white/50">단순 서류 검토에 뺏기는 뱅커들의 영업 시간</p>
+                                </div>
+                            </div>
                         </div>
                     </FadeUp>
                 </div>
@@ -132,24 +141,27 @@ const SolutionSection = () => {
             <div className="container mx-auto px-6 text-center">
                 <FadeUp>
                     <h2 className="text-3xl md:text-5xl font-bold text-white mb-6 word-keep-all">
-                        하지만, <span className="text-blue-500">버려지는 정보</span> 속에 돈이 있습니다.
+                        숨겨진 맥락을 연결하는 <span className="text-blue-500">Intelligence Engine</span>
                     </h2>
                     <p className="text-xl text-white/60 max-w-3xl mx-auto mb-16 word-keep-all leading-relaxed">
-                        기업의 여신 데이터, 거래 내역, KYC 정보...<br />
-                        사실 어디서도 돈 주고 살 수 없는 귀한 **내부 정보**입니다.<br />
-                        이 정보가 **AI**를 만나는 순간, **대체 불가능한 가치**가 만들어집니다.
+                        rKYC는 단순한 자동화 도구가 아닙니다.<br />
+                        기업 내부의 정형·비정형 데이터와 외부 시장 변수를 실시간으로 결합하여,<br />
+                        <span className="text-white font-semibold">살아있는 기업 분석 리포트</span>를 제공합니다.
                     </p>
                 </FadeUp>
 
                 <FadeUp delay={0.2} className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
                     {[
-                        { icon: Database, bg: "bg-blue-500/10", text: "귀중한 내부 데이터", color: "text-blue-400" },
-                        { icon: Cpu, bg: "bg-purple-500/10", text: "AI 인텔리전스", color: "text-purple-400" },
-                        { icon: Zap, bg: "bg-yellow-500/10", text: "폭발적 가치 창출", color: "text-yellow-400" }
+                        { icon: Database, bg: "bg-blue-500/10", text: "Compliance Data Asset", sub: "규제 데이터를 자산화", color: "text-blue-400" },
+                        { icon: Cpu, bg: "bg-purple-500/10", text: "Contextual AI Analysis", sub: "맥락을 이해하는 분석", color: "text-purple-400" },
+                        { icon: Zap, bg: "bg-yellow-500/10", text: "Proactive Insights", sub: "선제적 영업 기회 발굴", color: "text-yellow-400" }
                     ].map((item, i) => (
-                        <div key={i} className={`p-8 rounded-2xl border border-white/5 ${item.bg} flex flex-col items-center gap-4`}>
-                            <item.icon className={`w-10 h-10 ${item.color}`} />
-                            <span className={`text-lg font-bold ${item.color}`}>{item.text}</span>
+                        <div key={i} className={`p-8 rounded-2xl border border-white/5 ${item.bg} flex flex-col items-center gap-3 text-center transition-transform hover:-translate-y-1`}>
+                            <item.icon className={`w-10 h-10 ${item.color} mb-2`} />
+                            <div>
+                                <h3 className={`text-lg font-bold ${item.color} mb-1`}>{item.text}</h3>
+                                <p className="text-xs text-white/50">{item.sub}</p>
+                            </div>
                         </div>
                     ))}
                 </FadeUp>
@@ -168,14 +180,14 @@ const ProductShowcase = () => {
                 <div className="text-center mb-16">
                     <FadeUp>
                         <div className="inline-block px-4 py-1.5 rounded-full bg-blue-500/20 text-blue-300 text-sm font-bold mb-4 border border-blue-500/30">
-                            Live Demo
+                            Live Demo Cases
                         </div>
-                        <h2 className="text-4xl md:text-7xl font-bold text-white tracking-tighter mb-6 word-keep-all">
-                            MK전자, 1분 만에 파악하기
+                        <h2 className="text-4xl md:text-6xl font-bold text-white tracking-tighter mb-6 word-keep-all">
+                            복잡한 기업 분석, <br className="md:hidden" />AI가 1분 만에 끝냅니다.
                         </h2>
                         <p className="text-xl text-white/50 max-w-2xl mx-auto word-keep-all">
-                            "이 기업은 어떻게 돈을 벌까? 취약점은 무엇일까?"<br />
-                            사람이 하면 며칠 걸릴 분석, rKYC는 자동입니다.
+                            재무제표, 뉴스, 내부 여신 데이터, 거시 경제 지표...<br />
+                            수천 개의 데이터 포인트를 연결해 <strong>'지금 해야 할 영업'</strong>을 알려줍니다.
                         </p>
                     </FadeUp>
                 </div>
@@ -233,9 +245,9 @@ const ProductShowcase = () => {
 
                                 {/* AI Analysis Logic Badge */}
                                 <div className="mt-auto p-3 rounded-lg bg-gradient-to-br from-indigo-900/50 to-purple-900/50 border border-white/10">
-                                    <p className="text-[10px] text-indigo-300 font-bold mb-1">AI Logic</p>
+                                    <p className="text-[10px] text-indigo-300 font-bold mb-1">Intelligence Core</p>
                                     <p className="text-[10px] text-white/60 leading-tight">
-                                        내부 거래 데이터와<br />외부 매크로 변수 결합중...
+                                        Processing Internal Data<br />& Market Variables...
                                     </p>
                                 </div>
                             </div>
@@ -300,21 +312,21 @@ const ProductShowcase = () => {
                                             {/* SIGNAL 1: Opportunity */}
                                             <div className="p-3 bg-green-500/10 rounded-lg border border-green-500/20 flex flex-col gap-1">
                                                 <div className="flex justify-between items-start">
-                                                    <span className="text-[10px] font-bold text-green-400 bg-green-500/20 px-1.5 py-0.5 rounded">HOZ (기회)</span>
-                                                    <span className="text-[10px] text-green-400/60">방금 전</span>
+                                                    <span className="text-[10px] font-bold text-green-400 bg-green-500/20 px-1.5 py-0.5 rounded">OPPORTUNITY</span>
+                                                    <span className="text-[10px] text-green-400/60">Just now</span>
                                                 </div>
-                                                <div className="text-sm text-green-100 font-medium">담보 토지 인근 도로 개설 확정</div>
-                                                <div className="text-[10px] text-green-400/70">→ 담보 가치 급등 예상 (여신 영업 기회)</div>
+                                                <div className="text-sm text-green-100 font-medium">담보 가치 상승 시그널 감지</div>
+                                                <div className="text-sm text-green-400/70">→ 인근 도로 개설 확정으로 인한 지가 상승 예상</div>
                                             </div>
 
                                             {/* SIGNAL 2: Risk */}
                                             <div className="p-3 bg-red-500/10 rounded-lg border border-red-500/20 flex flex-col gap-1">
                                                 <div className="flex justify-between items-start">
-                                                    <span className="text-[10px] font-bold text-red-400 bg-red-500/20 px-1.5 py-0.5 rounded">RISK (위험)</span>
-                                                    <span className="text-[10px] text-red-400/60">10분 전</span>
+                                                    <span className="text-[10px] font-bold text-red-400 bg-red-500/20 px-1.5 py-0.5 rounded">RISK ALERT</span>
+                                                    <span className="text-[10px] text-red-400/60">10m ago</span>
                                                 </div>
-                                                <div className="text-sm text-red-100 font-medium">원/달러 환율 1,450원 돌파</div>
-                                                <div className="text-[10px] text-red-400/70">→ 유산스 결제 대금 부담 증가 예상</div>
+                                                <div className="text-sm text-red-100 font-medium">FX Volatility: USD/KRW &gt; 1,450</div>
+                                                <div className="text-sm text-red-400/70">→ 수입 원자재 결제 대금 리스크 증가</div>
                                             </div>
 
                                             {/* SIGNAL 3: Info */}
@@ -348,7 +360,7 @@ const ImpactSection = () => {
                 <FadeUp>
                     <div className="text-center mb-20">
                         <h2 className="text-4xl md:text-6xl font-bold text-white mb-6 word-keep-all">
-                            비용이 아닌, <span className="text-blue-500">이익</span>으로의 전환
+                            Cost Center에서<br className="md:hidden" /> <span className="text-blue-500">Profit Center</span>로.
                         </h2>
                         <p className="text-white/40 text-lg">JB금융그룹 기준 시뮬레이션 결과</p>
                     </div>
@@ -445,13 +457,13 @@ const Footer = () => (
 
         <FadeUp className="relative z-10">
             <h2 className="text-4xl md:text-5xl font-bold text-white mb-8 tracking-tight word-keep-all">
-                이 모든 분석이,<br />단 1분 안에 이루어집니다.
+                지금 바로, <br />귀행의 데이터 잠재력을 확인하세요.
             </h2>
 
             <div className="group relative inline-block">
                 <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full blur opacity-20 group-hover:opacity-75 transition duration-1000 group-hover:duration-200" />
                 <Button className="relative h-16 px-12 text-lg rounded-full bg-white text-black hover:bg-neutral-100 hover:scale-105 transition-all duration-300 shadow-[0_0_40px_rgba(255,255,255,0.3)] border border-white/50 word-keep-all">
-                    rKYC 엔진 초기화 (Initialize)
+                    데모 체험 신청
                 </Button>
             </div>
 
