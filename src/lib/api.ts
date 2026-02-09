@@ -916,6 +916,35 @@ export async function getBankingFinancialStatementsDart(corpId: string): Promise
 }
 
 // ============================================================
+// Banking Insights API (Rule-based 교차 분석)
+// ============================================================
+
+export interface ApiBankingInsight {
+  type: 'RISK' | 'OPPORTUNITY';
+  priority: 'HIGH' | 'MED' | 'LOW';
+  title: string;
+  description: string;
+  related_signal_ids: string[];
+  related_signal_titles: string[];
+  metric_name: string;
+  metric_value: string;
+  threshold: string;
+}
+
+export interface ApiBankingInsightsResponse {
+  corp_id: string;
+  corp_name: string;
+  risk_insights: ApiBankingInsight[];
+  opportunity_insights: ApiBankingInsight[];
+  total_risk_count: number;
+  total_opportunity_count: number;
+}
+
+export async function getBankingInsights(corpId: string): Promise<ApiBankingInsightsResponse> {
+  return fetchApi<ApiBankingInsightsResponse>(`/api/v1/banking-data/${corpId}/insights`);
+}
+
+// ============================================================
 // DART Financial Statements API (100% Fact - DART 공시)
 // ============================================================
 

@@ -23,6 +23,7 @@ import {
   getBankingData,
   getBankingDataHistory,
   getBankingRiskAlerts,
+  getBankingInsights,
   ApiCorporation,
   ApiSignal,
   ApiSignalDetail,
@@ -36,6 +37,7 @@ import {
   ApiBankingDataResponse,
   ApiBankingDataSummary,
   ApiBankingRiskAlertListResponse,
+  ApiBankingInsightsResponse,
 } from '@/lib/api';
 import type {
   ApiCorpProfileResponse,
@@ -609,6 +611,16 @@ export function useBankingRiskAlerts(corpId: string) {
   return useQuery({
     queryKey: ['banking-risk-alerts', corpId],
     queryFn: () => getBankingRiskAlerts(corpId),
+    enabled: !!corpId,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+}
+
+export function useBankingInsights(corpId: string) {
+  return useQuery({
+    queryKey: ['banking-insights', corpId],
+    queryFn: () => getBankingInsights(corpId),
     enabled: !!corpId,
     staleTime: 5 * 60 * 1000,
     retry: false,

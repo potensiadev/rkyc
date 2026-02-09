@@ -501,3 +501,82 @@ async def get_all_banking_data_summary(
         ))
 
     return summaries
+
+
+@router.get("/{corp_id}/insights")
+async def get_banking_insights(
+    corp_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Banking Data + Signal 교차 분석 인사이트 조회
+
+    Rule-based 엔진으로 리스크/기회 인사이트 생성:
+    - 수신/여신 비율 분석
+    - 환헤지 + 수출 시그널
+    - 신용대출 비중 + 매출 시그널
+    - LTV + 업황 시그널
+    - 내부등급 변동
+    - 연체 여부
+    - 수신 추세
+    - 재무건전성
+    """
+    from app.services.banking_insights import generate_banking_insights
+
+    # 1. Banking Data 조회
+    banking_query = (
+        select(BankingData)
+        .where(BankingData.corp_id == corp_id)
+        .order_by(BankingData.data_date.desc())
+        .limit(1)
+    )
+    banking_result = await db.execute(banking_query)
+    banking_data = banking_result.scalar_one_or_none()
+
+    if not banking_data:
+        raise HTTPException(status_code=404, detail=f"Banking data not found: {corp_id}")
+
+    # 2. Signals 조회
+    signals_query = text("""
+        SELECT id, signal_type, event_type, title, summary, impact_direction, impact_strength
+        FROM rkyc_signal
+        WHERE corp_id = :corp_id
+        ORDER BY detected_at DESC
+        LIMIT 50
+    """)
+    signals_result = await db.execute(signals_query, {"corp_id": corp_id})
+    signals = [
+        {
+            "id": str(row[0]),
+            "signal_type": row[1],
+            "event_type": row[2],
+            "title": row[3],
+            "summary": row[4],
+            "impact_direction": row[5],
+            "impact_strength": row[6],
+        }
+        for row in signals_result.fetchall()
+    ]
+
+    # 3. Corp name 조회
+    corp_query = select(Corporation.corp_name).where(Corporation.corp_id == corp_id)
+    corp_result = await db.execute(corp_query)
+    corp_name = corp_result.scalar_one_or_none() or ""
+
+    # 4. 인사이트 생성
+    banking_data_dict = {
+        "loan_exposure": banking_data.loan_exposure,
+        "deposit_trend": banking_data.deposit_trend,
+        "card_usage": banking_data.card_usage,
+        "collateral_detail": banking_data.collateral_detail,
+        "trade_finance": banking_data.trade_finance,
+        "financial_statements": banking_data.financial_statements,
+    }
+
+    insights = generate_banking_insights(banking_data_dict, signals, corp_name)
+
+    return {
+        "corp_id": corp_id,
+        "corp_name": corp_name,
+        **insights,
+    }

@@ -377,6 +377,8 @@ export function DemoPanel() {
         </div>
       )}
 
+
+
       {/* Info Text */}
       <p className="text-[11px] text-amber-600/80 mt-3 text-center">
         * 접속/조회는 분석을 실행하지 않습니다. 위 기능은 시연을 위한 수동 실행입니다.

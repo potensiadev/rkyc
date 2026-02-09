@@ -55,7 +55,7 @@ import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import ReportPreviewModal from "@/components/reports/ReportPreviewModal";
-import { useCorporation, useSignals, useCorporationSnapshot, useCorpProfile, useCorpProfileDetail, useRefreshCorpProfile, useJobStatus, useLoanInsight, useBankingData, useDartFinancials } from "@/hooks/useApi";
+import { useCorporation, useSignals, useCorporationSnapshot, useCorpProfile, useCorpProfileDetail, useRefreshCorpProfile, useJobStatus, useLoanInsight, useBankingData, useBankingInsights, useDartFinancials } from "@/hooks/useApi";
 import { toast } from "sonner";
 import type { ProfileConfidence, CorpProfile } from "@/types/profile";
 import { useQueryClient } from "@tanstack/react-query";
@@ -266,6 +266,8 @@ export default function CorporateDetailPage() {
   const loanInsight = loanInsightData?.insight || null;
   // Banking Data (PRD v1.1)
   const { data: bankingData, isLoading: isLoadingBankingData } = useBankingData(corpId || "");
+  // Banking Insights (Rule-based 교차 분석)
+  const { data: bankingInsights, isLoading: isLoadingBankingInsights } = useBankingInsights(corpId || "");
   // DART 재무제표 (100% Fact)
   const { data: dartFinancials, isLoading: isLoadingDartFinancials } = useDartFinancials(corporation?.name || "");
   // Banking Data Drill Down State
@@ -588,19 +590,37 @@ export default function CorporateDetailPage() {
                 </div>
                 <div className="text-[14px] leading-relaxed text-slate-600 mb-6 bg-slate-50/50 p-4 rounded-xl border border-slate-100">
                   {loanInsight?.executive_summary ? (
-                    <p>{loanInsight.executive_summary}</p>
+                    <ul className="space-y-2">
+                      {loanInsight.executive_summary
+                        .split(/\n|•/)
+                        .map(line => line.trim())
+                        .filter(line => line.length > 0 && !line.startsWith('['))
+                        .map((line, idx) => (
+                          <li key={idx} className="flex items-start gap-2">
+                            <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0" />
+                            <span>{line}</span>
+                          </li>
+                        ))}
+                    </ul>
                   ) : (
-                    <p>
-                      <strong className="text-slate-900 font-semibold text-foreground">{corporation.name}</strong>은(는) {corporation.industry} 분야에서
-                      사업을 영위하는 기업입니다.
-                      {corporation.headquarters ? ` 본사는 ${corporation.headquarters}에 소재하고 있습니다.` : ''}
-                      {corporation.bankRelationship.hasRelationship && (
-                        <span className="block mt-1">
-                          당행과는 여신 {corporation.bankRelationship.loanBalance}, 수신 {corporation.bankRelationship.depositBalance} 규모의
-                          거래 관계를 유지하고 있습니다.
-                        </span>
+                    <ul className="space-y-2">
+                      <li className="flex items-start gap-2">
+                        <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0" />
+                        <span><strong className="text-slate-900 font-semibold">{corporation.name}</strong>은(는) {corporation.industry} 분야에서 사업을 영위하는 기업</span>
+                      </li>
+                      {corporation.headquarters && (
+                        <li className="flex items-start gap-2">
+                          <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0" />
+                          <span>본사: {corporation.headquarters}</span>
+                        </li>
                       )}
-                    </p>
+                      {bankingData && (
+                        <li className="flex items-start gap-2">
+                          <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0" />
+                          <span>당행 거래: 여신 {((bankingData.loan_exposure as any)?.total_exposure_krw / 100000000).toFixed(0)}억, 수신 {((bankingData.deposit_trend as any)?.current_balance / 100000000).toFixed(0)}억</span>
+                        </li>
+                      )}
+                    </ul>
                   )}
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -923,6 +943,87 @@ export default function CorporateDetailPage() {
                   </div>
                 ) : bankingData ? (
                   <div className="space-y-6">
+
+                    {/* Banking Insights - Rule-based 교차 분석 */}
+                    {bankingInsights && (bankingInsights.total_risk_count > 0 || bankingInsights.total_opportunity_count > 0) && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Risk Insights */}
+                        {bankingInsights.risk_insights.length > 0 && (
+                          <div className="bg-gradient-to-br from-rose-50 to-orange-50 rounded-xl p-5 border border-rose-200">
+                            <h4 className="text-sm font-bold text-rose-800 mb-3 flex items-center gap-2">
+                              <AlertTriangle className="w-4 h-4" />
+                              핵심 리스크 요인 ({bankingInsights.total_risk_count})
+                            </h4>
+                            <div className="space-y-3">
+                              {bankingInsights.risk_insights.slice(0, 3).map((insight, idx) => (
+                                <div key={idx} className="bg-white/70 rounded-lg p-3 border border-rose-100">
+                                  <div className="flex items-start gap-2">
+                                    <span className={`shrink-0 mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                      insight.priority === 'HIGH' ? 'bg-rose-600 text-white' :
+                                      insight.priority === 'MED' ? 'bg-orange-500 text-white' :
+                                      'bg-amber-400 text-amber-900'
+                                    }`}>
+                                      {insight.priority}
+                                    </span>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-semibold text-slate-800">{insight.title}</p>
+                                      <p className="text-xs text-slate-600 mt-1 leading-relaxed">{insight.description}</p>
+                                      {insight.related_signal_titles.length > 0 && (
+                                        <div className="mt-2 flex flex-wrap gap-1">
+                                          {insight.related_signal_titles.slice(0, 2).map((title, i) => (
+                                            <span key={i} className="text-[10px] px-1.5 py-0.5 bg-rose-100 text-rose-700 rounded">
+                                              {title.length > 30 ? title.slice(0, 30) + '...' : title}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Opportunity Insights */}
+                        {bankingInsights.opportunity_insights.length > 0 && (
+                          <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl p-5 border border-emerald-200">
+                            <h4 className="text-sm font-bold text-emerald-800 mb-3 flex items-center gap-2">
+                              <TrendingUp className="w-4 h-4" />
+                              핵심 기회 요인 ({bankingInsights.total_opportunity_count})
+                            </h4>
+                            <div className="space-y-3">
+                              {bankingInsights.opportunity_insights.slice(0, 3).map((insight, idx) => (
+                                <div key={idx} className="bg-white/70 rounded-lg p-3 border border-emerald-100">
+                                  <div className="flex items-start gap-2">
+                                    <span className={`shrink-0 mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                      insight.priority === 'HIGH' ? 'bg-emerald-600 text-white' :
+                                      insight.priority === 'MED' ? 'bg-teal-500 text-white' :
+                                      'bg-cyan-400 text-cyan-900'
+                                    }`}>
+                                      {insight.priority}
+                                    </span>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-semibold text-slate-800">{insight.title}</p>
+                                      <p className="text-xs text-slate-600 mt-1 leading-relaxed">{insight.description}</p>
+                                      {insight.related_signal_titles.length > 0 && (
+                                        <div className="mt-2 flex flex-wrap gap-1">
+                                          {insight.related_signal_titles.slice(0, 2).map((title, i) => (
+                                            <span key={i} className="text-[10px] px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded">
+                                              {title.length > 30 ? title.slice(0, 30) + '...' : title}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {/* Main Dashboard Grid - High Density */}
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -1330,15 +1431,19 @@ export default function CorporateDetailPage() {
                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Total Deposit</p>
                         <div className="flex items-baseline gap-1">
                           <span className="text-3xl font-mono font-bold text-slate-900">
-                            {corporation.bankRelationship.depositBalance ? corporation.bankRelationship.depositBalance.replace(/[^0-9]/g, '') : "0"}
+                            {(bankingData?.deposit_trend as any)?.current_balance
+                              ? `${((bankingData.deposit_trend as any).current_balance / 100000000).toFixed(0)}`
+                              : "0"}
                           </span>
                           <span className="text-sm font-medium text-slate-500">억원</span>
                         </div>
                       </div>
                     </div>
                     <div className="h-12 w-full">
-                      {/* Placeholder sparkline data */}
-                      <Sparkline data={[30, 32, 33, 34, 34, 34]} color="#10b981" />
+                      <Sparkline
+                        data={((bankingData?.deposit_trend as any)?.monthly_balance || []).slice(-6).map((m: any) => m.balance / 100000000)}
+                        color="#10b981"
+                      />
                     </div>
                   </div>
                 </div>

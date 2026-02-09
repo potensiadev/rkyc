@@ -1,5 +1,5 @@
 import { Separator } from "@/components/ui/separator";
-import { useCorporationReport, useCorpProfile, useCorporation, useCorporationSnapshot, useLoanInsight } from "@/hooks/useApi";
+import { useCorporationReport, useCorpProfile, useCorporation, useCorporationSnapshot, useLoanInsight, useBankingData } from "@/hooks/useApi";
 import {
   formatDate,
 } from "@/data/signals";
@@ -55,6 +55,8 @@ const ReportDocument = ({
   const { data: snapshot } = useCorporationSnapshot(corporationId);
   // Loan Insight (조건부)
   const { data: loanInsightData, isLoading: isLoadingLoanInsight } = useLoanInsight(corporationId);
+  // Banking Data (수신 잔액 등)
+  const { data: bankingData } = useBankingData(corporationId);
 
   const isLoading = isLoadingReport || isLoadingCorp;
 
@@ -321,7 +323,7 @@ const ReportDocument = ({
       )}
 
       {/* Bank Relationship - CorporateDetailPage와 동일하게 */}
-      {(snapshot?.snapshot_json?.credit?.has_loan || corporation?.bankRelationship?.hasRelationship) && (
+      {(snapshot?.snapshot_json?.credit?.has_loan || bankingData) && (
         <section className="mb-8 break-inside-avoid">
           <h2 className="text-lg font-semibold text-foreground mb-4 pb-2 border-b border-border flex items-center gap-2">
             <Landmark className="w-4 h-4" />
@@ -333,7 +335,11 @@ const ReportDocument = ({
               <div className="flex items-center gap-6">
                 <div>
                   <span className="text-muted-foreground text-xs">수신</span>
-                  <span className="ml-2 font-medium">{corporation?.bankRelationship?.depositBalance || "-"}</span>
+                  <span className="ml-2 font-medium">
+                    {(bankingData?.deposit_trend as any)?.current_balance
+                      ? `${((bankingData.deposit_trend as any).current_balance / 100000000).toFixed(0)}억원`
+                      : "-"}
+                  </span>
                 </div>
                 <div>
                   <span className="text-muted-foreground text-xs">여신</span>

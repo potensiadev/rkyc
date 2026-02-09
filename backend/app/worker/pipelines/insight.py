@@ -42,7 +42,7 @@ LOAN_INSIGHT_SYSTEM_PROMPT = """당신은 은행의 '기업 여신 심사역(Cre
 다음 JSON 형식으로 출력하십시오. 마크다운 코드블록 없이 순수 JSON만 출력하세요.
 
 {{
-  "executive_summary": "5문장으로 작성. 기업을 처음 접하는 심사역도 즉시 파악 가능하도록 상세히 서술. (1) 기업명과 업종, 주요 사업 영역, (2) 설립연도/매출 규모/수출 비중 등 기본 현황, (3) 당행과의 거래 현황 (여신 규모, 주요 상품), (4) 현재 감지된 핵심 리스크 요약, (5) 주목할 영업 기회 또는 성장 가능성. 300자 내외.",
+  "executive_summary": "• (bullet 1) 기업명과 업종, 주요 사업 영역\n• (bullet 2) 설립연도/매출 규모/수출 비중 등 기본 현황 (확인된 숫자만)\n• (bullet 3) 당행과의 거래 현황 (여신 규모, 주요 상품)\n• (bullet 4) 현재 감지된 핵심 리스크 요약\n• (bullet 5) 주목할 영업 기회 또는 성장 가능성\n\n[필수 규칙]\n- 각 항목은 '•'로 시작\n- 추측/가설/전망 절대 금지 (예: ~할 것으로 예상, ~가능성 있음 금지)\n- 확인된 사실만 기술 (출처: DART, 당행 시스템, 공시 정보)\n- 숫자는 출처가 있는 것만 인용\n- 불확실한 정보는 생략",
   "stance_level": "CAUTION | MONITORING | STABLE | POSITIVE",
   "stance_label": "한글 라벨 (예: 주의 요망, 모니터링 필요, 중립/안정적, 긍정적)",
   "narrative": "종합 의견 서술 (3-4문장). '당행 여신 XXX억원' 등 구체적 숫자를 인용하여 은행 관점의 결론 도출.",
@@ -510,12 +510,6 @@ Banking Data의 실제 숫자(여신 금액, LTV, 환헤지율 등)를 반드시
             if s.get("impact_direction") == "RISK" and s.get("impact_strength") == "HIGH"
         )
 
-        # 기본 executive_summary 생성
-        business_summary = ""
-        if profile:
-            business_summary = profile.get("business_summary") or profile.get("business_model") or ""
-        executive_summary = f"{corp_name}은(는) {business_summary[:50]}..." if business_summary else f"{corp_name}에 대한 분석 결과입니다."
-
         # Banking Data에서 핵심 지표 추출
         loan_exposure_str = ""
         ltv_str = ""
@@ -551,29 +545,45 @@ Banking Data의 실제 숫자(여신 금액, LTV, 환헤지율 등)를 반드시
                 elif isinstance(opp, dict):
                     key_opportunities.append(f"당행 시스템 감지: {opp.get('title', opp)}")
 
+        # Bullet point 형식 executive_summary 생성
+        business_summary = ""
+        if profile:
+            business_summary = profile.get("business_summary") or profile.get("business_model") or ""
+
+        summary_bullets = []
+        summary_bullets.append(f"• {corp_name}: {business_summary[:80]}" if business_summary else f"• {corp_name}")
+        if loan_exposure_str:
+            summary_bullets.append(f"• {loan_exposure_str}")
+        if ltv_str:
+            summary_bullets.append(f"• 담보현황: {ltv_str}")
+        if hedge_ratio_str:
+            summary_bullets.append(f"• 무역금융: {hedge_ratio_str}")
+
         if high_risk_count > 0 or risk_count > (opp_count * 2):
             stance_level = "CAUTION"
             stance_label = "주의 요망"
             narrative = f"다수의 리스크 시그널이 감지되었습니다. {loan_exposure_str} 관련 모니터링이 필요합니다."
             key_risks.append("자동 산정: High Risk 시그널 감지됨" if high_risk_count > 0 else "자동 산정: Risk 시그널 다수")
-            executive_summary += f" {loan_exposure_str} 관련 리스크 {risk_count}건 감지."
+            summary_bullets.append(f"• 리스크 시그널 {risk_count}건 감지")
         elif risk_count > opp_count:
             stance_level = "MONITORING"
             stance_label = "모니터링 필요"
             narrative = f"일부 리스크 요인이 존재합니다. {loan_exposure_str}, {ltv_str} 관련 모니터링이 권장됩니다."
             key_risks.append("자동 산정: 일부 Risk 시그널 존재")
-            executive_summary += f" {loan_exposure_str} 모니터링 권장."
+            summary_bullets.append(f"• 리스크 시그널 {risk_count}건 - 모니터링 권장")
         elif opp_count > risk_count:
             stance_level = "POSITIVE"
             stance_label = "긍정적"
             narrative = f"기회 시그널이 다수 감지되었습니다. {loan_exposure_str} 한도 확대 검토 가능성이 있습니다."
             key_opportunities.append("자동 산정: 기회 시그널 다수 감지 - 여신 확대 검토 권고")
-            executive_summary += f" {loan_exposure_str} 확대 검토 가능."
+            summary_bullets.append(f"• 기회 시그널 {opp_count}건 감지")
         else:
             stance_level = "STABLE"
             stance_label = "중립/안정적"
             narrative = f"특이한 시그널이 감지되지 않았습니다. {loan_exposure_str}은(는) 현재 안정적입니다."
-            executive_summary += f" {loan_exposure_str} 안정적."
+            summary_bullets.append("• 현재 특이 시그널 없음")
+
+        executive_summary = "\n".join(summary_bullets)
 
         self._save_loan_insight_to_db(
             corp_id=corp_id,
@@ -647,10 +657,16 @@ Banking Data의 실제 숫자(여신 금액, LTV, 환헤지율 등)를 반드시
                 elif isinstance(opp, dict):
                     key_opportunities.append(f"당행 영업기회: {opp.get('title', opp)}")
 
-        if business_summary:
-            executive_summary = f"{corp_name}은(는) {business_summary[:60]}. {loan_exposure_str}. 현재 특이 시그널 없음."
-        else:
-            executive_summary = f"{corp_name}의 {loan_exposure_str}. 현재 특이 시그널이 감지되지 않았습니다."
+        # Bullet point 형식 executive_summary 생성
+        summary_bullets = []
+        summary_bullets.append(f"• {corp_name}: {business_summary[:80]}" if business_summary else f"• {corp_name}")
+        if loan_exposure_str:
+            summary_bullets.append(f"• {loan_exposure_str}")
+        if mitigating_factors:
+            for mf in mitigating_factors[:2]:
+                summary_bullets.append(f"• {mf}")
+        summary_bullets.append("• 현재 특이 시그널 없음")
+        executive_summary = "\n".join(summary_bullets)
 
         narrative = f"{corp_name}에 대해 새로운 외부 시그널이 발견되지 않았습니다. {loan_exposure_str}은(는) 현재 기준으로 안정적입니다."
         if key_risks:
