@@ -180,6 +180,7 @@ from app.worker.llm.orchestrator import (
 )
 
 # Multi-Search Provider Architecture (검색 내장 LLM 2-Track)
+# v2.0: Gemini Grounding Primary 모드 지원
 from app.worker.llm.search_providers import (
     MultiSearchManager,
     SearchResult,
@@ -191,6 +192,12 @@ from app.worker.llm.search_providers import (
     get_multi_search_manager,
     reset_multi_search_manager,
     get_search_providers_status,
+    # v2.0: Gemini Grounding 설정 (롤백 가능)
+    USE_REAL_GROUNDING,
+    USE_GEMINI_AS_PRIMARY,
+    get_search_config,
+    set_gemini_primary,
+    set_grounding_enabled,
 )
 
 # Field Assignment (한국어 특화 필드 분담)
@@ -520,6 +527,12 @@ __all__ = [
     "get_multi_search_manager",
     "reset_multi_search_manager",
     "get_search_providers_status",
+    # v2.0: Gemini Grounding 설정 (롤백 가능)
+    "USE_REAL_GROUNDING",
+    "USE_GEMINI_AS_PRIMARY",
+    "get_search_config",
+    "set_gemini_primary",
+    "set_grounding_enabled",
     # Field Assignment (한국어 특화 필드 분담)
     "FieldProvider",
     "FieldAssignment",

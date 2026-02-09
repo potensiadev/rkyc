@@ -47,8 +47,10 @@
 - Primary: Claude Opus 4.5 (claude-opus-4-5-20251101)
 - Fallback: GPT-5.2 Pro, Gemini 3 Pro Preview
 - External Search: **검색 내장 LLM 2-Track** (Perplexity 의존도 완화)
-  - Primary: Perplexity sonar-pro (실시간 검색 + AI 요약)
-  - Fallback: Gemini Grounding (Google Search 기반)
+  - **Primary: Gemini Grounding** (Google Search 기반, Citation 포함) - 비용 절약 모드
+  - Fallback: Perplexity sonar-pro (실시간 검색 + AI 요약)
+  - 설정: `USE_GEMINI_AS_PRIMARY=True` (롤백: False로 변경)
+  - Admin API: `/admin/search-providers/config`로 런타임 토글 가능
 
 ### Database
 - Supabase PostgreSQL (Tokyo ap-northeast-1)
@@ -1826,11 +1828,14 @@ CLAUDE.md
   - Sprint 2: Signal 3-Agent 병렬 (Direct/Industry/Environment), Orchestrator 패턴
   - Sprint 3: Cross-Validation 강화, Graceful Degradation, Provider Concurrency Limit
   - Sprint 4: Celery group() 분산 실행, Admin 모니터링 API
-- **검색 내장 LLM 2-Track** (ADR-010): Perplexity 의존도 완화
-  - Primary: Perplexity sonar-pro
-  - Fallback: Gemini Grounding (GOOGLE_API_KEY 활용)
-  - 추가 유료 API 없음! (Tavily, Brave 등 미사용)
-  - `/admin/search-providers/health`로 상태 모니터링
+- **검색 내장 LLM 2-Track** (ADR-010 → v2.0 업그레이드):
+  - **v2.0 Primary: Gemini Grounding** (Google Search 기반, Citation 포함, 비용 $0)
+  - Fallback: Perplexity sonar-pro (실시간 검색 + AI 요약, $5/1000 req)
+  - 설정 플래그: `USE_GEMINI_AS_PRIMARY=True`, `USE_REAL_GROUNDING=True`
+  - 롤백: 두 플래그를 False로 변경하면 기존 동작 복원
+  - Admin API: `/admin/search-providers/config` (런타임 토글)
+  - Admin API: `/admin/search-providers/test` (Provider 직접 테스트)
+  - Admin API: `/admin/search-providers/health` (건강 상태 확인)
 - **Cross-Coverage 검색** (세션 20):
   - Perplexity 실패 필드 → Gemini 커버
   - Gemini 실패 필드 → Perplexity 커버
@@ -2725,5 +2730,67 @@ CLAUDE.md
 - 숫자 왜곡 방지: 템플릿 변수로만 주입 (`{total_exposure_krw}`)
 - 권고 수준 제한: "검토 권고" 표현만 허용
 
+### 세션 33 (2026-02-09) - Gemini Grounding Primary 모드 구현 ✅
+**목표**: Perplexity 대체 - Gemini Grounding으로 비용 $0 검색 + Citation 제공
+
+**배경**:
+- Perplexity 비용: ~$5/1000 requests
+- Gemini Grounding: $0 (기존 GOOGLE_API_KEY 활용)
+- 목표: 동일한 품질 + Citation 제공으로 Hallucination 0% 유지
+
+**완료 항목**:
+
+#### 1. Gemini Grounding 실제 활성화
+- `search_providers.py`의 `GeminiGroundingProvider` 완전 재작성
+- litellm → google-generativeai 라이브러리 직접 사용
+- `Tool.from_google_search_retrieval()` 사용하여 Google Search 활성화
+- `grounding_metadata`에서 Citation URL 추출 로직 구현
+
+#### 2. Citation 추출 로직
+- `_extract_citations_from_grounding()`: grounding_chunks에서 URL 추출
+- 블로그/커뮤니티 필터링 (blog.naver.com, tistory.com 등 제외)
+- Confidence 계산: Citation 수 + 공시 도메인 보너스
+
+#### 3. 롤백 가능한 설정 플래그
+- `USE_REAL_GROUNDING = True`: 실제 Grounding 활성화 (False면 Legacy 모드)
+- `USE_GEMINI_AS_PRIMARY = True`: Gemini를 Primary로 사용 (False면 Perplexity Primary)
+- 런타임 변경 함수: `set_gemini_primary()`, `set_grounding_enabled()`
+
+#### 4. Admin API 추가
+| Endpoint | Method | 설명 |
+|----------|--------|------|
+| `/admin/search-providers/config` | GET | 현재 설정 조회 |
+| `/admin/search-providers/config` | POST | 설정 변경 (롤백 가능) |
+| `/admin/search-providers/test` | POST | Provider 직접 테스트 |
+| `/admin/search-providers/health` | GET | 건강 상태 확인 |
+
+**신규/수정된 파일**:
+```
+backend/app/worker/llm/search_providers.py (GeminiGroundingProvider 재작성)
+backend/app/worker/llm/__init__.py (새 함수 export)
+backend/app/api/v1/endpoints/admin.py (Admin API 추가)
+CLAUDE.md
+```
+
+**Gemini Grounding vs Perplexity 비교**:
+| 항목 | Perplexity | Gemini Grounding (v2.0) |
+|------|------------|------------------------|
+| 비용 | $5/1000 req | **$0** |
+| Citation | ✅ | ✅ (grounding_metadata) |
+| 실시간 검색 | ✅ | ✅ (Google Search) |
+| Confidence 기본값 | 0.8 | 0.75-0.9 (Citation 수 기반) |
+| Hallucination 검증 | 가능 | 가능 |
+
+**롤백 방법**:
+```python
+# 1. 코드에서 직접 변경
+USE_GEMINI_AS_PRIMARY = False
+USE_REAL_GROUNDING = False
+
+# 2. Admin API로 런타임 변경
+POST /admin/search-providers/config
+{"gemini_primary": false, "grounding_enabled": false}
+```
+
 ---
-*Last Updated: 2026-02-09 (세션 32 - 은행 관점 시그널 재해석 MVP 구현 완료)*
+*Last Updated: 2026-02-09 (세션 33 - Gemini Grounding Primary 모드 구현 완료)*

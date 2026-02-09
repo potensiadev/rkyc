@@ -1581,3 +1581,224 @@ async def test_fact_checker(request: FactCheckRequest):
         is_acceptable=result.is_acceptable,
         latency_ms=result.latency_ms,
     )
+
+
+# ============================================================================
+# Search Provider 설정 (Gemini Grounding)
+# ============================================================================
+
+
+class SearchConfigResponse(BaseModel):
+    """검색 설정 응답"""
+    gemini_primary: bool
+    grounding_enabled: bool
+    provider_order: list[str]
+    message: str
+
+
+class SearchConfigRequest(BaseModel):
+    """검색 설정 요청"""
+    gemini_primary: Optional[bool] = None
+    grounding_enabled: Optional[bool] = None
+
+
+class SearchTestRequest(BaseModel):
+    """검색 테스트 요청"""
+    query: str
+    provider: Optional[str] = None  # "perplexity" or "gemini_grounding"
+
+
+class SearchTestResponse(BaseModel):
+    """검색 테스트 응답"""
+    provider: str
+    content: str
+    citations: list[str]
+    confidence: float
+    latency_ms: int
+    grounding_used: bool
+
+
+@router.get(
+    "/search-providers/config",
+    response_model=SearchConfigResponse,
+    summary="검색 Provider 설정 조회",
+    description="현재 검색 Provider 설정을 조회합니다.",
+)
+async def get_search_config_endpoint():
+    """
+    검색 Provider 설정 조회
+
+    Returns:
+        - gemini_primary: Gemini가 Primary인지 여부
+        - grounding_enabled: Grounding 활성화 여부
+        - provider_order: Provider 우선순위
+    """
+    from app.worker.llm.search_providers import (
+        get_search_config,
+        MultiSearchManager,
+    )
+
+    config = get_search_config()
+
+    # 현재 Manager로 provider 순서 확인
+    manager = MultiSearchManager(gemini_primary=config["gemini_primary"])
+    provider_order = manager.get_provider_order()
+
+    return SearchConfigResponse(
+        gemini_primary=config["gemini_primary"],
+        grounding_enabled=config["grounding_enabled"],
+        provider_order=provider_order,
+        message="Current search provider configuration"
+    )
+
+
+@router.post(
+    "/search-providers/config",
+    response_model=SearchConfigResponse,
+    summary="검색 Provider 설정 변경",
+    description="검색 Provider 설정을 변경합니다. 롤백 가능.",
+)
+async def update_search_config(request: SearchConfigRequest):
+    """
+    검색 Provider 설정 변경
+
+    Args:
+        gemini_primary: True면 Gemini를 Primary로 사용 (비용 절약)
+        grounding_enabled: True면 실제 Google Search Grounding 사용
+
+    롤백:
+        - gemini_primary=False로 설정하면 Perplexity Primary로 복원
+        - grounding_enabled=False로 설정하면 Legacy 모드로 복원
+    """
+    from app.worker.llm.search_providers import (
+        get_search_config,
+        set_gemini_primary,
+        set_grounding_enabled,
+        MultiSearchManager,
+    )
+
+    if request.gemini_primary is not None:
+        set_gemini_primary(request.gemini_primary)
+
+    if request.grounding_enabled is not None:
+        set_grounding_enabled(request.grounding_enabled)
+
+    config = get_search_config()
+
+    # 새 설정으로 Manager 생성하여 provider 순서 확인
+    manager = MultiSearchManager(gemini_primary=config["gemini_primary"])
+    provider_order = manager.get_provider_order()
+
+    return SearchConfigResponse(
+        gemini_primary=config["gemini_primary"],
+        grounding_enabled=config["grounding_enabled"],
+        provider_order=provider_order,
+        message="Search provider configuration updated"
+    )
+
+
+@router.post(
+    "/search-providers/test",
+    response_model=SearchTestResponse,
+    summary="검색 Provider 테스트",
+    description="검색 Provider를 직접 테스트합니다.",
+)
+async def test_search_provider(request: SearchTestRequest):
+    """
+    검색 Provider 테스트
+
+    실제 검색을 수행하여 결과를 확인합니다.
+    provider를 지정하지 않으면 현재 Primary Provider를 사용합니다.
+    """
+    from app.worker.llm.search_providers import (
+        PerplexityProvider,
+        GeminiGroundingProvider,
+        MultiSearchManager,
+        SearchProviderType,
+        get_circuit_breaker_manager,
+    )
+
+    circuit_breaker = get_circuit_breaker_manager()
+
+    if request.provider == "perplexity":
+        provider = PerplexityProvider(circuit_breaker)
+    elif request.provider == "gemini_grounding":
+        provider = GeminiGroundingProvider(circuit_breaker)
+    else:
+        # Primary Provider 사용
+        manager = MultiSearchManager(circuit_breaker)
+        available = manager.get_available_providers()
+        if not available:
+            raise HTTPException(status_code=503, detail="No search providers available")
+        provider = available[0]
+
+    if not provider.is_available():
+        raise HTTPException(
+            status_code=503,
+            detail=f"{provider.provider_type.value} is not available (API key not configured)"
+        )
+
+    try:
+        result = await provider.search(request.query)
+
+        return SearchTestResponse(
+            provider=result.provider.value,
+            content=result.content[:2000] if result.content else "",  # 내용 제한
+            citations=result.citations[:10],  # Citation 제한
+            confidence=result.confidence,
+            latency_ms=result.latency_ms,
+            grounding_used=result.raw_response.get("grounding_used", False),
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
+
+
+@router.get(
+    "/search-providers/health",
+    summary="검색 Provider 건강 상태",
+    description="모든 검색 Provider의 건강 상태를 확인합니다.",
+)
+async def get_search_providers_health():
+    """
+    검색 Provider 건강 상태
+
+    Returns:
+        각 Provider의 가용성, Circuit Breaker 상태, 설정
+    """
+    from app.worker.llm.search_providers import (
+        PerplexityProvider,
+        GeminiGroundingProvider,
+        get_search_config,
+        get_circuit_breaker_manager,
+    )
+
+    circuit_breaker = get_circuit_breaker_manager()
+    config = get_search_config()
+
+    perplexity = PerplexityProvider(circuit_breaker)
+    gemini = GeminiGroundingProvider(circuit_breaker)
+
+    # Circuit Breaker 상태
+    perplexity_circuit = circuit_breaker.get_status("perplexity")
+    gemini_circuit = circuit_breaker.get_status("gemini")
+
+    return {
+        "config": config,
+        "providers": {
+            "perplexity": {
+                "available": perplexity.is_available(),
+                "is_primary": not config["gemini_primary"],
+                "circuit_state": perplexity_circuit.state.value if perplexity_circuit else "unknown",
+            },
+            "gemini_grounding": {
+                "available": gemini.is_available(),
+                "is_primary": config["gemini_primary"],
+                "grounding_enabled": config["grounding_enabled"],
+                "circuit_state": gemini_circuit.state.value if gemini_circuit else "unknown",
+            },
+        },
+        "recommendation": (
+            "Gemini Grounding Primary (cost-saving)" if config["gemini_primary"]
+            else "Perplexity Primary (default)"
+        ),
+    }

@@ -338,57 +338,292 @@ class PerplexityProvider(BaseSearchProvider):
             raise
 
 
+# =============================================================================
+# Gemini Grounding 설정 (롤백 가능)
+# =============================================================================
+# True: 실제 Google Search Grounding 활성화 (Citation 제공, Perplexity 대체 가능)
+# False: 기존 litellm 방식 (Citation 없음, Fallback 전용)
+USE_REAL_GROUNDING = True
+
+# Gemini Grounding 시스템 프롬프트
+GEMINI_GROUNDING_SYSTEM_PROMPT = """당신은 한국 기업 정보를 검색하는 도우미입니다.
+
+## 역할
+- Google Search를 사용하여 최신 정보 검색
+- 검색된 출처를 반드시 인용
+- 사실만 보고, 추측/예측 금지
+
+## 검색 우선순위
+1. 공시: DART, KIND, 금감원
+2. 경제지: 한경, 매경, 조선비즈
+3. 통신사: 연합뉴스, 뉴시스
+
+## 출력 규칙
+- 한국어만 사용
+- 정확한 숫자와 날짜 포함
+- 출처 불명확하면 "확인 필요" 명시"""
+
+
 class GeminiGroundingProvider(BaseSearchProvider):
-    """Gemini with Google Search Grounding (Fallback 3)"""
+    """
+    Gemini with Google Search Grounding
+
+    v2.0: 실제 Google Search Grounding 활성화
+    - Citation (출처 URL) 추출
+    - Perplexity 대체 가능
+    - Hallucination 0% 지원
+
+    롤백: USE_REAL_GROUNDING = False로 설정
+    """
 
     provider_type = SearchProviderType.GEMINI_GROUNDING
 
-    def __init__(self, circuit_breaker: Optional[CircuitBreakerManager] = None):
+    # 지원 모델 (Grounding 지원 모델)
+    GROUNDING_MODEL = "gemini-2.0-flash-exp"  # Grounding 지원
+    FALLBACK_MODEL = "gemini-1.5-flash"       # Grounding 미지원 시 Fallback
+
+    def __init__(
+        self,
+        circuit_breaker: Optional[CircuitBreakerManager] = None,
+        use_grounding: Optional[bool] = None,
+    ):
         super().__init__(circuit_breaker)
         self.key_rotator = get_key_rotator()
         self._current_key: Optional[str] = None
+        # 인스턴스별 grounding 설정 (테스트용)
+        self._use_grounding = use_grounding if use_grounding is not None else USE_REAL_GROUNDING
 
     def is_available(self) -> bool:
-        # 다중 키 또는 기본 키 중 하나라도 있으면 사용 가능
         key = self.key_rotator.get_key("google")
         return bool(key)
 
     async def search(self, query: str) -> SearchResult:
         """
-        Gemini를 사용한 검색 (litellm 사용)
+        Gemini Google Search Grounding을 사용한 검색
 
-        Google Search grounding 대신 Gemini의 지식 기반 응답을 활용합니다.
+        v2.0: 실제 Grounding 활성화 + Citation 추출
         """
-        import litellm
+        if self._use_grounding:
+            return await self._search_with_grounding(query)
+        else:
+            return await self._search_legacy(query)
 
-        # KeyRotator에서 키 가져오기
+    async def _search_with_grounding(self, query: str) -> SearchResult:
+        """
+        실제 Google Search Grounding 사용 (v2.0)
+
+        google-generativeai 라이브러리의 grounding 기능 활용:
+        - Google Search Tool 자동 활성화
+        - grounding_metadata에서 Citation 추출
+        - Perplexity 수준의 품질 제공
+        """
+        import google.generativeai as genai
+
         api_key = self.key_rotator.get_key("google")
         if not api_key:
             raise ValueError("Google API key not configured")
 
         self._current_key = api_key
+        genai.configure(api_key=api_key)
 
-        # litellm용 환경변수 설정
+        start_time = time.time()
+
+        try:
+            # Google Search Tool 생성 (Grounding 활성화)
+            # 최신 SDK에서는 google_search_retrieval 사용
+            from google.generativeai.types import Tool
+
+            # Gemini 2.0 Flash Exp는 자동 grounding 지원
+            model = genai.GenerativeModel(
+                model_name=self.GROUNDING_MODEL,
+                system_instruction=GEMINI_GROUNDING_SYSTEM_PROMPT,
+            )
+
+            # Google Search Grounding Tool 생성
+            # 참고: https://ai.google.dev/gemini-api/docs/grounding
+            google_search_tool = Tool.from_google_search_retrieval(
+                google_search_retrieval=genai.protos.GoogleSearchRetrieval(
+                    dynamic_retrieval_config=genai.protos.DynamicRetrievalConfig(
+                        mode=genai.protos.DynamicRetrievalConfig.Mode.MODE_DYNAMIC,
+                        dynamic_threshold=0.3,  # 낮을수록 검색 더 자주 수행
+                    )
+                )
+            )
+
+            # Thread-safe 비동기 호출
+            loop = _get_or_create_event_loop()
+
+            response = await loop.run_in_executor(
+                None,
+                lambda: model.generate_content(
+                    query,
+                    tools=[google_search_tool],
+                    generation_config={
+                        "temperature": 0.1,  # 낮은 temperature로 사실 중심
+                        "max_output_tokens": 2048,
+                    },
+                )
+            )
+
+            # 성공 시 키 마킹
+            self.key_rotator.mark_success("google", api_key)
+
+            # 응답 텍스트 추출
+            content = ""
+            if response and response.text:
+                content = response.text
+
+            # Citation 추출 (grounding_metadata에서)
+            citations = self._extract_citations_from_grounding(response)
+
+            # Confidence 계산 (Citation 수 기반)
+            confidence = self._calculate_confidence(citations, content)
+
+            latency_ms = int((time.time() - start_time) * 1000)
+
+            logger.info(
+                f"[GeminiGrounding] Search success: {len(citations)} citations, "
+                f"confidence={confidence:.2f}, latency={latency_ms}ms"
+            )
+
+            return SearchResult(
+                provider=self.provider_type,
+                content=content,
+                citations=citations,
+                raw_response={
+                    "text": content,
+                    "grounding_used": True,
+                    "model": self.GROUNDING_MODEL,
+                },
+                confidence=confidence,
+                latency_ms=latency_ms,
+            )
+
+        except Exception as e:
+            self.key_rotator.mark_failed("google", api_key)
+            logger.error(f"[GeminiGrounding] Search failed: {e}")
+
+            # Grounding 실패 시 Fallback 시도
+            if "grounding" in str(e).lower() or "tool" in str(e).lower():
+                logger.warning("[GeminiGrounding] Grounding failed, trying fallback")
+                return await self._search_legacy(query)
+            raise
+
+    def _extract_citations_from_grounding(self, response) -> list[str]:
+        """
+        Gemini grounding_metadata에서 Citation URL 추출
+
+        grounding_metadata 구조:
+        - grounding_chunks: 검색된 콘텐츠 청크
+        - grounding_supports: 응답의 어느 부분이 어떤 청크에서 왔는지
+        - web_search_queries: 사용된 검색 쿼리
+        """
+        citations = []
+        seen_urls = set()
+
+        try:
+            if not response or not response.candidates:
+                return citations
+
+            candidate = response.candidates[0]
+
+            # grounding_metadata 확인
+            if not hasattr(candidate, 'grounding_metadata') or not candidate.grounding_metadata:
+                logger.debug("[GeminiGrounding] No grounding_metadata in response")
+                return citations
+
+            grounding_meta = candidate.grounding_metadata
+
+            # grounding_chunks에서 URL 추출
+            if hasattr(grounding_meta, 'grounding_chunks') and grounding_meta.grounding_chunks:
+                for chunk in grounding_meta.grounding_chunks:
+                    if hasattr(chunk, 'web') and chunk.web:
+                        url = getattr(chunk.web, 'uri', None)
+                        if url and url not in seen_urls:
+                            # 블로그/커뮤니티 필터링
+                            if not self._is_excluded_domain(url):
+                                citations.append(url)
+                                seen_urls.add(url)
+
+            # retrieval_queries에서 추가 정보 로깅
+            if hasattr(grounding_meta, 'web_search_queries') and grounding_meta.web_search_queries:
+                queries = list(grounding_meta.web_search_queries)
+                logger.debug(f"[GeminiGrounding] Search queries used: {queries}")
+
+            # grounding_supports에서 신뢰도 정보 추출
+            if hasattr(grounding_meta, 'grounding_supports') and grounding_meta.grounding_supports:
+                support_count = len(grounding_meta.grounding_supports)
+                logger.debug(f"[GeminiGrounding] Grounding supports: {support_count}")
+
+        except Exception as e:
+            logger.warning(f"[GeminiGrounding] Citation extraction error: {e}")
+
+        logger.info(f"[GeminiGrounding] Extracted {len(citations)} citations")
+        return citations
+
+    def _is_excluded_domain(self, url: str) -> bool:
+        """블로그/커뮤니티 등 제외할 도메인 체크"""
+        excluded = [
+            "blog.naver.com", "m.blog.naver.com", "blog.daum.net",
+            "tistory.com", "brunch.co.kr", "velog.io", "medium.com",
+            "cafe.naver.com", "cafe.daum.net", "dcinside.com",
+            "fmkorea.com", "clien.net", "ruliweb.com", "reddit.com",
+        ]
+        url_lower = url.lower()
+        return any(domain in url_lower for domain in excluded)
+
+    def _calculate_confidence(self, citations: list[str], content: str) -> float:
+        """
+        Citation 기반 Confidence 계산
+
+        - 3개 이상 Citation: 0.9 (HIGH)
+        - 1-2개 Citation: 0.75 (MED)
+        - 0개 Citation: 0.5 (LOW)
+        - 공시 도메인 포함: +0.05 보너스
+        """
+        base_confidence = 0.5
+
+        if len(citations) >= 3:
+            base_confidence = 0.9
+        elif len(citations) >= 1:
+            base_confidence = 0.75
+
+        # 공시 도메인 보너스
+        high_trust_domains = ["dart.fss.or.kr", "kind.krx.co.kr", ".go.kr", ".or.kr"]
+        for url in citations:
+            if any(domain in url.lower() for domain in high_trust_domains):
+                base_confidence = min(1.0, base_confidence + 0.05)
+                break
+
+        return base_confidence
+
+    async def _search_legacy(self, query: str) -> SearchResult:
+        """
+        기존 litellm 방식 (Grounding 없음, 롤백용)
+        """
+        import litellm
+
+        api_key = self.key_rotator.get_key("google")
+        if not api_key:
+            raise ValueError("Google API key not configured")
+
+        self._current_key = api_key
         os.environ["GEMINI_API_KEY"] = api_key
 
         start_time = time.time()
 
         try:
-            # P0 Fix: Thread-safe event loop 사용
             loop = _get_or_create_event_loop()
 
-            # litellm completion 호출 (동기 함수를 executor에서 실행)
-            # gemini-pro는 GA 모델로 더 안정적
             response = await loop.run_in_executor(
                 None,
                 lambda: litellm.completion(
-                    model="gemini/gemini-3-pro-preview",
+                    model="gemini/gemini-1.5-flash",
                     messages=[{"role": "user", "content": query}],
                     timeout=30,
                 )
             )
 
-            # 성공 시 키 마킹
             self.key_rotator.mark_success("google", api_key)
 
             content = ""
@@ -400,15 +635,52 @@ class GeminiGroundingProvider(BaseSearchProvider):
             return SearchResult(
                 provider=self.provider_type,
                 content=content,
-                citations=[],  # litellm은 citations 미제공
-                raw_response={"text": content},
-                confidence=0.7,  # Grounding 없이는 약간 낮은 신뢰도
+                citations=[],  # Legacy 모드는 Citation 없음
+                raw_response={
+                    "text": content,
+                    "grounding_used": False,
+                    "model": "gemini-1.5-flash",
+                },
+                confidence=0.6,  # Grounding 없으면 낮은 신뢰도
                 latency_ms=latency_ms,
             )
         except Exception as e:
-            # 실패 시 키 마킹
             self.key_rotator.mark_failed("google", api_key)
             raise
+
+
+# =============================================================================
+# Search Provider 우선순위 설정 (롤백 가능)
+# =============================================================================
+# True: Gemini Grounding을 Primary로 사용 (Perplexity 비용 절약)
+# False: Perplexity를 Primary로 사용 (기존 동작)
+USE_GEMINI_AS_PRIMARY = True  # 비용 절약 모드
+
+# 현재 설정 상태 (런타임 변경 가능)
+_search_config = {
+    "gemini_primary": USE_GEMINI_AS_PRIMARY,
+    "grounding_enabled": USE_REAL_GROUNDING,
+}
+
+
+def get_search_config() -> dict:
+    """현재 검색 설정 반환"""
+    return _search_config.copy()
+
+
+def set_gemini_primary(enabled: bool) -> None:
+    """Gemini Primary 모드 설정 (런타임)"""
+    global _search_config
+    _search_config["gemini_primary"] = enabled
+    logger.info(f"[SearchConfig] Gemini primary mode: {enabled}")
+
+
+def set_grounding_enabled(enabled: bool) -> None:
+    """Grounding 활성화 설정 (런타임)"""
+    global _search_config, USE_REAL_GROUNDING
+    _search_config["grounding_enabled"] = enabled
+    USE_REAL_GROUNDING = enabled
+    logger.info(f"[SearchConfig] Grounding enabled: {enabled}")
 
 
 class MultiSearchManager:
@@ -417,27 +689,48 @@ class MultiSearchManager:
 
     검색 요청을 우선순위에 따라 여러 Provider에 시도합니다.
     Circuit Breaker와 연동하여 장애 Provider를 자동으로 건너뜁니다.
+
+    v2.0: Gemini Primary 모드 지원
+    - USE_GEMINI_AS_PRIMARY=True: Gemini → Perplexity 순서
+    - USE_GEMINI_AS_PRIMARY=False: Perplexity → Gemini 순서
     """
 
     def __init__(
         self,
         circuit_breaker: Optional[CircuitBreakerManager] = None,
         providers: Optional[list[BaseSearchProvider]] = None,
+        gemini_primary: Optional[bool] = None,
     ):
         self.circuit_breaker = circuit_breaker or get_circuit_breaker_manager()
 
-        # 검색 내장 LLM 2-Track (Perplexity + Gemini Grounding)
+        # 우선순위 결정
+        use_gemini_first = gemini_primary if gemini_primary is not None else _search_config["gemini_primary"]
+
+        # 검색 내장 LLM 2-Track
         if providers:
             self.providers = providers
-        else:
+        elif use_gemini_first:
+            # Gemini Primary 모드 (비용 절약)
             self.providers = [
-                PerplexityProvider(self.circuit_breaker),      # Primary - 실시간 검색 + AI 요약
-                GeminiGroundingProvider(self.circuit_breaker), # Fallback - Google Search 기반
+                GeminiGroundingProvider(self.circuit_breaker),  # Primary - Google Search Grounding
+                PerplexityProvider(self.circuit_breaker),       # Fallback - 실시간 검색
             ]
+            logger.info("[MultiSearchManager] Mode: Gemini Primary (cost-saving)")
+        else:
+            # Perplexity Primary 모드 (기존)
+            self.providers = [
+                PerplexityProvider(self.circuit_breaker),       # Primary - 실시간 검색 + AI 요약
+                GeminiGroundingProvider(self.circuit_breaker),  # Fallback - Google Search 기반
+            ]
+            logger.info("[MultiSearchManager] Mode: Perplexity Primary (default)")
 
     def get_available_providers(self) -> list[BaseSearchProvider]:
         """사용 가능한 Provider 목록"""
         return [p for p in self.providers if p.is_available()]
+
+    def get_provider_order(self) -> list[str]:
+        """현재 Provider 우선순위 반환"""
+        return [p.provider_type.value for p in self.providers]
 
     async def cleanup(self) -> None:
         """
