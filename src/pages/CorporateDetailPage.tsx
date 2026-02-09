@@ -65,7 +65,7 @@ import { EvidenceMap } from "@/components/profile/EvidenceMap";
 import { RiskIndicators } from "@/components/profile/RiskIndicators";
 import { DrillDownSheet } from "@/components/dashboard/DrillDownSheet";
 import { motion, AnimatePresence } from "framer-motion";
-import { PieChart, Pie, Cell, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LineChart, Line } from "recharts";
+import { PieChart, Pie, Cell, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LineChart, Line, BarChart, Bar, LabelList } from "recharts";
 
 // --- Icons ---
 const IconBuilding = ({ className }: { className?: string }) => (
@@ -747,12 +747,12 @@ export default function CorporateDetailPage() {
                       {/* Left Column (Main Charts) - 8/12 */}
                       <div className="lg:col-span-8 space-y-6">
 
-                        {/* Loan Exposure Chart */}
+                        {/* Loan Exposure Chart - Stacked Bar */}
                         <div className="bg-slate-50/50 rounded-xl p-5 border border-slate-200 shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
                           <div className="flex justify-between items-end mb-4">
                             <div>
                               <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1.5">
-                                총 여신 잔액 (Total Exposure)
+                                여신 잔액 추이 (Loan Exposure Trend)
                                 <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-600 border border-indigo-100">
                                   등급: {(bankingData.loan_exposure as any)?.risk_indicators?.internal_grade || 'N/A'}
                                 </span>
@@ -761,51 +761,197 @@ export default function CorporateDetailPage() {
                                 <h3 className="text-2xl font-bold text-slate-900 font-mono tracking-tight">
                                   {formatKRW((bankingData.loan_exposure as any)?.total_exposure_krw)}
                                 </h3>
-                                <span className="text-xs text-emerald-600 font-medium font-mono flex items-center gap-0.5">
-                                  <TrendingUp className="w-3 h-3" /> +12.5% YoY
-                                </span>
+                                {(() => {
+                                  const trend = (bankingData.loan_exposure as any)?.yearly_trend || [];
+                                  if (trend.length >= 2) {
+                                    const latest = trend[trend.length - 1]?.total || 0;
+                                    const prev = trend[trend.length - 2]?.total || 0;
+                                    const change = prev > 0 ? ((latest - prev) / prev * 100).toFixed(1) : 0;
+                                    const isUp = Number(change) >= 0;
+                                    return (
+                                      <span className={`text-xs font-medium font-mono flex items-center gap-0.5 ${isUp ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                        {isUp ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                                        {isUp ? '+' : ''}{change}% YoY
+                                      </span>
+                                    );
+                                  }
+                                  return null;
+                                })()}
                               </div>
                             </div>
-                            <div className="flex gap-4 text-[11px] text-slate-500 font-medium">
-                              <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-sm bg-indigo-500" />담보대출 (Secured)</div>
-                              <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-sm bg-indigo-300" />신용대출 (Unsecured)</div>
+                            <div className="flex gap-3 text-[11px] text-slate-500 font-medium">
+                              <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-indigo-600" />담보대출</div>
+                              <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-violet-500" />신용대출</div>
+                              <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-pink-500" />외화대출</div>
                             </div>
                           </div>
 
-                          <div className="h-[220px] w-full relative">
-                            {/* 한도선 (Reference Line Mock) */}
-                            <div className="absolute top-[20%] left-0 right-0 border-t border-dashed border-slate-300 z-0" />
-                            <span className="absolute top-[17%] right-0 text-[10px] text-slate-400 font-mono bg-slate-50 px-1 z-0">Limit: 1,500억</span>
-
+                          <div className="h-[280px] w-full relative">
                             <ResponsiveContainer width="100%" height="100%">
-                              <AreaChart
+                              <BarChart
                                 data={(bankingData.loan_exposure as any)?.yearly_trend || []}
-                                margin={{ top: 10, right: 0, left: -20, bottom: 0 }}
+                                margin={{ top: 25, right: 10, left: 10, bottom: 5 }}
                                 onClick={(data) => {
                                   if (data && data.activePayload && data.activePayload.length > 0) {
                                     handleDrillDown(`여신 상세 내역 (${data.activePayload[0].payload.year})`, data.activePayload[0].payload);
                                   }
                                 }}
                                 style={{ cursor: 'pointer' }}
+                                barCategoryGap="25%"
                               >
                                 <defs>
-                                  <linearGradient id="colorSecured" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.15} />
-                                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                                  <linearGradient id="barSecured" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stopColor="#4f46e5" />
+                                    <stop offset="100%" stopColor="#6366f1" />
+                                  </linearGradient>
+                                  <linearGradient id="barUnsecured" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stopColor="#7c3aed" />
+                                    <stop offset="100%" stopColor="#8b5cf6" />
+                                  </linearGradient>
+                                  <linearGradient id="barFx" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stopColor="#db2777" />
+                                    <stop offset="100%" stopColor="#ec4899" />
                                   </linearGradient>
                                 </defs>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                                <XAxis dataKey="year" stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} tickMargin={10} fontFamily="monospace" />
-                                <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} fontFamily="monospace" tickFormatter={(val) => `${val / 100000000}`} />
-                                <Tooltip
-                                  contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 12px rgba(0,0,0,0.08)', fontSize: '12px', fontFamily: 'monospace' }}
-                                  itemStyle={{ fontSize: '12px' }}
-                                  labelStyle={{ fontSize: '11px', color: '#64748b', marginBottom: '4px' }}
-                                  cursor={{ stroke: '#6366f1', strokeWidth: 1, strokeDasharray: '4 4' }}
+                                <XAxis
+                                  dataKey="year"
+                                  stroke="#64748b"
+                                  fontSize={12}
+                                  tickLine={false}
+                                  axisLine={{ stroke: '#cbd5e1' }}
+                                  tickMargin={8}
+                                  fontWeight={600}
                                 />
-                                <Area type="monotone" dataKey="total" stroke="#6366f1" fill="url(#colorSecured)" strokeWidth={2} name="총 여신" activeDot={{ r: 4, strokeWidth: 0 }} />
-                              </AreaChart>
+                                <YAxis
+                                  stroke="#94a3b8"
+                                  fontSize={10}
+                                  tickLine={false}
+                                  axisLine={false}
+                                  fontFamily="monospace"
+                                  tickFormatter={(val) => `${(val / 10).toLocaleString()}억`}
+                                  width={50}
+                                />
+                                <Tooltip
+                                  contentStyle={{
+                                    borderRadius: '12px',
+                                    border: '1px solid #e2e8f0',
+                                    boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
+                                    fontSize: '12px',
+                                    fontFamily: 'monospace',
+                                    padding: '12px 16px'
+                                  }}
+                                  formatter={(value: number, name: string) => {
+                                    const labels: Record<string, string> = {
+                                      secured: '담보대출',
+                                      unsecured: '신용대출',
+                                      fx: '외화대출',
+                                      total: '합계'
+                                    };
+                                    return [`${(value / 10).toLocaleString()}억원`, labels[name] || name];
+                                  }}
+                                  labelFormatter={(label) => `${label}년`}
+                                  cursor={{ fill: 'rgba(99, 102, 241, 0.08)' }}
+                                />
+                                <Bar
+                                  dataKey="secured"
+                                  stackId="loan"
+                                  fill="url(#barSecured)"
+                                  name="secured"
+                                  radius={[0, 0, 0, 0]}
+                                >
+                                  <LabelList
+                                    dataKey="secured"
+                                    position="center"
+                                    fill="#ffffff"
+                                    fontSize={11}
+                                    fontWeight={700}
+                                    formatter={(value: number) => value > 0 ? `${(value / 10).toLocaleString()}` : ''}
+                                  />
+                                </Bar>
+                                <Bar
+                                  dataKey="unsecured"
+                                  stackId="loan"
+                                  fill="url(#barUnsecured)"
+                                  name="unsecured"
+                                  radius={[0, 0, 0, 0]}
+                                >
+                                  <LabelList
+                                    dataKey="unsecured"
+                                    position="center"
+                                    fill="#ffffff"
+                                    fontSize={11}
+                                    fontWeight={700}
+                                    formatter={(value: number) => value > 0 ? `${(value / 10).toLocaleString()}` : ''}
+                                  />
+                                </Bar>
+                                <Bar
+                                  dataKey="fx"
+                                  stackId="loan"
+                                  fill="url(#barFx)"
+                                  name="fx"
+                                  radius={[6, 6, 0, 0]}
+                                >
+                                  <LabelList
+                                    dataKey="fx"
+                                    position="center"
+                                    fill="#ffffff"
+                                    fontSize={11}
+                                    fontWeight={700}
+                                    formatter={(value: number) => value > 0 ? `${(value / 10).toLocaleString()}` : ''}
+                                  />
+                                </Bar>
+                                {/* Total label on top of bars */}
+                                <Bar
+                                  dataKey="total"
+                                  stackId="total-invisible"
+                                  fill="transparent"
+                                  name="total"
+                                >
+                                  <LabelList
+                                    dataKey="total"
+                                    position="top"
+                                    fill="#1e293b"
+                                    fontSize={13}
+                                    fontWeight={800}
+                                    formatter={(value: number) => `${(value / 10).toLocaleString()}억`}
+                                    offset={8}
+                                  />
+                                </Bar>
+                              </BarChart>
                             </ResponsiveContainer>
+                          </div>
+
+                          {/* Composition Summary */}
+                          <div className="mt-4 pt-4 border-t border-slate-200">
+                            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-3">현재 여신 구성 (Current Composition)</p>
+                            <div className="grid grid-cols-3 gap-3">
+                              {(() => {
+                                const composition = (bankingData.loan_exposure as any)?.composition || {};
+                                const items = [
+                                  { key: 'secured_loan', label: '담보대출', color: 'bg-indigo-600', textColor: 'text-indigo-600' },
+                                  { key: 'unsecured_loan', label: '신용대출', color: 'bg-violet-500', textColor: 'text-violet-600' },
+                                  { key: 'fx_loan', label: '외화대출', color: 'bg-pink-500', textColor: 'text-pink-600' },
+                                ];
+                                return items.map(item => {
+                                  const data = composition[item.key] || {};
+                                  return (
+                                    <div key={item.key} className="bg-white rounded-lg p-3 border border-slate-100 shadow-sm">
+                                      <div className="flex items-center gap-2 mb-2">
+                                        <div className={`w-2.5 h-2.5 rounded-sm ${item.color}`} />
+                                        <span className="text-[11px] font-medium text-slate-600">{item.label}</span>
+                                      </div>
+                                      <p className={`text-lg font-bold font-mono ${item.textColor}`}>
+                                        {formatKRW(data.amount || 0)}
+                                      </p>
+                                      <p className="text-[11px] text-slate-400 font-mono mt-0.5">
+                                        비중: {data.ratio?.toFixed(1) || 0}%
+                                      </p>
+                                    </div>
+                                  );
+                                });
+                              })()}
+                            </div>
                           </div>
                         </div>
 
