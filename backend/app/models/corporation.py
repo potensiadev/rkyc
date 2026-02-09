@@ -5,6 +5,7 @@ SQLAlchemy model for corp table (PRD 14.1.1)
 
 from datetime import datetime, date
 from sqlalchemy import Column, String, Text, Date, Boolean, TIMESTAMP
+from sqlalchemy.orm import relationship
 from app.core.database import Base
 
 
@@ -48,6 +49,9 @@ class Corporation(Base):
     # Timestamps
     created_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
     updated_at = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    banking_data = relationship("BankingData", back_populates="corporation", lazy="dynamic")
 
     def __repr__(self):
         return f"<Corporation(corp_id='{self.corp_id}', corp_name='{self.corp_name}')>"

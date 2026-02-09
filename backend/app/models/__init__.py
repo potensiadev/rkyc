@@ -7,6 +7,7 @@ from app.models.snapshot import InternalSnapshot, InternalSnapshotLatest
 from app.models.document import Document, DocumentPage, Fact
 from app.models.profile import CorpProfile
 from app.models.loan_insight import LoanInsight
+from app.models.banking_data import BankingData
 
 # Security Architecture - External Intel
 from app.models.external_intel import (
@@ -39,6 +40,8 @@ __all__ = [
     "CorpProfile",
     # Loan Insight
     "LoanInsight",
+    # Banking Data
+    "BankingData",
     # External Intel
     "ExternalNews",
     "ExternalAnalysis",
