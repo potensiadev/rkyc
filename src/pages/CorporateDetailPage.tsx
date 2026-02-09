@@ -55,7 +55,7 @@ import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import ReportPreviewModal from "@/components/reports/ReportPreviewModal";
-import { useCorporation, useSignals, useCorporationSnapshot, useCorpProfile, useCorpProfileDetail, useRefreshCorpProfile, useJobStatus, useLoanInsight, useBankingData, useBankingRiskAlerts, useDartFinancials } from "@/hooks/useApi";
+import { useCorporation, useSignals, useCorporationSnapshot, useCorpProfile, useCorpProfileDetail, useRefreshCorpProfile, useJobStatus, useLoanInsight, useBankingData, useDartFinancials } from "@/hooks/useApi";
 import { toast } from "sonner";
 import type { ProfileConfidence, CorpProfile } from "@/types/profile";
 import { useQueryClient } from "@tanstack/react-query";
@@ -266,7 +266,6 @@ export default function CorporateDetailPage() {
   const loanInsight = loanInsightData?.insight || null;
   // Banking Data (PRD v1.1)
   const { data: bankingData, isLoading: isLoadingBankingData } = useBankingData(corpId || "");
-  const { data: bankingRiskAlerts } = useBankingRiskAlerts(corpId || "");
   // DART 재무제표 (100% Fact)
   const { data: dartFinancials, isLoading: isLoadingDartFinancials } = useDartFinancials(corporation?.name || "");
   // Banking Data Drill Down State
@@ -925,58 +924,7 @@ export default function CorporateDetailPage() {
                 ) : bankingData ? (
                   <div className="space-y-6">
 
-                    {/* 1. Risk & Opportunity Banners - Compact High Density */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {/* Risk Alerts */}
-                      {bankingRiskAlerts && bankingRiskAlerts.total > 0 && (
-                        <div className="bg-red-50/80 border border-red-100 rounded-lg p-3 relative overflow-hidden group hover:border-red-200 transition-colors">
-                          <div className="flex items-start gap-3 relative z-10">
-                            <div className="p-1.5 bg-white rounded-md text-red-600 shadow-sm mt-0.5"><AlertTriangle className="w-4 h-4" /></div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-1">
-                                <h4 className="font-bold text-red-900 text-sm">위험 알림 (Risk Alerts)</h4>
-                                <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-red-100 text-red-700 font-bold font-mono">{bankingRiskAlerts.total}</span>
-                              </div>
-                              <div className="space-y-1.5">
-                                {bankingRiskAlerts.alerts.slice(0, 2).map((alert) => (
-                                  <div key={alert.id} className="flex items-start gap-2 text-xs text-red-800/90 leading-snug">
-                                    <span className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${alert.severity === 'HIGH' ? 'bg-red-600' : 'bg-orange-500'}`} />
-                                    <span className="truncate"><span className="font-semibold text-red-900">{alert.title}:</span> {alert.description}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Opportunity Signals */}
-                      {bankingData.opportunity_signals.length > 0 && (
-                        <div className="bg-emerald-50/80 border border-emerald-100 rounded-lg p-3 relative overflow-hidden group hover:border-emerald-200 transition-colors">
-                          <div className="flex items-start gap-3 relative z-10">
-                            <div className="p-1.5 bg-white rounded-md text-emerald-600 shadow-sm mt-0.5"><TrendingUp className="w-4 h-4" /></div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-1">
-                                <h4 className="font-bold text-emerald-900 text-sm">영업 기회 (Opportunities)</h4>
-                                <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-emerald-100 text-emerald-700 font-bold font-mono">{bankingData.opportunity_signals.length}</span>
-                              </div>
-                              <div className="space-y-1.5">
-                                {bankingData.opportunity_signals.slice(0, 2).map((opp, idx) => (
-                                  <div key={idx} className="flex items-start gap-2 text-xs text-emerald-800/90 leading-snug">
-                                    <span className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 bg-emerald-600" />
-                                    <span className="truncate">
-                                      {typeof opp === 'string' ? opp : (opp as any)?.title || '기회 요인 포착'}
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* 2. Main Dashboard Grid - High Density */}
+                    {/* Main Dashboard Grid - High Density */}
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
                       {/* Left Column (Main Charts) - 8/12 */}
