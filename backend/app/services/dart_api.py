@@ -278,9 +278,21 @@ async def load_corp_codes() -> bool:
 
 def _normalize_corp_name(name: str) -> str:
     """기업명 정규화 (검색용)"""
-    # 공백 제거, 소문자 변환, 특수문자 제거
-    normalized = re.sub(r'[^\w가-힣]', '', name.lower())
-    return normalized
+    # 1. 법인 표기 제거 (순서 중요: 긴 패턴부터)
+    corp_suffixes = [
+        '주식회사', '(주)', '(株)', '㈜',
+        '유한회사', '(유)',
+        '유한책임회사',
+        '합자회사', '합명회사',
+        'inc', 'inc.', 'corp', 'corp.', 'ltd', 'ltd.', 'llc', 'co.', 'co'
+    ]
+    normalized = name.lower()
+    for suffix in corp_suffixes:
+        normalized = normalized.replace(suffix.lower(), '')
+
+    # 2. 공백 및 특수문자 제거
+    normalized = re.sub(r'[^\w가-힣]', '', normalized)
+    return normalized.strip()
 
 
 async def get_corp_code(
