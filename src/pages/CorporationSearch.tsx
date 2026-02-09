@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { useQueries } from "@tanstack/react-query";
 import { useCorporations, useSignals } from "@/hooks/useApi";
-import { getCorporationSnapshot, ApiSnapshot } from "@/lib/api";
+import { getBankingData, ApiBankingDataResponse } from "@/lib/api";
 import { buildSignalCountsByCorpId, getCorpSignalCountsFromMap } from "@/data/signals";
 import { DynamicBackground, GlassCard, StatusBadge, Tag } from "@/components/premium";
 import { motion } from "framer-motion";
@@ -36,31 +36,33 @@ export default function CorporationSearch() {
   const { data: corporations = [], isLoading, error } = useCorporations();
   const { data: signals = [] } = useSignals();
 
-  // 모든 기업의 스냅샷을 병렬로 가져오기
-  const snapshotQueries = useQueries({
+  // 모든 기업의 Banking Data를 병렬로 가져오기
+  const bankingDataQueries = useQueries({
     queries: corporations.map((corp) => ({
-      queryKey: ["snapshot", corp.id],
-      queryFn: () => getCorporationSnapshot(corp.id),
+      queryKey: ["banking-data", corp.id],
+      queryFn: () => getBankingData(corp.id),
       enabled: corporations.length > 0,
       staleTime: 5 * 60 * 1000,
       retry: false,
     })),
   });
 
-  // 스냅샷에서 여신 잔액 맵 생성
+  // Banking Data에서 여신 잔액 맵 생성
   const loanBalanceMap = useMemo(() => {
     const map = new Map<string, number>();
-    snapshotQueries.forEach((query, index) => {
+    bankingDataQueries.forEach((query, index) => {
       if (query.data) {
-        const snapshot = query.data as ApiSnapshot;
-        const loanAmount = snapshot.snapshot_json?.credit?.loan_summary?.total_exposure_krw;
+        const bankingData = query.data as ApiBankingDataResponse;
+        // loan_exposure는 Record<string, unknown> 타입이므로 타입 단언 필요
+        const loanExposure = bankingData.loan_exposure as { total_exposure_krw?: number } | null;
+        const loanAmount = loanExposure?.total_exposure_krw;
         if (loanAmount) {
           map.set(corporations[index]?.id, loanAmount);
         }
       }
     });
     return map;
-  }, [snapshotQueries, corporations]);
+  }, [bankingDataQueries, corporations]);
 
   // Precompute signal counts map once when signals change
   const signalCountsMap = useMemo(
