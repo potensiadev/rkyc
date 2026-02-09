@@ -2439,5 +2439,77 @@ execute()
 | Hallucination | Soft Guardrails만 | Hard Fact-Check |
 | 추가 지연 | 0초 | +3~5초 (병렬 처리) |
 
+### 세션 30 (2026-02-09) - Corp Profiling 성능 최적화 및 Signal 버그 수정 ✅
+**목표**: Demo Mode 프로파일링 속도 개선 (~40% 단축) 및 Signal dismiss 에러 수정
+
+**완료 항목**:
+
+#### 1. P0: DART + Industry Hints 병렬화
+- `corp_profiling.py`에서 순차 → `asyncio.gather()` 병렬 실행
+- 기존: 5-7초 (순차) → 개선: 3-5초 (병렬)
+- **효과**: 2초 단축
+
+#### 2. P0: Profile Fact-Check 배치 병렬화
+- 기존: for 루프에서 순차 `check_signal()` 호출 (8-10초)
+- 개선: `check_signals_batch(max_concurrent=5)` 사용 (2초)
+- **효과**: 6-8초 단축 (80%)
+
+#### 3. P1: Gemini 호출 통합 (Layer 1.5 + Fact-Check)
+- `gemini_adapter.py`: 프롬프트에 `fact_check_hints` 필드 추가
+- `orchestrator.py`: provenance에 `gemini_fact_check_hints` 저장
+- `corp_profiling.py`: 이미 검증된 필드는 Fact-Check 스킵
+- **효과**: ~5초 추가 단축
+
+#### 4. Frontend 자동 Pre-warming
+- `CorporateDetailPage.tsx`: 페이지 로드 시 stale/expired 프로필 자동 갱신
+- `DemoPanel.tsx`: 분석 완료 시 프로필+LoanInsight 캐시 무효화
+- **효과**: 수동 Pre-warming 불필요
+
+#### 5. Signal dismiss/status 에러 수정
+**문제**: `"record 'new' has no field 'updated_at'"` 에러
+**원인**:
+- DB 트리거 `update_signal_updated_at`가 `NEW.updated_at` 업데이트 시도
+- 실제 테이블에는 `last_updated_at` 컬럼만 존재
+**해결**:
+- `signals.py`: `last_updated_at` 업데이트 제거
+- `migration_v14_fix_signal_trigger.sql`: 트리거 삭제
+- Supabase에 마이그레이션 적용 완료
+
+**수정된 파일**:
+```
+backend/app/worker/pipelines/corp_profiling.py
+  - DART + Industry Hints 병렬화 (asyncio.gather)
+  - Fact-Check 배치 병렬화 (check_signals_batch)
+  - P1 Gemini hints 활용으로 중복 스킵
+
+backend/app/worker/llm/gemini_adapter.py
+  - fact_check_hints 프롬프트 추가
+
+backend/app/worker/llm/orchestrator.py
+  - gemini_fact_check_hints provenance 저장
+
+backend/app/api/v1/endpoints/signals.py
+  - last_updated_at 업데이트 제거
+
+backend/sql/migration_v14_fix_signal_trigger.sql (신규)
+  - update_signal_updated_at 트리거 삭제
+  - update_signal_index_updated_at 트리거 삭제
+
+src/pages/CorporateDetailPage.tsx
+  - 자동 Pre-warming useEffect 추가
+
+src/components/demo/DemoPanel.tsx
+  - 프로필 캐시 무효화 추가
+```
+
+**성능 개선 요약**:
+| 항목 | 이전 | 이후 | 개선 |
+|------|------|------|------|
+| DART + Hints | 5-7초 | 3-5초 | -2초 |
+| Fact-Check | 8-10초 | 2초 | -6~8초 |
+| P1 통합 | - | - | -5초 |
+| **총계** | ~60초 | ~35-45초 | **40%** |
+| 캐시 히트 | - | < 1초 | - |
+
 ---
-*Last Updated: 2026-02-08 (세션 29 - LLM 검색 4가지 개선)*
+*Last Updated: 2026-02-09 (세션 30 - Corp Profiling 성능 최적화 및 Signal 버그 수정)*

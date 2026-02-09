@@ -547,7 +547,7 @@ export default function CorporateDetailPage() {
 
             {/* 1. Summary & Gauge */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6" id="summary">
-              <GlassCard className="md:col-span-2 p-8" id="summary-card">
+              <GlassCard className="md:col-span-3 p-8" id="summary-card">
                 <div className="flex justify-between items-start mb-6">
                   <h3 className="text-lg font-bold text-slate-900">Executive Summary</h3>
                   {loanInsight && (
@@ -592,56 +592,7 @@ export default function CorporateDetailPage() {
                 </div>
               </GlassCard>
 
-              <GlassCard className="p-6 flex flex-col items-center justify-center relative overflow-hidden text-center" id="risk-score-card">
-                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-400 via-amber-400 to-rose-400 opacity-20" />
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">AI Risk Score</h3>
-                <div className="relative mb-2">
-                  <ResponsiveContainer width={200} height={100}>
-                    <PieChart>
-                      <Pie
-                        data={[{ value: 1 }]}
-                        cx="50%"
-                        cy="100%"
-                        startAngle={180}
-                        endAngle={0}
-                        innerRadius={62}
-                        outerRadius={78}
-                        dataKey="value"
-                        stroke="none"
-                        isAnimationActive={false}
-                        cornerRadius={10}
-                      >
-                        <Cell fill="#f1f5f9" />
-                      </Pie>
-                      <Pie
-                        data={[{ value: riskScore }, { value: 100 - riskScore }]}
-                        cx="50%"
-                        cy="100%"
-                        startAngle={180}
-                        endAngle={0}
-                        innerRadius={60}
-                        outerRadius={80}
-                        dataKey="value"
-                        cornerRadius={12}
-                        stroke="none"
-                        isAnimationActive={true}
-                        animationDuration={1500}
-                        animationEasing="ease-out"
-                        animationBegin={300}
-                      >
-                        <Cell fill={riskScore > 70 ? "#F43F5E" : riskScore > 40 ? "#f59e0b" : "#10b981"} />
-                        <Cell fill="transparent" />
-                      </Pie>
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div className="absolute inset-0 flex items-end justify-center transform translate-y-1">
-                    <span className="text-5xl font-mono font-bold text-slate-900 tracking-tighter">{riskScore}</span>
-                  </div>
-                </div>
-                <StatusBadge variant={riskScore > 70 ? "danger" : riskScore > 40 ? "neutral" : "success"} className="mt-2 text-[10px] uppercase">
-                  {riskScore > 70 ? "High Risk" : riskScore > 40 ? "Moderate" : "Low Risk"}
-                </StatusBadge>
-              </GlassCard>
+
             </div>
 
             {/* 2. Corporate Profile Grid */}
@@ -650,7 +601,7 @@ export default function CorporateDetailPage() {
                 <SectionHeader icon={IconBuilding} title="Corporate Profile" />
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-8">
                   <DataField label="CEO" value={corporation.ceo} isHighlighted />
-                  <DataField label="Established" value={corporation.foundedYear > 0 ? `${corporation.foundedYear}년` : (corporation.establishedDate ? `${corporation.establishedDate.substring(0,4)}년` : '-')} />
+                  <DataField label="Established" value={corporation.foundedYear > 0 ? `${corporation.foundedYear}년` : (corporation.establishedDate ? `${corporation.establishedDate.substring(0, 4)}년` : '-')} />
                   <DataField label="Biz Type" value={corporation.bizType || '-'} />
                   <DataField label="Industry" value={corporation.industryCode} />
                   <div className="lg:col-span-2">
