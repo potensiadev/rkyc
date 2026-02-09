@@ -295,12 +295,12 @@ class BankingInsightsEngine:
         industry_down_signals = self._get_signals_by_keyword(["업황 악화", "업황 부진", "산업 침체", "수요 감소"])
 
         if self.avg_ltv < 50 and industry_up_signals:
-            collateral_余력 = self.total_collateral - (self.total_collateral * self.avg_ltv / 100)
+            collateral_headroom = self.total_collateral - (self.total_collateral * self.avg_ltv / 100)
             self.insights.append(BankingInsight(
                 type=InsightType.OPPORTUNITY,
                 priority=InsightPriority.MED,
                 title="담보 여력 활용 추가 여신 기회",
-                description=f"LTV {self.avg_ltv:.0f}%로 담보여력 {self._format_krw(int(collateral_余력))} 있음. 업황 호조와 함께 추가 여신 검토.",
+                description=f"LTV {self.avg_ltv:.0f}%로 담보여력 {self._format_krw(int(collateral_headroom))} 있음. 업황 호조와 함께 추가 여신 검토.",
                 related_signal_ids=[s.get("id", "") for s in industry_up_signals],
                 related_signal_titles=[s.get("title", "") for s in industry_up_signals],
                 metric_name="평균 LTV",
