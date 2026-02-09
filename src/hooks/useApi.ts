@@ -615,6 +615,27 @@ export function useBankingRiskAlerts(corpId: string) {
   });
 }
 
+// ============================================================
+// DART Financial Statements Hook (100% Fact - DART 공시)
+// ============================================================
+
+import {
+  getDartFinancialsByName,
+  ApiDartFinancialsResponse,
+  ApiDartFinancialStatement,
+} from '@/lib/api';
+
+// DART 재무제표 조회 훅 (기업명으로)
+export function useDartFinancials(corpName: string) {
+  return useQuery({
+    queryKey: ['dart-financials', corpName],
+    queryFn: () => getDartFinancialsByName(corpName),
+    enabled: !!corpName && corpName.length > 0,
+    staleTime: 30 * 60 * 1000, // 30분 캐시 (DART 데이터는 변경이 드묾)
+    retry: 1,
+  });
+}
+
 // API 타입 re-export (페이지에서 직접 사용)
 export type {
   ApiSignalDetail,
@@ -646,4 +667,7 @@ export type {
   ApiLoanInsightExistsResponse,
   ApiLoanInsightSummary,
   ApiLoanInsightSummariesResponse,
+  // DART Financial Statements types
+  ApiDartFinancialsResponse,
+  ApiDartFinancialStatement,
 };

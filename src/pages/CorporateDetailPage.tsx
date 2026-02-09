@@ -55,7 +55,7 @@ import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import ReportPreviewModal from "@/components/reports/ReportPreviewModal";
-import { useCorporation, useSignals, useCorporationSnapshot, useCorpProfile, useCorpProfileDetail, useRefreshCorpProfile, useJobStatus, useLoanInsight, useBankingData, useBankingRiskAlerts } from "@/hooks/useApi";
+import { useCorporation, useSignals, useCorporationSnapshot, useCorpProfile, useCorpProfileDetail, useRefreshCorpProfile, useJobStatus, useLoanInsight, useBankingData, useBankingRiskAlerts, useDartFinancials } from "@/hooks/useApi";
 import { toast } from "sonner";
 import type { ProfileConfidence, CorpProfile } from "@/types/profile";
 import { useQueryClient } from "@tanstack/react-query";
@@ -230,6 +230,7 @@ const StickyCommandBar = () => (
 const TOC_ITEMS = [
   { id: "summary", label: "Executive Summary" },
   { id: "profile", label: "Corporate Profile" },
+  { id: "dart-financials", label: "DART 재무제표" },
   { id: "banking", label: "Banking Data" },
   { id: "financials", label: "Bank Relationship" },
   { id: "intelligence", label: "Intelligence & Flow" },
@@ -266,6 +267,8 @@ export default function CorporateDetailPage() {
   // Banking Data (PRD v1.1)
   const { data: bankingData, isLoading: isLoadingBankingData } = useBankingData(corpId || "");
   const { data: bankingRiskAlerts } = useBankingRiskAlerts(corpId || "");
+  // DART 재무제표 (100% Fact)
+  const { data: dartFinancials, isLoading: isLoadingDartFinancials } = useDartFinancials(corporation?.name || "");
   // Banking Data Drill Down State
   const [drillDownConfig, setDrillDownConfig] = useState<{ isOpen: boolean; title: string; data: any } | null>(null);
 
@@ -670,7 +673,239 @@ export default function CorporateDetailPage() {
               </GlassCard>
             </div>
 
-            {/* 2.5 Banking Data Section (PRD v1.1) - Visual Update */}
+            {/* 2.5 DART Financial Statements (100% Fact) */}
+            <div id="dart-financials">
+              <GlassCard className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <SectionHeader icon={FileText} title="DART 재무제표" subtitle="100% Fact - DART 전자공시" />
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-1 rounded text-[10px] font-mono bg-green-100 text-green-700 border border-green-200">
+                      <ShieldCheck className="w-3 h-3 inline mr-1" />
+                      DART 공시
+                    </span>
+                  </div>
+                </div>
+
+                {isLoadingDartFinancials ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="w-6 h-6 animate-spin text-indigo-500" />
+                    <span className="ml-2 text-slate-500">DART 재무제표를 불러오는 중...</span>
+                  </div>
+                ) : dartFinancials?.found && dartFinancials.financial_statements.length > 0 ? (
+                  <div className="space-y-6">
+                    {/* Financial Summary Cards */}
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                      {(() => {
+                        const latest = dartFinancials.financial_statements[0];
+                        const prev = dartFinancials.financial_statements[1];
+
+                        const calcChange = (curr: number | null, prev: number | null) => {
+                          if (!curr || !prev || prev === 0) return null;
+                          return ((curr - prev) / Math.abs(prev) * 100);
+                        };
+
+                        const revenueChange = calcChange(latest?.revenue, prev?.revenue);
+                        const opChange = calcChange(latest?.operating_profit, prev?.operating_profit);
+                        const netChange = calcChange(latest?.net_income, prev?.net_income);
+                        const assetChange = calcChange(latest?.total_assets, prev?.total_assets);
+
+                        return (
+                          <>
+                            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-100">
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">매출액</p>
+                              <p className="text-xl font-bold text-slate-900 font-mono">{formatKRW(latest?.revenue)}</p>
+                              {revenueChange !== null && (
+                                <p className={`text-[11px] font-medium font-mono flex items-center gap-0.5 mt-1 ${revenueChange >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                  {revenueChange >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                                  {revenueChange >= 0 ? '+' : ''}{revenueChange.toFixed(1)}% YoY
+                                </p>
+                              )}
+                            </div>
+                            <div className="bg-gradient-to-br from-emerald-50 to-green-50 rounded-xl p-4 border border-emerald-100">
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">영업이익</p>
+                              <p className={`text-xl font-bold font-mono ${(latest?.operating_profit ?? 0) >= 0 ? 'text-slate-900' : 'text-rose-600'}`}>
+                                {formatKRW(latest?.operating_profit)}
+                              </p>
+                              {opChange !== null && (
+                                <p className={`text-[11px] font-medium font-mono flex items-center gap-0.5 mt-1 ${opChange >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                  {opChange >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                                  {opChange >= 0 ? '+' : ''}{opChange.toFixed(1)}% YoY
+                                </p>
+                              )}
+                            </div>
+                            <div className="bg-gradient-to-br from-violet-50 to-purple-50 rounded-xl p-4 border border-violet-100">
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">당기순이익</p>
+                              <p className={`text-xl font-bold font-mono ${(latest?.net_income ?? 0) >= 0 ? 'text-slate-900' : 'text-rose-600'}`}>
+                                {formatKRW(latest?.net_income)}
+                              </p>
+                              {netChange !== null && (
+                                <p className={`text-[11px] font-medium font-mono flex items-center gap-0.5 mt-1 ${netChange >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                  {netChange >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                                  {netChange >= 0 ? '+' : ''}{netChange.toFixed(1)}% YoY
+                                </p>
+                              )}
+                            </div>
+                            <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl p-4 border border-amber-100">
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">자산총계</p>
+                              <p className="text-xl font-bold text-slate-900 font-mono">{formatKRW(latest?.total_assets)}</p>
+                              {assetChange !== null && (
+                                <p className={`text-[11px] font-medium font-mono flex items-center gap-0.5 mt-1 ${assetChange >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                  {assetChange >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                                  {assetChange >= 0 ? '+' : ''}{assetChange.toFixed(1)}% YoY
+                                </p>
+                              )}
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </div>
+
+                    {/* Yearly Trend Chart */}
+                    <div className="bg-slate-50/50 rounded-xl p-5 border border-slate-200">
+                      <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-4">연도별 손익 추이</p>
+                      <div className="h-[200px] w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart
+                            data={[...dartFinancials.financial_statements].reverse().map(stmt => ({
+                              year: stmt.bsns_year,
+                              revenue: stmt.revenue ? stmt.revenue / 100000000 : 0,
+                              operating_profit: stmt.operating_profit ? stmt.operating_profit / 100000000 : 0,
+                              net_income: stmt.net_income ? stmt.net_income / 100000000 : 0,
+                            }))}
+                            margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                            <XAxis dataKey="year" tick={{ fontSize: 12, fontWeight: 600 }} tickLine={false} axisLine={{ stroke: '#cbd5e1' }} />
+                            <YAxis tick={{ fontSize: 10, fontFamily: 'monospace' }} tickLine={false} axisLine={false} tickFormatter={(val) => `${val}억`} width={50} />
+                            <Tooltip
+                              contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', fontSize: '12px', fontFamily: 'monospace' }}
+                              formatter={(value: number, name: string) => {
+                                const labels: Record<string, string> = { revenue: '매출액', operating_profit: '영업이익', net_income: '당기순이익' };
+                                return [`${value.toFixed(1)}억원`, labels[name] || name];
+                              }}
+                              labelFormatter={(label) => `${label}년`}
+                            />
+                            <Legend formatter={(value) => {
+                              const labels: Record<string, string> = { revenue: '매출액', operating_profit: '영업이익', net_income: '당기순이익' };
+                              return labels[value] || value;
+                            }} />
+                            <Bar dataKey="revenue" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                            <Bar dataKey="operating_profit" fill="#10b981" radius={[4, 4, 0, 0]} />
+                            <Bar dataKey="net_income" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+
+                    {/* Balance Sheet Details */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* 재무상태표 */}
+                      <div className="bg-slate-50/50 rounded-xl p-5 border border-slate-200">
+                        <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-4">재무상태표 (최신연도)</p>
+                        {(() => {
+                          const latest = dartFinancials.financial_statements[0];
+                          return (
+                            <div className="space-y-3">
+                              <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                                <span className="text-sm text-slate-600">자산총계</span>
+                                <span className="text-sm font-bold font-mono text-slate-900">{formatKRW(latest?.total_assets)}</span>
+                              </div>
+                              <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                                <span className="text-sm text-slate-600">부채총계</span>
+                                <span className="text-sm font-bold font-mono text-rose-600">{formatKRW(latest?.total_liabilities)}</span>
+                              </div>
+                              <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                                <span className="text-sm text-slate-600">자본총계</span>
+                                <span className="text-sm font-bold font-mono text-emerald-600">{formatKRW(latest?.total_equity)}</span>
+                              </div>
+                              <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                                <span className="text-sm text-slate-600">이익잉여금</span>
+                                <span className={`text-sm font-bold font-mono ${(latest?.retained_earnings ?? 0) >= 0 ? 'text-indigo-600' : 'text-rose-600'}`}>
+                                  {formatKRW(latest?.retained_earnings)}
+                                </span>
+                              </div>
+                              <div className="flex justify-between items-center py-2 bg-slate-100 rounded-lg px-3 -mx-1">
+                                <span className="text-sm font-semibold text-slate-700">부채비율</span>
+                                <span className={`text-sm font-bold font-mono ${(latest?.debt_ratio ?? 0) > 200 ? 'text-rose-600' : (latest?.debt_ratio ?? 0) > 100 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                                  {latest?.debt_ratio?.toFixed(1) || '-'}%
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+
+                      {/* 연도별 상세 테이블 */}
+                      <div className="bg-slate-50/50 rounded-xl p-5 border border-slate-200">
+                        <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-4">연도별 상세 (단위: 억원)</p>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="border-b border-slate-200">
+                                <th className="py-2 text-left text-slate-500 font-semibold">연도</th>
+                                {dartFinancials.financial_statements.map(stmt => (
+                                  <th key={stmt.bsns_year} className="py-2 text-right text-slate-700 font-bold font-mono">{stmt.bsns_year}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr className="border-b border-slate-100">
+                                <td className="py-2 text-slate-600">매출액</td>
+                                {dartFinancials.financial_statements.map(stmt => (
+                                  <td key={stmt.bsns_year} className="py-2 text-right font-mono text-slate-800">
+                                    {stmt.revenue ? (stmt.revenue / 100000000).toFixed(0) : '-'}
+                                  </td>
+                                ))}
+                              </tr>
+                              <tr className="border-b border-slate-100">
+                                <td className="py-2 text-slate-600">영업이익</td>
+                                {dartFinancials.financial_statements.map(stmt => (
+                                  <td key={stmt.bsns_year} className={`py-2 text-right font-mono ${(stmt.operating_profit ?? 0) < 0 ? 'text-rose-600' : 'text-slate-800'}`}>
+                                    {stmt.operating_profit ? (stmt.operating_profit / 100000000).toFixed(0) : '-'}
+                                  </td>
+                                ))}
+                              </tr>
+                              <tr className="border-b border-slate-100">
+                                <td className="py-2 text-slate-600">순이익</td>
+                                {dartFinancials.financial_statements.map(stmt => (
+                                  <td key={stmt.bsns_year} className={`py-2 text-right font-mono ${(stmt.net_income ?? 0) < 0 ? 'text-rose-600' : 'text-slate-800'}`}>
+                                    {stmt.net_income ? (stmt.net_income / 100000000).toFixed(0) : '-'}
+                                  </td>
+                                ))}
+                              </tr>
+                              <tr className="border-b border-slate-100">
+                                <td className="py-2 text-slate-600">부채비율</td>
+                                {dartFinancials.financial_statements.map(stmt => (
+                                  <td key={stmt.bsns_year} className={`py-2 text-right font-mono ${(stmt.debt_ratio ?? 0) > 200 ? 'text-rose-600' : 'text-slate-800'}`}>
+                                    {stmt.debt_ratio?.toFixed(0) || '-'}%
+                                  </td>
+                                ))}
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Source Attribution */}
+                    <div className="flex items-center justify-end gap-2 text-[10px] text-slate-400 pt-2">
+                      <ShieldCheck className="w-3 h-3 text-green-500" />
+                      <span>출처: DART 전자공시시스템 (금융감독원)</span>
+                      <span className="text-slate-300">|</span>
+                      <span>신뢰도: HIGH (100% Fact)</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-12 text-slate-400">
+                    <FileText className="w-12 h-12 mx-auto mb-4 opacity-30" />
+                    <p className="font-medium">DART 재무제표를 찾을 수 없습니다.</p>
+                    <p className="text-xs mt-2">{dartFinancials?.message || "비상장 기업이거나 DART에 등록되지 않은 기업입니다."}</p>
+                  </div>
+                )}
+              </GlassCard>
+            </div>
+
+            {/* 2.6 Banking Data Section (PRD v1.1) - Visual Update */}
             <div id="banking">
               <GlassCard className="p-6">
                 <div className="flex items-center justify-between mb-6">

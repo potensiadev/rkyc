@@ -629,6 +629,7 @@ class FinancialStatementResponse(BaseModel):
     total_assets: Optional[int] = None
     total_liabilities: Optional[int] = None
     total_equity: Optional[int] = None
+    retained_earnings: Optional[int] = None  # 이익잉여금
     debt_ratio: Optional[float] = None
     report_code: Optional[str] = None
     source: str = "DART"

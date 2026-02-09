@@ -914,3 +914,39 @@ export async function getBankingTradeFinance(corpId: string): Promise<Record<str
 export async function getBankingFinancialStatementsDart(corpId: string): Promise<Record<string, unknown>> {
   return fetchApi<Record<string, unknown>>(`/api/v1/banking-data/${corpId}/financial-statements/dart`);
 }
+
+// ============================================================
+// DART Financial Statements API (100% Fact - DART 공시)
+// ============================================================
+
+export interface ApiDartFinancialStatement {
+  bsns_year: string;              // 사업연도
+  revenue: number | null;         // 매출액
+  operating_profit: number | null; // 영업이익
+  net_income: number | null;      // 당기순이익
+  total_assets: number | null;    // 자산총계
+  total_liabilities: number | null; // 부채총계
+  total_equity: number | null;    // 자본총계
+  retained_earnings: number | null; // 이익잉여금
+  debt_ratio: number | null;      // 부채비율
+  report_code: string | null;
+  source: string;                 // "DART"
+  confidence: string;             // "HIGH"
+}
+
+export interface ApiDartFinancialsResponse {
+  corp_name: string;
+  corp_code?: string;
+  found: boolean;
+  financial_statements: ApiDartFinancialStatement[];
+  count: number;
+  message?: string;
+  source: string;
+  confidence: string;
+}
+
+// DART 재무제표 조회 (기업명으로)
+export async function getDartFinancialsByName(corpName: string): Promise<ApiDartFinancialsResponse> {
+  const encodedName = encodeURIComponent(corpName);
+  return fetchApi<ApiDartFinancialsResponse>(`/api/v1/dart/financials-by-name?corp_name=${encodedName}`);
+}
