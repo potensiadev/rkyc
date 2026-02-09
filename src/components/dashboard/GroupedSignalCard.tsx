@@ -101,16 +101,7 @@ export function GroupedSignalCard({
           {/* Left: 기업 정보 */}
           <div className="flex items-center gap-4">
             {/* Avatar */}
-            <div
-              className={cn(
-                "w-10 h-10 rounded-xl flex items-center justify-center font-bold text-lg shadow-sm transition-colors",
-                hasHighRisk
-                  ? "bg-rose-50 text-rose-600 border border-rose-100"
-                  : "bg-indigo-50 text-indigo-600 border border-indigo-100"
-              )}
-            >
-              {corporationName.charAt(0)}
-            </div>
+
 
             {/* Name + ID */}
             <div>

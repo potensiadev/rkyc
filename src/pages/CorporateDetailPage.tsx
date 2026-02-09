@@ -260,59 +260,59 @@ export default function CorporateDetailPage() {
   const activeSection = useScrollSpy(TOC_ITEMS.map(i => i.id));
 
   // =========================================================================
-  // P0 Auto Pre-warming: 페이지 로드 시 자동 프로필 갱신
-  // - 프로필이 없거나 만료되었으면 백그라운드에서 자동 갱신
-  // - 시연 시 수동 Pre-warming 불필요
+  // P0 Auto Pre-warming: 비활성화됨
+  // - 시연 시 Demo Panel에서 수동으로 분석 실행
+  // - Corporate Detail Page 진입 시 자동 분석 하지 않음
   // =========================================================================
-  useEffect(() => {
-    // 이미 갱신 트리거됨 또는 로딩 중이면 스킵
-    if (autoRefreshTriggered || isLoadingProfile || !corpId) return;
+  // useEffect(() => {
+  //   // 이미 갱신 트리거됨 또는 로딩 중이면 스킵
+  //   if (autoRefreshTriggered || isLoadingProfile || !corpId) return;
 
-    // 현재 갱신 중이면 스킵
-    if (refreshStatus === 'running') return;
+  //   // 현재 갱신 중이면 스킵
+  //   if (refreshStatus === 'running') return;
 
-    // 프로필 갱신 필요 조건 체크
-    const needsRefresh = () => {
-      // 1. 프로필이 없으면 갱신 필요
-      if (!profile) return true;
+  //   // 프로필 갱신 필요 조건 체크
+  //   const needsRefresh = () => {
+  //     // 1. 프로필이 없으면 갱신 필요
+  //     if (!profile) return true;
 
-      // 2. expires_at이 과거이면 갱신 필요
-      if (profile.expiresAt) {
-        const expiresAt = new Date(profile.expiresAt);
-        if (expiresAt < new Date()) return true;
-      }
+  //     // 2. expires_at이 과거이면 갱신 필요
+  //     if (profile.expiresAt) {
+  //       const expiresAt = new Date(profile.expiresAt);
+  //       if (expiresAt < new Date()) return true;
+  //     }
 
-      // 3. confidence가 STALE이면 갱신 필요
-      if (profile.profileConfidence === 'STALE') return true;
+  //     // 3. confidence가 STALE이면 갱신 필요
+  //     if (profile.profileConfidence === 'STALE') return true;
 
-      // 4. is_fallback이 true이면 갱신 권장 (더 나은 데이터 시도)
-      if (profile.isFallback) return true;
+  //     // 4. is_fallback이 true이면 갱신 권장 (더 나은 데이터 시도)
+  //     if (profile.isFallback) return true;
 
-      return false;
-    };
+  //     return false;
+  //   };
 
-    if (needsRefresh()) {
-      setAutoRefreshTriggered(true);
+  //   if (needsRefresh()) {
+  //     setAutoRefreshTriggered(true);
 
-      // 백그라운드 갱신 시작
-      refreshProfile.mutate(corpId, {
-        onSuccess: (job) => {
-          if (job?.job_id) {
-            setRefreshJobId(job.job_id);
-            setRefreshStatus('running');
-            toast.info("프로필 자동 갱신 중", {
-              description: "최신 정보를 가져오고 있습니다...",
-              duration: 3000,
-            });
-          }
-        },
-        onError: () => {
-          // 자동 갱신 실패는 조용히 처리 (사용자 경험 방해 X)
-          console.warn("[Auto Pre-warming] Profile refresh failed");
-        },
-      });
-    }
-  }, [corpId, profile, isLoadingProfile, refreshStatus, autoRefreshTriggered, refreshProfile]);
+  //     // 백그라운드 갱신 시작
+  //     refreshProfile.mutate(corpId, {
+  //       onSuccess: (job) => {
+  //         if (job?.job_id) {
+  //           setRefreshJobId(job.job_id);
+  //           setRefreshStatus('running');
+  //           toast.info("프로필 자동 갱신 중", {
+  //             description: "최신 정보를 가져오고 있습니다...",
+  //             duration: 3000,
+  //           });
+  //         }
+  //       },
+  //       onError: () => {
+  //         // 자동 갱신 실패는 조용히 처리 (사용자 경험 방해 X)
+  //         console.warn("[Auto Pre-warming] Profile refresh failed");
+  //       },
+  //     });
+  //   }
+  // }, [corpId, profile, isLoadingProfile, refreshStatus, autoRefreshTriggered, refreshProfile]);
 
   // 보고서 데이터 프리페칭 (hover 시 미리 로드)
   const prefetchReport = () => {
