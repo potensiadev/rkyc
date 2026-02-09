@@ -63,6 +63,7 @@ import { getCorporationReport } from "@/lib/api";
 import { EvidenceBackedField } from "@/components/profile/EvidenceBackedField";
 import { EvidenceMap } from "@/components/profile/EvidenceMap";
 import { RiskIndicators } from "@/components/profile/RiskIndicators";
+import { DrillDownSheet } from "@/components/dashboard/DrillDownSheet";
 import { motion, AnimatePresence } from "framer-motion";
 import { PieChart, Pie, Cell, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LineChart, Line } from "recharts";
 
@@ -265,6 +266,16 @@ export default function CorporateDetailPage() {
   // Banking Data (PRD v1.1)
   const { data: bankingData, isLoading: isLoadingBankingData } = useBankingData(corpId || "");
   const { data: bankingRiskAlerts } = useBankingRiskAlerts(corpId || "");
+  // Banking Data Drill Down State
+  const [drillDownConfig, setDrillDownConfig] = useState<{ isOpen: boolean; title: string; data: any } | null>(null);
+
+  const handleDrillDown = (title: string, data: any) => {
+    setDrillDownConfig({
+      isOpen: true,
+      title,
+      data
+    });
+  };
   const refreshProfile = useRefreshCorpProfile();
   const [showDetailedView, setShowDetailedView] = useState(false);
   const [autoRefreshTriggered, setAutoRefreshTriggered] = useState(false);
@@ -661,12 +672,12 @@ export default function CorporateDetailPage() {
 
             {/* 2.5 Banking Data Section (PRD v1.1) - Visual Update */}
             <div id="banking">
-              <GlassCard className="p-8">
+              <GlassCard className="p-6">
                 <div className="flex items-center justify-between mb-6">
-                  <SectionHeader icon={IconBank} title="Banking Data" subtitle="Internal Transaction & Risk Analysis" />
+                  <SectionHeader icon={IconBank} title="은행 내부 데이터 (Banking Data)" subtitle="여신, 수신, 담보 및 무역금융 종합 분석" />
                   <div className="flex gap-2">
-                    <span className="text-[10px] text-slate-400 flex items-center gap-1">
-                      <Clock className="w-3 h-3" /> Data as of: {bankingData?.data_date || new Date().toISOString().split('T')[0]}
+                    <span className="text-[11px] text-slate-400 flex items-center gap-1 font-mono">
+                      <Clock className="w-3 h-3" /> 기준일: {bankingData?.data_date || new Date().toISOString().split('T')[0]}
                     </span>
                   </div>
                 </div>
@@ -674,97 +685,125 @@ export default function CorporateDetailPage() {
                 {isLoadingBankingData ? (
                   <div className="flex items-center justify-center py-12">
                     <Loader2 className="w-6 h-6 animate-spin text-indigo-500" />
-                    <span className="ml-2 text-slate-500">Loading banking data...</span>
+                    <span className="ml-2 text-slate-500">은행 데이터를 불러오는 중...</span>
                   </div>
                 ) : bankingData ? (
-                  <div className="space-y-8">
+                  <div className="space-y-6">
 
-                    {/* 1. Risk & Opportunity Banners */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* 1. Risk & Opportunity Banners - Compact High Density */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {/* Risk Alerts */}
                       {bankingRiskAlerts && bankingRiskAlerts.total > 0 && (
-                        <div className="bg-red-50 border border-red-100 rounded-xl p-4 relative overflow-hidden">
-                          <div className="absolute top-0 right-0 p-3 opacity-10"><AlertTriangle className="w-12 h-12 text-red-600" /></div>
-                          <div className="flex items-center gap-2 mb-2 relative z-10">
-                            <div className="p-1.5 bg-red-100 rounded-lg text-red-600"><AlertTriangle className="w-4 h-4" /></div>
-                            <h4 className="font-bold text-red-900 text-sm">Critical Risk Alerts ({bankingRiskAlerts.total})</h4>
-                          </div>
-                          <div className="space-y-2 relative z-10">
-                            {bankingRiskAlerts.alerts.slice(0, 2).map((alert) => (
-                              <div key={alert.id} className="flex items-start gap-2">
-                                <div className={`w-1.5 h-1.5 rounded-full mt-1.5 ${alert.severity === 'HIGH' ? 'bg-red-600' : 'bg-orange-500'}`} />
-                                <p className="text-xs text-red-800 leading-snug"><span className="font-semibold">{alert.title}:</span> {alert.description}</p>
+                        <div className="bg-red-50/80 border border-red-100 rounded-lg p-3 relative overflow-hidden group hover:border-red-200 transition-colors">
+                          <div className="flex items-start gap-3 relative z-10">
+                            <div className="p-1.5 bg-white rounded-md text-red-600 shadow-sm mt-0.5"><AlertTriangle className="w-4 h-4" /></div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <h4 className="font-bold text-red-900 text-sm">위험 알림 (Risk Alerts)</h4>
+                                <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-red-100 text-red-700 font-bold font-mono">{bankingRiskAlerts.total}</span>
                               </div>
-                            ))}
+                              <div className="space-y-1.5">
+                                {bankingRiskAlerts.alerts.slice(0, 2).map((alert) => (
+                                  <div key={alert.id} className="flex items-start gap-2 text-xs text-red-800/90 leading-snug">
+                                    <span className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${alert.severity === 'HIGH' ? 'bg-red-600' : 'bg-orange-500'}`} />
+                                    <span className="truncate"><span className="font-semibold text-red-900">{alert.title}:</span> {alert.description}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
                           </div>
                         </div>
                       )}
 
                       {/* Opportunity Signals */}
                       {bankingData.opportunity_signals.length > 0 && (
-                        <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 relative overflow-hidden">
-                          <div className="absolute top-0 right-0 p-3 opacity-10"><TrendingUp className="w-12 h-12 text-emerald-600" /></div>
-                          <div className="flex items-center gap-2 mb-2 relative z-10">
-                            <div className="p-1.5 bg-emerald-100 rounded-lg text-emerald-600"><TrendingUp className="w-4 h-4" /></div>
-                            <h4 className="font-bold text-emerald-900 text-sm">Detected Opportunities ({bankingData.opportunity_signals.length})</h4>
-                          </div>
-                          <div className="space-y-2 relative z-10">
-                            {bankingData.opportunity_signals.slice(0, 2).map((opp, idx) => (
-                              <div key={idx} className="flex items-start gap-2">
-                                <div className="w-1.5 h-1.5 rounded-full mt-1.5 bg-emerald-600" />
-                                <p className="text-xs text-emerald-800 leading-snug">
-                                  {typeof opp === 'string' ? opp : (opp as any)?.title || 'Opportunity Detected'}
-                                </p>
+                        <div className="bg-emerald-50/80 border border-emerald-100 rounded-lg p-3 relative overflow-hidden group hover:border-emerald-200 transition-colors">
+                          <div className="flex items-start gap-3 relative z-10">
+                            <div className="p-1.5 bg-white rounded-md text-emerald-600 shadow-sm mt-0.5"><TrendingUp className="w-4 h-4" /></div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <h4 className="font-bold text-emerald-900 text-sm">영업 기회 (Opportunities)</h4>
+                                <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-emerald-100 text-emerald-700 font-bold font-mono">{bankingData.opportunity_signals.length}</span>
                               </div>
-                            ))}
+                              <div className="space-y-1.5">
+                                {bankingData.opportunity_signals.slice(0, 2).map((opp, idx) => (
+                                  <div key={idx} className="flex items-start gap-2 text-xs text-emerald-800/90 leading-snug">
+                                    <span className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 bg-emerald-600" />
+                                    <span className="truncate">
+                                      {typeof opp === 'string' ? opp : (opp as any)?.title || '기회 요인 포착'}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
                           </div>
                         </div>
                       )}
                     </div>
 
-                    {/* 2. Main Dashboard Grid */}
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* 2. Main Dashboard Grid - High Density */}
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
-                      {/* Left Column (2/3) */}
-                      <div className="lg:col-span-2 space-y-6">
+                      {/* Left Column (Main Charts) - 8/12 */}
+                      <div className="lg:col-span-8 space-y-6">
 
                         {/* Loan Exposure Chart */}
-                        <div className="bg-slate-50/50 rounded-2xl p-6 border border-slate-100">
-                          <div className="flex justify-between items-end mb-6">
+                        <div className="bg-slate-50/50 rounded-xl p-5 border border-slate-200 shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
+                          <div className="flex justify-between items-end mb-4">
                             <div>
-                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Total Loan Exposure</p>
-                              <div className="flex items-baseline gap-2">
-                                <h3 className="text-2xl font-bold text-slate-900 font-mono">
+                              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                                총 여신 잔액 (Total Exposure)
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-600 border border-indigo-100">
+                                  등급: {(bankingData.loan_exposure as any)?.risk_indicators?.internal_grade || 'N/A'}
+                                </span>
+                              </p>
+                              <div className="flex items-baseline gap-3">
+                                <h3 className="text-2xl font-bold text-slate-900 font-mono tracking-tight">
                                   {formatKRW((bankingData.loan_exposure as any)?.total_exposure_krw)}
                                 </h3>
-                                {(bankingData.loan_exposure as any)?.risk_indicators?.internal_grade && (
-                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-700">
-                                    Grade: {(bankingData.loan_exposure as any).risk_indicators.internal_grade}
-                                  </span>
-                                )}
+                                <span className="text-xs text-emerald-600 font-medium font-mono flex items-center gap-0.5">
+                                  <TrendingUp className="w-3 h-3" /> +12.5% YoY
+                                </span>
                               </div>
                             </div>
-                            {/* Mock Legend */}
-                            <div className="flex gap-3 text-[10px] text-slate-500">
-                              <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-indigo-500" />Secured</div>
-                              <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-indigo-300" />Unsecured</div>
+                            <div className="flex gap-4 text-[11px] text-slate-500 font-medium">
+                              <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-sm bg-indigo-500" />담보대출 (Secured)</div>
+                              <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-sm bg-indigo-300" />신용대출 (Unsecured)</div>
                             </div>
                           </div>
 
-                          <div className="h-[200px] w-full">
+                          <div className="h-[220px] w-full relative">
+                            {/* 한도선 (Reference Line Mock) */}
+                            <div className="absolute top-[20%] left-0 right-0 border-t border-dashed border-slate-300 z-0" />
+                            <span className="absolute top-[17%] right-0 text-[10px] text-slate-400 font-mono bg-slate-50 px-1 z-0">Limit: 1,500억</span>
+
                             <ResponsiveContainer width="100%" height="100%">
-                              <AreaChart data={(bankingData.loan_exposure as any)?.yearly_trend || []}>
+                              <AreaChart
+                                data={(bankingData.loan_exposure as any)?.yearly_trend || []}
+                                margin={{ top: 10, right: 0, left: -20, bottom: 0 }}
+                                onClick={(data) => {
+                                  if (data && data.activePayload && data.activePayload.length > 0) {
+                                    handleDrillDown(`여신 상세 내역 (${data.activePayload[0].payload.year})`, data.activePayload[0].payload);
+                                  }
+                                }}
+                                style={{ cursor: 'pointer' }}
+                              >
                                 <defs>
                                   <linearGradient id="colorSecured" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.1} />
+                                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.15} />
                                     <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
                                   </linearGradient>
                                 </defs>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                <XAxis dataKey="year" stroke="#cbd5e1" fontSize={10} tickLine={false} axisLine={false} />
-                                <YAxis hide />
-                                <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
-                                <Area type="monotone" dataKey="total" stroke="#6366f1" fill="url(#colorSecured)" strokeWidth={2} />
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                                <XAxis dataKey="year" stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} tickMargin={10} fontFamily="monospace" />
+                                <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} fontFamily="monospace" tickFormatter={(val) => `${val / 100000000}`} />
+                                <Tooltip
+                                  contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 12px rgba(0,0,0,0.08)', fontSize: '12px', fontFamily: 'monospace' }}
+                                  itemStyle={{ fontSize: '12px' }}
+                                  labelStyle={{ fontSize: '11px', color: '#64748b', marginBottom: '4px' }}
+                                  cursor={{ stroke: '#6366f1', strokeWidth: 1, strokeDasharray: '4 4' }}
+                                />
+                                <Area type="monotone" dataKey="total" stroke="#6366f1" fill="url(#colorSecured)" strokeWidth={2} name="총 여신" activeDot={{ r: 4, strokeWidth: 0 }} />
                               </AreaChart>
                             </ResponsiveContainer>
                           </div>
@@ -772,67 +811,90 @@ export default function CorporateDetailPage() {
 
                         {/* Trade Finance Grid */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="bg-slate-50/50 rounded-2xl p-5 border border-slate-100">
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Trade: Export vs Import</p>
-                            <div className="flex justify-between items-center mb-4">
+                          <div
+                            className="bg-slate-50/50 rounded-xl p-5 border border-slate-200 cursor-pointer hover:border-indigo-300 transition-colors group"
+                            onClick={() => handleDrillDown("무역금융 상세 (Trade Finance)", bankingData.trade_finance)}
+                          >
+                            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-3 group-hover:text-indigo-600 transition-colors">무역금융 (Trade Finance)</p>
+                            <div className="flex justify-between items-center mb-5">
                               <div>
-                                <p className="text-xs text-slate-500">Export Recv.</p>
-                                <p className="text-lg font-bold text-blue-600 font-mono">${((bankingData.trade_finance as any)?.export?.current_receivables_usd / 1000000)?.toFixed(1)}M</p>
+                                <p className="text-[10px] text-slate-500 mb-0.5">수출 채권 (Export Recv.)</p>
+                                <p className="text-lg font-bold text-blue-600 font-mono tracking-tight">${((bankingData.trade_finance as any)?.export?.current_receivables_usd / 1000000)?.toFixed(1)}M</p>
                               </div>
                               <div className="text-right">
-                                <p className="text-xs text-slate-500">Import Payables</p>
-                                <p className="text-lg font-bold text-rose-500 font-mono">${((bankingData.trade_finance as any)?.import?.current_payables_usd / 1000000)?.toFixed(1)}M</p>
+                                <p className="text-[10px] text-slate-500 mb-0.5">수입 채무 (Import Payables)</p>
+                                <p className="text-lg font-bold text-rose-500 font-mono tracking-tight">${((bankingData.trade_finance as any)?.import?.current_payables_usd / 1000000)?.toFixed(1)}M</p>
                               </div>
                             </div>
-                            {/* Simple Bar Visual */}
-                            <div className="flex gap-1 h-2 rounded-full overflow-hidden bg-slate-100">
-                              <div className="bg-blue-500" style={{ width: '60%' }} />
-                              <div className="bg-rose-500" style={{ width: '40%' }} />
+                            {/* Stacked Bar Visual */}
+                            <div className="relative h-2.5 rounded-full overflow-hidden bg-slate-100 flex">
+                              <div className="bg-blue-500 transition-all duration-1000" style={{ width: '60%' }} />
+                              <div className="bg-rose-500 transition-all duration-1000" style={{ width: '40%' }} />
+                            </div>
+                            <div className="flex justify-between text-[10px] text-slate-400 mt-1.5 font-mono">
+                              <span>60%</span>
+                              <span>40%</span>
                             </div>
                           </div>
 
-                          <div className="bg-slate-50/50 rounded-2xl p-5 border border-slate-100">
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">FX Hedge Ratio</p>
-                            <div className="flex items-end gap-2 mb-2">
-                              <p className="text-3xl font-bold text-slate-900 font-mono">{(bankingData.trade_finance as any)?.fx_exposure?.hedge_ratio}%</p>
-                              <p className="text-xs text-amber-500 font-medium mb-1.5 flex items-center gap-1">
-                                <AlertTriangle className="w-3 h-3" /> Below Target (50%)
-                              </p>
+                          <div className="bg-slate-50/50 rounded-xl p-5 border border-slate-200">
+                            <div className="flex justify-between items-start mb-1">
+                              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">환헤지 비율 (Hedge Ratio)</p>
+                              <div className="flex items-center gap-1 px-2 py-0.5 bg-amber-50 text-amber-700 rounded text-[10px] font-medium border border-amber-100">
+                                <AlertTriangle className="w-3 h-3" /> 주의 필요
+                              </div>
                             </div>
-                            <Progress value={(bankingData.trade_finance as any)?.fx_exposure?.hedge_ratio || 0} className="h-2 bg-amber-100 text-amber-500" />
+
+                            <div className="flex items-end gap-3 mt-4 mb-3">
+                              <p className="text-3xl font-bold text-slate-900 font-mono tracking-tighter">{(bankingData.trade_finance as any)?.fx_exposure?.hedge_ratio}%</p>
+                              <p className="text-[11px] text-slate-500 mb-1.5">권고치 (50%) 미달</p>
+                            </div>
+
+                            <div className="relative">
+                              <Progress value={(bankingData.trade_finance as any)?.fx_exposure?.hedge_ratio || 0} className="h-2.5 bg-slate-100" indicatorClassName="bg-amber-400" />
+                              <div className="absolute top-0 bottom-0 w-0.5 bg-slate-400 opacity-30 z-10" style={{ left: '50%' }} />
+                              <span className="absolute -top-4 left-[48%] text-[9px] text-slate-400 font-mono">Target</span>
+                            </div>
                           </div>
                         </div>
                       </div>
 
-                      {/* Right Column (1/3) */}
-                      <div className="lg:col-span-1 space-y-6">
+                      {/* Right Column (Side Data) - 4/12 */}
+                      <div className="lg:col-span-4 space-y-6">
 
                         {/* Collateral & LTV */}
-                        <div className="bg-slate-50/50 rounded-2xl p-5 border border-slate-100">
+                        <div className="bg-slate-50/50 rounded-xl p-5 border border-slate-200 flex flex-col h-auto">
                           <div className="flex justify-between items-center mb-4">
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Collateral & LTV</p>
-                            <span className="text-xs font-bold text-slate-900 font-mono">Avg LTV: {(bankingData.collateral_detail as any)?.avg_ltv}%</span>
+                            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">주요 담보 (Collateral)</p>
+                            <span className="text-[11px] font-bold text-slate-900 font-mono bg-white px-2 py-1 rounded border border-slate-200">Avg LTV: {(bankingData.collateral_detail as any)?.avg_ltv}%</span>
                           </div>
-                          <div className="space-y-4">
+
+                          {/* AI Insight Inline */}
+                          <div className="mb-4 px-3 py-2 bg-indigo-50/50 border border-indigo-100 rounded-lg flex items-start gap-2">
+                            <Sparkles className="w-3.5 h-3.5 text-indigo-500 mt-0.5 flex-shrink-0" />
+                            <p className="text-[11px] text-indigo-800 leading-snug">
+                              <span className="font-bold">AI Note:</span> 울산 공장 인근 인프라 개발 호재로 감정가 상승 예상 (+15%)
+                            </p>
+                          </div>
+
+                          <div className="space-y-3 flex-1">
                             {((bankingData.collateral_detail as any)?.collaterals || []).slice(0, 3).map((col: any, i: number) => (
-                              <div key={i} className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
+                              <div key={i} className="bg-white p-3 rounded-lg border border-slate-100 shadow-sm transition-shadow hover:shadow-md cursor-default">
                                 <div className="flex items-center gap-3 mb-2">
-                                  <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600">
+                                  <div className="w-8 h-8 rounded bg-slate-50 flex items-center justify-center text-slate-500 border border-slate-100">
                                     <Building2 className="w-4 h-4" />
                                   </div>
                                   <div className="flex-1 min-w-0">
                                     <p className="text-xs font-bold text-slate-800 truncate">{col.description}</p>
-                                    <p className="text-[10px] text-slate-400">{col.type}</p>
+                                    <p className="text-[10px] text-slate-400 truncate">{col.type} · {formatKRW(col.value)}</p>
                                   </div>
                                 </div>
-                                <div className="space-y-1">
-                                  <div className="flex justify-between text-[10px] text-slate-500">
-                                    <span>LTV</span>
-                                    <span>{col.ltv_ratio}%</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] text-slate-500 w-6 font-mono">LTV</span>
+                                  <div className="h-1.5 flex-1 bg-slate-100 rounded-full overflow-hidden">
+                                    <div className={`h-full rounded-full ${col.ltv_ratio > 70 ? 'bg-red-500' : 'bg-emerald-500'}`} style={{ width: `${col.ltv_ratio}%` }} />
                                   </div>
-                                  <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-                                    <div className={`h-full rounded-full ${col.ltv_ratio > 70 ? 'bg-red-500' : 'bg-green-500'}`} style={{ width: `${col.ltv_ratio}%` }} />
-                                  </div>
+                                  <span className={`text-[10px] font-bold font-mono w-8 text-right ${col.ltv_ratio > 70 ? 'text-red-600' : 'text-emerald-600'}`}>{col.ltv_ratio}%</span>
                                 </div>
                               </div>
                             ))}
@@ -840,32 +902,50 @@ export default function CorporateDetailPage() {
                         </div>
 
                         {/* Card Usage Donut */}
-                        <div className="bg-slate-50/50 rounded-2xl p-5 border border-slate-100 flex flex-col items-center">
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 w-full text-left">Internal Expense (Card)</p>
-                          <div className="h-[140px] w-full relative">
-                            <ResponsiveContainer width="100%" height="100%">
-                              <PieChart>
-                                <Pie
-                                  data={[
-                                    { name: 'Travel', value: 35, fill: '#6366f1' },
-                                    { name: 'Ent.', value: 25, fill: '#8b5cf6' },
-                                    { name: 'Others', value: 40, fill: '#cbd5e1' },
-                                  ]}
-                                  cx="50%" cy="50%"
-                                  innerRadius={40} outerRadius={55}
-                                  paddingAngle={5}
-                                  dataKey="value"
-                                />
-                                <Tooltip />
-                              </PieChart>
-                            </ResponsiveContainer>
-                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                              <span className="text-lg font-bold text-slate-700">55M</span>
+                        <div className="bg-slate-50/50 rounded-xl p-5 border border-slate-200">
+                          <div className="flex flex-col h-full">
+                            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-4">법인카드 지출 (Expense)</p>
+                            <div className="flex items-center justify-between">
+                              <div className="h-[120px] w-[120px] relative">
+                                <ResponsiveContainer width="100%" height="100%">
+                                  <PieChart>
+                                    <Pie
+                                      data={[
+                                        { name: '출장', value: 35, fill: '#6366f1' },
+                                        { name: '접대', value: 25, fill: '#8b5cf6' },
+                                        { name: '기타', value: 40, fill: '#cbd5e1' },
+                                      ]}
+                                      cx="50%" cy="50%"
+                                      innerRadius={35} outerRadius={50}
+                                      paddingAngle={3}
+                                      dataKey="value"
+                                    >
+                                      <Cell fill="#6366f1" />
+                                      <Cell fill="#8b5cf6" />
+                                      <Cell fill="#e2e8f0" />
+                                    </Pie>
+                                  </PieChart>
+                                </ResponsiveContainer>
+                                <div className="absolute inset-0 flex items-center justify-center pointer-events-none flex-col">
+                                  <span className="text-sm font-bold text-slate-800 font-mono">55M</span>
+                                </div>
+                              </div>
+                              <div className="flex-1 pl-4 space-y-2">
+                                <p className="text-[10px] text-slate-400 mb-1">카테고리별 비중</p>
+                                <div className="flex items-center justify-between text-[11px]">
+                                  <span className="flex items-center gap-1.5 text-slate-600"><div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />출장비</span>
+                                  <span className="font-mono font-medium text-slate-900">35%</span>
+                                </div>
+                                <div className="flex items-center justify-between text-[11px]">
+                                  <span className="flex items-center gap-1.5 text-slate-600"><div className="w-1.5 h-1.5 rounded-full bg-purple-500" />접대비</span>
+                                  <span className="font-mono font-medium text-slate-900">25%</span>
+                                </div>
+                                <div className="flex items-center justify-between text-[11px]">
+                                  <span className="flex items-center gap-1.5 text-slate-600"><div className="w-1.5 h-1.5 rounded-full bg-slate-300" />기타</span>
+                                  <span className="font-mono font-medium text-slate-900">40%</span>
+                                </div>
+                              </div>
                             </div>
-                          </div>
-                          <div className="flex gap-2 text-[10px] text-slate-500 mt-2">
-                            <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />Travel</span>
-                            <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-purple-500" />Ent.</span>
                           </div>
                         </div>
 
@@ -876,7 +956,7 @@ export default function CorporateDetailPage() {
                 ) : (
                   <div className="text-center py-12 text-slate-400">
                     <IconBank className="w-12 h-12 mx-auto mb-4 opacity-30" />
-                    <p>No banking data available</p>
+                    <p>은행 데이터가 없습니다.</p>
                   </div>
                 )}
               </GlassCard>
@@ -1269,6 +1349,15 @@ export default function CorporateDetailPage() {
         onClose={() => setShowPreviewModal(false)}
         corporationId={corporation.id}
       />
+      {/* Drill Down Sheet */}
+      {drillDownConfig && (
+        <DrillDownSheet
+          isOpen={drillDownConfig.isOpen}
+          onClose={() => setDrillDownConfig(null)}
+          title={drillDownConfig.title}
+          data={drillDownConfig.data}
+        />
+      )}
     </div>
   );
 }

@@ -28,14 +28,13 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-# 6개 시드 기업
+# 4개 시드 기업 (DART API 검증됨)
+# (corp_id, corp_name, dart_corp_code)
 SEED_CORPS = [
-    ("8001-3719240", "엠케이전자"),
-    ("8000-7647330", "동부건설"),
-    ("4028-1234567", "전북식품"),
-    ("6201-2345678", "광주정밀기계"),
-    ("4301-3456789", "삼성전자"),
-    ("6701-4567890", "휴림로봇"),
+    ("8001-3719240", "엠케이전자", "00121686"),
+    ("8000-7647330", "동부건설", "00115612"),
+    ("4301-3456789", "삼성전자", "00126380"),
+    ("6701-4567890", "휴림로봇", "00540429"),
 ]
 
 
@@ -285,7 +284,7 @@ async def run_all():
     """모든 시드 기업 분석"""
     results = []
 
-    for corp_id, corp_name in SEED_CORPS:
+    for corp_id, corp_name, dart_corp_code in SEED_CORPS:
         try:
             result = await run_analysis(corp_id, corp_name)
             results.append(result)
@@ -321,7 +320,7 @@ async def main():
     elif args.corp_id:
         # 특정 기업 찾기
         corp_name = None
-        for cid, cname in SEED_CORPS:
+        for cid, cname, _ in SEED_CORPS:
             if cid == args.corp_id:
                 corp_name = cname
                 break

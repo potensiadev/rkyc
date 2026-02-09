@@ -232,34 +232,6 @@ CORP_SENSITIVITY_CONFIG = {
         "min_signals": 3,
     },
 
-    # 전북식품 (4028-1234567) - 식품
-    "4028-1234567": {
-        "corp_name": "전북식품",
-        "industry_code": "C10",
-        "sensitivity": {
-            "원자재가격": "HIGH",    # 농산물 가격
-            "식량정책": "HIGH",      # 농업 정책
-            "환율변동": "MED",       # 수입 원자재
-            "금리정책": "LOW",
-        },
-        "expected_signals": ["DIRECT", "ENVIRONMENT"],
-        "min_signals": 3,
-    },
-
-    # 광주정밀기계 (6201-2345678) - 기계
-    "6201-2345678": {
-        "corp_name": "광주정밀기계",
-        "industry_code": "C29",
-        "sensitivity": {
-            "공급망정책": "HIGH",    # 부품 수급
-            "수출규제": "MED",       # 기계 수출
-            "환율변동": "MED",
-            "원자재가격": "MED",     # 철강 등
-        },
-        "expected_signals": ["DIRECT", "INDUSTRY"],
-        "min_signals": 3,
-    },
-
     # 삼성전자 (4301-3456789) - 전자
     "4301-3456789": {
         "corp_name": "삼성전자",

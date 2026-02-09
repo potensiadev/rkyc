@@ -221,21 +221,70 @@ SNAPSHOT → DOC_INGEST → EXTERNAL → CONTEXT → SIGNAL → VALIDATION → I
 - 예: `/credit/loan_summary/total_exposure_krw`
 - 예: `/corp/kyc_status/internal_risk_grade`
 
-## 시드 데이터 v2 (6개 기업, 29개 시그널) - 2026-01-19 동기화
+## 시드 데이터 v3 (4개 기업) - 2026-02-09 DART API 동기화
 
-| 기업명 | corp_id | industry_code | ceo_name | biz_no | Signal (D/I/E) |
-|-------|---------|---------------|----------|--------|----------------|
-| 엠케이전자 | 8001-3719240 | C26 | 현기진 | 135-81-06406 | 5개 (3/1/1) |
-| 동부건설 | 8000-7647330 | F41 | 윤진오 | 824-87-03495 | 6개 (4/1/1) |
-| 전북식품 | 4028-1234567 | C10 | 강동구 | 418-01-55362 | 5개 (3/1/1) |
-| 광주정밀기계 | 6201-2345678 | C29 | 강성우 | 415-02-96323 | 4개 (2/1/1) |
-| 삼성전자 | 4301-3456789 | C21 | 전영현 | 124-81-00998 | 5개 (3/1/1) |
-| 휴림로봇 | 6701-4567890 | D35 | 김봉관 | 109-81-60401 | 4개 (2/1/1) |
+### 시드 기업 목록 (DART 100% Fact)
 
-**Signal 분포:**
-- DIRECT: 17개
-- INDUSTRY: 7개
-- ENVIRONMENT: 5개
+| 기업명 | corp_id | dart_corp_code | corp_class | ceo_name |
+|-------|---------|----------------|------------|----------|
+| 엠케이전자 | 8001-3719240 | 00121686 | K (코스닥) | 현기진 |
+| 동부건설 | 8000-7647330 | 00115612 | Y (유가증권) | 윤진오 |
+| 삼성전자 | 4301-3456789 | 00126380 | Y (유가증권) | 전영현, 노태문 |
+| 휴림로봇 | 6701-4567890 | 00540429 | K (코스닥) | 김봉관 |
+
+### 시드 기업 상세 정보 (DART 공시 기준)
+
+**1. 엠케이전자(주)** `8001-3719240`
+- DART 고유번호: 00121686
+- 영문명: MKElectron
+- 대표이사: 현기진
+- 법인등록번호: 1345110004412
+- 사업자등록번호: 135-81-06406
+- 본사: 경기도 용인시 처인구 포곡읍 금어로 405
+- 홈페이지: www.mke.co.kr
+- 설립일: 1982-12-16
+- 결산월: 12월
+- 법인구분: K (코스닥)
+- 주요주주: 계(35.43%), (주)오션비홀딩스(23.8%), (주)신성건설(6.6%)
+
+**2. 동부건설(주)** `8000-7647330`
+- DART 고유번호: 00115612
+- 영문명: Dongbu Corporation
+- 대표이사: 윤진오
+- 법인등록번호: 1101110005002
+- 사업자등록번호: 201-81-45685
+- 본사: 서울특별시 강남구 테헤란로 137 코레이트 타워
+- 홈페이지: dbcon.dongbu.co.kr
+- 설립일: 1969-01-24
+- 결산월: 12월
+- 법인구분: Y (유가증권)
+- 주요주주: 키스톤에코프라임(주)(56.22%)
+
+**3. 삼성전자(주)** `4301-3456789`
+- DART 고유번호: 00126380
+- 영문명: SAMSUNG ELECTRONICS CO.,LTD
+- 대표이사: 전영현, 노태문
+- 법인등록번호: 1301110006246
+- 사업자등록번호: 124-81-00998
+- 본사: 경기도 수원시 영통구 삼성로 129 (매탄동)
+- 홈페이지: www.samsung.com/sec
+- 설립일: 1969-01-13
+- 결산월: 12월
+- 법인구분: Y (유가증권)
+- 주요주주: 삼성생명보험(주)(8.51%), 삼성물산(주)(5.01%)
+
+**4. 휴림로봇(주)** `6701-4567890`
+- DART 고유번호: 00540429
+- 영문명: Hyulim ROBOT Co.,Ltd.
+- 대표이사: 김봉관
+- 법인등록번호: 1101111817828
+- 사업자등록번호: 109-81-60401
+- 본사: 충청남도 천안시 서북구 직산읍 4산단6길 27
+- 홈페이지: www.dstrobot.com
+- 설립일: 1998-11-29
+- 결산월: 12월
+- 법인구분: K (코스닥)
+- 주요주주: (주)휴림홀딩스(7.15%)
 
 ## 현재 진행 상황
 
@@ -2155,12 +2204,10 @@ CLAUDE.md
 **현재 DB 상태**:
 - 엠케이전자: 2 signals ✅
 - 동부건설: 0 signals ⚠️
-- 전북식품: 0 signals ⚠️
-- 광주정밀기계: 0 signals ⚠️
 - 삼성전자: 0 signals ⚠️
 - 휴림로봇: 0 signals ⚠️
 
-**다음 단계**: 5개 기업 분석 실행 필요
+**다음 단계**: 3개 기업 분석 실행 필요
 
 ### 세션 26 (2026-02-08) - Entity Confusion 방지 및 Gemini Grounding Fact-Checker ✅
 **목표**: 엠케이전자 상장폐지 Hallucination 해결 및 모든 시그널 팩트체크 적용
@@ -2511,5 +2558,172 @@ src/components/demo/DemoPanel.tsx
 | **총계** | ~60초 | ~35-45초 | **40%** |
 | 캐시 히트 | - | < 1초 | - |
 
+### 세션 31 (2026-02-09) - Internal Banking Data Integration PRD v1.1 구현 완료
+**목표**: 은행 내부 거래 데이터 통합 - 여신/수신/카드/담보/무역금융/재무제표
+
+**완료 항목**:
+
+#### Phase 1: DB Schema & Mock Data
+- `migration_v15_banking_data.sql`: `rkyc_banking_data` 테이블 생성
+  - JSONB 컬럼: loan_exposure, deposit_trend, card_usage, collateral_detail, trade_finance, financial_statements
+  - risk_alerts, opportunity_signals 배열
+- `seed_banking_data.sql`: 6개 시드 기업 Mock 데이터
+  - 기업별 특화 리스크/기회 시나리오 설정
+
+#### Phase 2: Backend API
+- `models/banking_data.py`: SQLAlchemy 모델
+- `schemas/banking_data.py`: Pydantic 스키마 (80+ 라인)
+- `endpoints/banking_data.py`: 15+ REST 엔드포인트
+  - GET /banking-data/{corp_id} - 전체 조회
+  - GET /banking-data/{corp_id}/risk-alerts - 리스크 알림
+  - GET /banking-data/{corp_id}/opportunities - 영업 기회
+  - GET /banking-data/{corp_id}/loan-exposure - 여신 현황
+  - GET /banking-data/{corp_id}/financial-statements/dart - DART 실시간 재무제표
+
+#### Phase 3: LLM Context Integration
+- `context.py`: `_fetch_banking_data()` 메서드 추가
+- `prompts.py`: `format_banking_data_context()` 함수 추가
+- `signal_extraction.py`: banking_data 파라미터 전달
+- Signal Extraction 프롬프트에 Banking Data 섹션 주입
+
+#### Phase 4: Frontend UI
+- `lib/api.ts`: Banking Data API 함수 추가 (10+ functions)
+- `hooks/useApi.ts`: `useBankingData`, `useBankingRiskAlerts` 훅
+- `CorporateDetailPage.tsx`: Banking Data 섹션 UI
+  - Risk Alerts 배너 (HIGH/MED/LOW 색상 구분)
+  - Opportunity Signals 배너
+  - Loan Exposure 차트 (AreaChart)
+  - Trade Finance 시각화 (Export vs Import)
+  - FX Hedge Ratio Progress Bar
+  - Collateral & LTV 카드 그리드
+  - Card Usage 도넛 차트
+
+**신규 파일**:
+```
+backend/sql/migration_v15_banking_data.sql
+backend/sql/seed_banking_data.sql
+backend/app/models/banking_data.py
+backend/app/schemas/banking_data.py
+backend/app/api/v1/endpoints/banking_data.py
+docs/PRD-Internal-Banking-Data-Integration.md
+```
+
+**수정된 파일**:
+```
+backend/app/models/__init__.py
+backend/app/models/corporation.py (relationship 추가)
+backend/app/api/v1/router.py
+backend/app/worker/pipelines/context.py
+backend/app/worker/llm/prompts.py
+backend/app/worker/pipelines/signal_extraction.py
+src/lib/api.ts
+src/hooks/useApi.ts
+src/pages/CorporateDetailPage.tsx
+```
+
+**Banking Data 구조**:
+```json
+{
+  "loan_exposure": {
+    "total_exposure_krw": 120000000000,
+    "risk_indicators": {
+      "overdue_flag": false,
+      "internal_grade": "MED"
+    }
+  },
+  "deposit_trend": {
+    "current_balance": 45000000000,
+    "trend": "INCREASING"
+  },
+  "collateral_detail": {
+    "total_collateral_value": 150000000000,
+    "avg_ltv": 65.5
+  },
+  "trade_finance": {
+    "export": { "current_receivables_usd": 12500000 },
+    "fx_exposure": { "hedge_ratio": 35.0 }
+  },
+  "risk_alerts": [
+    { "severity": "HIGH", "title": "환헤지율 저조", "category": "TRADE" }
+  ],
+  "opportunity_signals": [
+    "담보물 인근 인프라 개발 호재"
+  ]
+}
+```
+
+### 세션 32 (2026-02-09) - 은행 관점 시그널 재해석 MVP 구현 ✅
+**목표**: 시그널을 은행 관점으로 재해석하여 "당행 여신"에 미치는 영향 분석
+
+**핵심 원칙** (실리콘밸리 시니어 SWE 자문):
+1. **숫자는 템플릿 변수로 주입** - LLM 생성 금지 (Hallucination 방지)
+2. **권고 조치는 "검토 권고" 수준만** - 결정 사항 아님
+3. **기존 시그널 구조 유지** - 해석만 추가
+
+**완료 항목**:
+
+#### 1. DB 마이그레이션
+- `migration_v15_bank_interpretation.sql`
+  - `bank_interpretation` TEXT - 은행 관점 해석 텍스트
+  - `portfolio_impact` VARCHAR(10) - 포트폴리오 영향도 (HIGH/MED/LOW)
+  - `recommended_action` TEXT - 권고 조치
+  - `action_priority` VARCHAR(10) - 조치 우선순위 (URGENT/NORMAL/LOW)
+  - `interpretation_generated_at` TIMESTAMPTZ
+
+#### 2. Backend Pipeline 구현
+- `bank_interpretation.py` 신규 생성 (300+ 라인)
+  - `BankContext` 데이터클래스: 여신, 담보, 신용, 업종 정보
+  - `BankInterpretation` 데이터클래스: 해석 결과
+  - `BankInterpretationService`: LLM 호출 서비스
+  - `BankInterpretationPipeline`: 시그널 일괄 재해석
+  - `BANK_INTERPRETATION_SYSTEM_PROMPT`: 은행 심사역 프롬프트
+
+#### 3. Pipeline 통합
+- `analysis.py`: Stage 6.5로 Bank Interpretation 추가
+  - VALIDATION 후, INDEX 전에 실행
+  - 실패 시 기존 시그널 유지 (non-fatal)
+- `index.py`: Signal 저장 시 bank_interpretation 필드 포함
+
+#### 4. API 확장
+- `schemas/signal.py`: `SignalDetailResponse`에 4개 필드 추가
+- `models/signal.py`: Signal 모델에 5개 컬럼 추가
+- `endpoints/signals.py`: `/signals/{id}/detail`에서 bank_interpretation 반환
+
+#### 5. Frontend UI
+- `SignalDetailPage.tsx`: "당행 관점 분석" 섹션 추가
+  - 포트폴리오 영향도 배지 (HIGH/MED/LOW)
+  - 은행 관점 해석 텍스트
+  - 권고 조치 + 우선순위 아이콘 (URGENT/NORMAL/LOW)
+
+**신규 파일**:
+```
+backend/sql/migration_v15_bank_interpretation.sql
+backend/app/worker/pipelines/bank_interpretation.py
+```
+
+**수정된 파일**:
+```
+backend/app/worker/tasks/analysis.py
+backend/app/worker/pipelines/index.py
+backend/app/worker/pipelines/__init__.py
+backend/app/models/signal.py
+backend/app/schemas/signal.py
+backend/app/api/v1/endpoints/signals.py
+src/lib/api.ts
+src/pages/SignalDetailPage.tsx
+CLAUDE.md
+```
+
+**은행 관점 재해석 예시**:
+| Before (기업 관점) | After (은행 관점) |
+|-------------------|------------------|
+| "수출 비중 70%로 환율 리스크 증가" | "당행의 엠케이전자 여신 12억원이 환율 변동에 노출됨. 현 담보율 120% 감안 시 모니터링 권고" |
+| "반도체 업황 회복 기대" | "당행 여신 포트폴리오 내 반도체 섹터(총 50억) 회수 가능성 개선. 한도 확대 검토 가능" |
+
+**치명적 리스크 방지**:
+- 금지 표현 체크: "즉시 조치", "반드시", "확실히" 등
+- 숫자 왜곡 방지: 템플릿 변수로만 주입 (`{total_exposure_krw}`)
+- 권고 수준 제한: "검토 권고" 표현만 허용
+
 ---
-*Last Updated: 2026-02-09 (세션 30 - Corp Profiling 성능 최적화 및 Signal 버그 수정)*
+*Last Updated: 2026-02-09 (세션 32 - 은행 관점 시그널 재해석 MVP 구현 완료)*

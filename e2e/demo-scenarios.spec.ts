@@ -7,12 +7,10 @@ import { test, expect } from '@playwright/test';
 
 const API_BASE = 'https://rkyc-production.up.railway.app';
 
-// 6개 시드 기업
+// 4개 시드 기업
 const SEED_CORPS = [
   { id: '8001-3719240', name: '엠케이전자', minSignals: 3 },
   { id: '8000-7647330', name: '동부건설', minSignals: 3 },
-  { id: '4028-1234567', name: '전북식품', minSignals: 3 },
-  { id: '6201-2345678', name: '광주정밀기계', minSignals: 3 },
   { id: '4301-3456789', name: '삼성전자', minSignals: 4 },
   { id: '6701-4567890', name: '휴림로봇', minSignals: 3 },
 ];
@@ -49,7 +47,7 @@ test.describe('API Endpoints', () => {
     // API returns {total, items} format
     const corps = data.items || data;
     expect(Array.isArray(corps)).toBeTruthy();
-    expect(corps.length).toBeGreaterThanOrEqual(6);
+    expect(corps.length).toBeGreaterThanOrEqual(4);
 
     // 시드 기업 존재 확인
     const corpIds = corps.map((c: any) => c.corp_id);

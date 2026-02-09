@@ -10,15 +10,15 @@ test.describe('Homepage / Signal Inbox', () => {
     await page.waitForLoadState('networkidle');
 
     // 시그널 카드나 기업 카드 존재 확인 (실제 UI 기반)
-    // 스크린샷에서 확인: 휴림로봇, 동부건설, 전북식품 등 기업 카드 표시
+    // 스크린샷에서 확인: 휴림로봇, 동부건설, 삼성전자 등 기업 카드 표시
     const hasHurim = await page.locator('text=휴림로봇').count();
     const hasDongbu = await page.locator('text=동부건설').count();
-    const hasJeonbuk = await page.locator('text=전북식품').count();
+    const hasSamsung = await page.locator('text=삼성전자').count();
     const hasMK = await page.locator('text=엠케이전자').count();
     const hasRisk = await page.locator('text=Risk').count();
     const hasOpp = await page.locator('text=Opp').count();
 
-    const totalFound = hasHurim + hasDongbu + hasJeonbuk + hasMK + hasRisk + hasOpp;
+    const totalFound = hasHurim + hasDongbu + hasSamsung + hasMK + hasRisk + hasOpp;
     expect(totalFound).toBeGreaterThan(0);
   });
 
@@ -36,7 +36,6 @@ test.describe('Homepage / Signal Inbox', () => {
       const hasRelevantContent =
         text?.includes('전자') ||
         text?.includes('건설') ||
-        text?.includes('식품') ||
         text?.includes('기계') ||
         text?.includes('로봇') ||
         text?.includes('KYC') ||

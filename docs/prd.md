@@ -783,8 +783,6 @@ if (isLoading) return <LoadingSpinner />; if (error || !signal) return <NotFound
 // Corp table data:
 // - 엠케이전자 (8001-3719240)
 // - 동부건설 (8000-7647330)
-// - 전북식품 (4028-1234567)
-// - 광주정밀기계 (6201-2345678)
 // - 삼성전자 (4301-3456789)
 // - 휴림로봇 (6701-4567890)
 export function DemoPanel() { const [selectedCorpId, setSelectedCorpId] = useState<string>(''); const [currentJobId, setCurrentJobId] = useState<string | null>(null);
@@ -1084,8 +1082,6 @@ PART 8: SEED DATA (Demo용 6개 법인) - 실제 corp 테이블 참조
 INSERT INTO corp VALUES
 ('8001-3719240', '...', '엠케이전자', '135-81-06406', 'C26', '현기진', ...),
 ('8000-7647330', '...', '동부건설', '824-87-03495', 'F41', '윤진오', ...),
-('4028-1234567', '...', '전북식품', '418-01-55362', 'C10', '강동구', ...),
-('6201-2345678', '...', '광주정밀기계', '415-02-96323', 'C29', '강성우', ...),
 ('4301-3456789', '...', '삼성전자', '124-81-00998', 'C21', '전영현', ...),
 ('6701-4567890', '...', '휴림로봇', '109-81-60401', 'D35', '김봉관', ...);
 
@@ -1100,7 +1096,7 @@ INSERT INTO corp_bank_relationship (corp_id, deposit_balance, loan_balance) VALU
 
 -- Pre-seeded Signals (8개)
 INSERT INTO rkyc_signal (signal_id, corp_id, signal_type, event_type, ...) VALUES
-('sig-1', '1', 'DIRECT', 'FINANCIAL_STATEMENT_UPDATE', 'OPPORTUNITY', 'HIGH', '전북식품, 미국 유통망 입점'),
+('sig-1', '1', 'DIRECT', 'FINANCIAL_STATEMENT_UPDATE', 'OPPORTUNITY', 'HIGH', '엠케이전자, 미국 반도체 수주 확정'),
 ('sig-2', '1', 'INDUSTRY', 'INDUSTRY_SHOCK', 'OPPORTUNITY', 'MEDIUM', 'K-푸드 수출 호조'),
 ('sig-3', '2', 'DIRECT', 'FINANCIAL_STATEMENT_UPDATE', 'OPPORTUNITY', 'HIGH', '현대차 부품 수주'),
 ('sig-4', '2', 'ENVIRONMENT', 'POLICY_REGULATION_CHANGE', 'RISK', 'MEDIUM', '원자재 가격 상승'),
@@ -1406,16 +1402,6 @@ alembic upgrade head
 법인번호
 업종
 3
-전북식품
-8002-1234567
-134511-0012345
-식품제조
-4
-광주정밀기계
-8002-2345678
-134511-0023456
-기계제조
-5
 익산바이오텍
 8002-3456789
 134511-0034567
@@ -1547,125 +1533,7 @@ alembic upgrade head
   ]
 }
 
-3. 전북식품 (가라 데이터)
-{
-  "corp_id": "8002-1234567",
-  "corp_reg_no": "134511-0012345",
-  "corp_name": "전북식품",
-  "biz_no": "402-81-12345",
-  "industry_code": "C10",
-  "industry_name": "식품제조업",
-  "ceo_name": "김정호",
-  "employee_count": 245,
-  "founded_year": 1987,
-  "headquarters": "전북 전주시 덕진구",
-  "main_business": "김치, 젓갈 등 전통 발효식품 제조 및 수출",
-  
-  "bank_relationship": {
-    "has_relationship": true,
-    "deposit_balance": 3200000000,
-    "loan_balance": 8500000000,
-    "fx_transactions": 12000000000,
-    "relationship_since": "2012-04-10"
-  },
-  
-  "kyc_status": {
-    "is_kyc_completed": true,
-    "last_kyc_updated": "2025-12-15",
-    "internal_risk_grade": "LOW"
-  },
-  
-  "credit": {
-    "has_loan": true,
-    "total_exposure_krw": 8500000000,
-    "overdue_flag": false,
-    "risk_grade_internal": "LOW"
-  },
-  
-  "collateral": {
-    "has_collateral": true,
-    "collateral_types": ["REAL_ESTATE"],
-    "collateral_count": 2
-  },
-  
-  "shareholders": [
-    {"name": "김정호", "ownership": "45%", "type": "개인"},
-    {"name": "김영수", "ownership": "25%", "type": "개인"},
-    {"name": "전북창업투자", "ownership": "15%", "type": "법인"}
-  ],
-  
-  "executives": [
-    {"name": "김정호", "position": "대표이사", "is_key_man": true},
-    {"name": "이미자", "position": "상무이사", "is_key_man": false}
-  ],
-  
-  "financial_snapshots": [
-    {"year": 2024, "revenue": "580억", "operating_profit": "52억", "net_profit": "38억"},
-    {"year": 2023, "revenue": "520억", "operating_profit": "44억", "net_profit": "31억"},
-    {"year": 2022, "revenue": "465억", "operating_profit": "37억", "net_profit": "26억"}
-  ]
-}
-
-4. 광주정밀기계 (가라 데이터)
-{
-  "corp_id": "8002-2345678",
-  "corp_reg_no": "134511-0023456",
-  "corp_name": "광주정밀기계",
-  "biz_no": "410-81-23456",
-  "industry_code": "C29",
-  "industry_name": "기타 기계 및 장비 제조업",
-  "ceo_name": "이상훈",
-  "employee_count": 178,
-  "founded_year": 1995,
-  "headquarters": "광주 광산구 평동산단",
-  "main_business": "자동차 정밀 금형 및 부품 제조",
-  
-  "bank_relationship": {
-    "has_relationship": true,
-    "deposit_balance": 1800000000,
-    "loan_balance": 12000000000,
-    "fx_transactions": 2500000000,
-    "relationship_since": "2016-09-01"
-  },
-  
-  "kyc_status": {
-    "is_kyc_completed": true,
-    "last_kyc_updated": "2025-10-28",
-    "internal_risk_grade": "LOW"
-  },
-  
-  "credit": {
-    "has_loan": true,
-    "total_exposure_krw": 12000000000,
-    "overdue_flag": false,
-    "risk_grade_internal": "LOW"
-  },
-  
-  "collateral": {
-    "has_collateral": true,
-    "collateral_types": ["REAL_ESTATE", "DEPOSIT"],
-    "collateral_count": 2
-  },
-  
-  "shareholders": [
-    {"name": "이상훈", "ownership": "52%", "type": "개인"},
-    {"name": "광주테크밸리", "ownership": "20%", "type": "법인"},
-    {"name": "현대모비스", "ownership": "10%", "type": "법인"}
-  ],
-  
-  "executives": [
-    {"name": "이상훈", "position": "대표이사", "is_key_man": true},
-    {"name": "최기술", "position": "기술이사", "is_key_man": true}
-  ],
-  
-  "financial_snapshots": [
-    {"year": 2024, "revenue": "420억", "operating_profit": "46억", "net_profit": "33억"},
-    {"year": 2023, "revenue": "385억", "operating_profit": "39억", "net_profit": "27억"},
-    {"year": 2022, "revenue": "352억", "operating_profit": "32억", "net_profit": "22억"}
-  ]
-}
-
-5. 익산바이오텍 (가라 데이터)
+3. 익산바이오텍 (가라 데이터)
 {
   "corp_id": "8002-3456789",
   "corp_reg_no": "134511-0034567",
@@ -1786,17 +1654,6 @@ alembic upgrade head
 
 2.3 Pre-seeded Signals (시연용)
 법인별 초기 시그널
--- 전북식품
-INSERT INTO rkyc_signal (signal_id, corp_id, signal_type, event_type, impact_direction, impact_strength, title, summary) VALUES
-('sig-001', '8002-1234567', 'DIRECT', 'FINANCIAL_STATEMENT_UPDATE', 'OPPORTUNITY', 'HIGH', 
- '전북식품, 미국 대형 유통망 입점 확정', 
- '코스트코 미국 본사와 김치 제품 공급 계약 체결. 연간 150억원 규모 수출 예상.');
-
--- 광주정밀기계
-INSERT INTO rkyc_signal (signal_id, corp_id, signal_type, event_type, impact_direction, impact_strength, title, summary) VALUES
-('sig-002', '8002-2345678', 'DIRECT', 'FINANCIAL_STATEMENT_UPDATE', 'OPPORTUNITY', 'HIGH',
- '현대차 신규 전기차 부품 수주',
- '현대자동차 아이오닉7용 정밀 금형 부품 3년간 공급 계약 체결. 계약 규모 약 280억원.');
 
 -- 익산바이오텍
 INSERT INTO rkyc_signal (signal_id, corp_id, signal_type, event_type, impact_direction, impact_strength, title, summary) VALUES
@@ -1994,10 +1851,10 @@ backend/
         │   ├── BIZ_REG.png
         │   ├── REGISTRY.png
         │   └── SHAREHOLDERS.png
-        ├── 8002-1234567/           # 전북식품
+        ├── 4301-3456789/           # 삼성전자
         │   ├── BIZ_REG.png
         │   └── SHAREHOLDERS.png
-        ├── 8002-2345678/           # 광주정밀기계
+        ├── 6701-4567890/           # 휴림로봇
         │   ├── BIZ_REG.png
         │   └── SHAREHOLDERS.png
         ├── 8002-3456789/           # 익산바이오텍
@@ -2069,11 +1926,9 @@ REGISTRY, AOI, FIN_STATEMENT
 Database
 Supabase PostgreSQL (Tokyo 리전)
 법인 수
-6개 (실데이터 2 + 가라 4)
-실데이터 법인
-엠케이전자, 동부건설
-가라 법인
-전북식품, 광주정밀기계, 익산바이오텍, 나주태양에너지
+4개 (엠케이전자, 동부건설, 삼성전자, 휴림로봇)
+가라 법인 (시연 보조)
+익산바이오텍, 나주태양에너지
 문서 유형
 5종 (BIZ_REG, REGISTRY, SHAREHOLDERS, AOI, FIN_STATEMENT)
 최소 문서

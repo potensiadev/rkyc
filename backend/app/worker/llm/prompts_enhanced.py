@@ -368,8 +368,8 @@ DIRECT_EXAMPLES = """
   "impact_strength": "HIGH",
   "confidence": "HIGH",
   "retrieval_confidence": "VERBATIM",
-  "title": "전북식품 내부신용등급 2단계 하락",
-  "summary": "전북식품의 내부신용등급이 BBB에서 BB로 2단계 하락함. 내부 스냅샷에서 확인. 기존 여신 조건 재검토 대상.",
+  "title": "삼성전자 내부신용등급 2단계 하락",
+  "summary": "삼성전자의 내부신용등급이 BBB에서 BB로 2단계 하락함. 내부 스냅샷에서 확인. 기존 여신 조건 재검토 대상.",
   "evidence": [
     {
       "evidence_type": "INTERNAL_FIELD",
@@ -390,8 +390,8 @@ DIRECT_EXAMPLES = """
   "impact_strength": "MED",
   "confidence": "HIGH",
   "retrieval_confidence": "VERBATIM",
-  "title": "광주정밀기계 내부신용등급 상향 조정",
-  "summary": "광주정밀기계의 내부신용등급이 BB에서 BBB로 1단계 상향됨. 내부 스냅샷에서 확인. 여신 확대 검토 가능.",
+  "title": "휴림로봇 내부신용등급 상향 조정",
+  "summary": "휴림로봇의 내부신용등급이 BB에서 BBB로 1단계 상향됨. 내부 스냅샷에서 확인. 여신 확대 검토 가능.",
   "evidence": [
     {
       "evidence_type": "INTERNAL_FIELD",
@@ -500,8 +500,8 @@ DIRECT_EXAMPLES = """
   "impact_strength": "HIGH",
   "confidence": "HIGH",
   "retrieval_confidence": "PARAPHRASED",
-  "title": "전북식품 대주주 지분 35% 전량 매각",
-  "summary": "전북식품의 대주주 홍길동(지분 35%)이 지분 전량을 매각함. DART 주요주주 변동 공시에 따름. 경영 연속성 리스크 점검 권고.",
+  "title": "삼성전자 대주주 지분 35% 전량 매각",
+  "summary": "삼성전자의 대주주 홍길동(지분 35%)이 지분 전량을 매각함. DART 주요주주 변동 공시에 따름. 경영 연속성 리스크 점검 권고.",
   "evidence": [
     {
       "evidence_type": "EXTERNAL",
@@ -522,14 +522,14 @@ DIRECT_EXAMPLES = """
   "impact_strength": "HIGH",
   "confidence": "HIGH",
   "retrieval_confidence": "VERBATIM",
-  "title": "광주정밀기계 LG전자 전략적 투자 100억원 유치",
-  "summary": "광주정밀기계가 LG전자로부터 100억원 규모 전략적 투자를 유치함. 지분 10% 취득. DART 공시에 따름. 기술 협력 및 안정적 매출처 확보.",
+  "title": "휴림로봇 LG전자 전략적 투자 100억원 유치",
+  "summary": "휴림로봇가 LG전자로부터 100억원 규모 전략적 투자를 유치함. 지분 10% 취득. DART 공시에 따름. 기술 협력 및 안정적 매출처 확보.",
   "evidence": [
     {
       "evidence_type": "EXTERNAL",
       "ref_type": "URL",
       "ref_value": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260120000002",
-      "snippet": "LG전자, 광주정밀기계 지분 10%(100억원) 취득, 2026.01.20"
+      "snippet": "LG전자, 휴림로봇 지분 10%(100억원) 취득, 2026.01.20"
     }
   ]
 }
@@ -632,8 +632,8 @@ DIRECT_EXAMPLES = """
   "impact_strength": "LOW",
   "confidence": "HIGH",
   "retrieval_confidence": "VERBATIM",
-  "title": "전북식품 KYC 정기 갱신 시점 도래",
-  "summary": "전북식품의 KYC 갱신 시점이 도래함(마지막 갱신: 2025-01-15, 12개월 경과). 내부 스냅샷에서 확인. 정기 점검 프로세스 진행 필요.",
+  "title": "삼성전자 KYC 정기 갱신 시점 도래",
+  "summary": "삼성전자의 KYC 갱신 시점이 도래함(마지막 갱신: 2025-01-15, 12개월 경과). 내부 스냅샷에서 확인. 정기 점검 프로세스 진행 필요.",
   "evidence": [
     {
       "evidence_type": "INTERNAL_FIELD",
@@ -655,8 +655,8 @@ DIRECT_EXAMPLES = """
   "confidence": "MED",
   "retrieval_confidence": "INFERRED",
   "confidence_reason": "외부 공시 정보와 내부 KYC 정보 간 대표이사 불일치 확인",
-  "title": "광주정밀기계 KYC 정보 불일치 발견",
-  "summary": "광주정밀기계의 내부 KYC 정보와 DART 공시 정보 간 불일치 발견. 내부: 대표이사 김철수, DART: 대표이사 강성우. 정보 갱신 필요.",
+  "title": "휴림로봇 KYC 정보 불일치 발견",
+  "summary": "휴림로봇의 내부 KYC 정보와 DART 공시 정보 간 불일치 발견. 내부: 대표이사 김철수, DART: 대표이사 강성우. 정보 갱신 필요.",
   "evidence": [
     {
       "evidence_type": "INTERNAL_FIELD",
@@ -758,7 +758,7 @@ INDUSTRY_EXAMPLES = """
   "confidence": "MED",
   "retrieval_confidence": "PARAPHRASED",
   "title": "밀가루 가격 15% 하락, 식품업계 원가 부담 완화",
-  "summary": "국제 밀 가격이 6개월 연속 하락하며 안정세. 농림축산식품부 발표 기준 밀가루 가격 전년비 15% 하락. 전북식품은 식품제조업(C10)으로 원가 개선 효과가 있을 수 있음.",
+  "summary": "국제 밀 가격이 6개월 연속 하락하며 안정세. 농림축산식품부 발표 기준 밀가루 가격 전년비 15% 하락. 삼성전자은 식품제조업(C10)으로 원가 개선 효과가 있을 수 있음.",
   "evidence": [
     {
       "evidence_type": "EXTERNAL",
@@ -802,7 +802,7 @@ INDUSTRY_EXAMPLES = """
   "confidence": "MED",
   "retrieval_confidence": "PARAPHRASED",
   "title": "국내 1위 경쟁사 사업 축소, 시장점유율 변화 가능",
-  "summary": "국내 기계장비 1위 업체 A사가 사업 구조조정을 발표함. 매일경제 보도에 따르면 A사 3개 사업부 매각 추진 중. 광주정밀기계는 기계장비제조업(C29)으로 시장점유율 확대 기회 가능.",
+  "summary": "국내 기계장비 1위 업체 A사가 사업 구조조정을 발표함. 매일경제 보도에 따르면 A사 3개 사업부 매각 추진 중. 휴림로봇는 기계장비제조업(C29)으로 시장점유율 확대 기회 가능.",
   "evidence": [
     {
       "evidence_type": "EXTERNAL",
@@ -846,7 +846,7 @@ INDUSTRY_EXAMPLES = """
   "confidence": "HIGH",
   "retrieval_confidence": "VERBATIM",
   "title": "스마트팩토리 도입 40% 증가, 산업로봇 수요 확대",
-  "summary": "제조업 스마트팩토리 도입이 전년비 40% 증가함. 산업통상자원부 발표 기준. 광주정밀기계는 기계장비제조업(C29)으로 산업로봇 수요 확대 수혜 가능.",
+  "summary": "제조업 스마트팩토리 도입이 전년비 40% 증가함. 산업통상자원부 발표 기준. 휴림로봇는 기계장비제조업(C29)으로 산업로봇 수요 확대 수혜 가능.",
   "evidence": [
     {
       "evidence_type": "EXTERNAL",
@@ -890,7 +890,7 @@ INDUSTRY_EXAMPLES = """
   "confidence": "HIGH",
   "retrieval_confidence": "VERBATIM",
   "title": "K-푸드 수출 100억불 돌파, 식품업계 수혜",
-  "summary": "농림축산식품부 발표에 따르면 2025년 K-푸드 수출액이 100억 달러를 돌파함. 동남아/중동 시장에서 30% 이상 성장. 전북식품은 식품제조업(C10)으로 해당 수출 증가의 수혜 가능.",
+  "summary": "농림축산식품부 발표에 따르면 2025년 K-푸드 수출액이 100억 달러를 돌파함. 동남아/중동 시장에서 30% 이상 성장. 삼성전자은 식품제조업(C10)으로 해당 수출 증가의 수혜 가능.",
   "evidence": [
     {
       "evidence_type": "EXTERNAL",
@@ -1008,7 +1008,7 @@ ENVIRONMENT_EXAMPLES = """
   "confidence": "HIGH",
   "retrieval_confidence": "VERBATIM",
   "title": "식품 영양성분 표시 강화, 2026년 3월 시행",
-  "summary": "식품의약품안전처가 식품 영양성분 표시 기준을 강화함. 당류/나트륨 전면 표기 의무화. 전북식품은 식품제조업(C10)으로 포장 변경 비용 발생 가능.",
+  "summary": "식품의약품안전처가 식품 영양성분 표시 기준을 강화함. 당류/나트륨 전면 표기 의무화. 삼성전자은 식품제조업(C10)으로 포장 변경 비용 발생 가능.",
   "evidence": [
     {
       "evidence_type": "EXTERNAL",
@@ -1030,7 +1030,7 @@ ENVIRONMENT_EXAMPLES = """
   "confidence": "HIGH",
   "retrieval_confidence": "VERBATIM",
   "title": "중국 희토류 수출 쿼터제 도입, 연간 30% 감축",
-  "summary": "중국 상무부가 희토류 수출 쿼터제 도입을 발표함. 연간 수출량 30% 감축. 광주정밀기계는 기계장비제조업(C29)으로 모터/센서 등 희토류 사용 부품 원가 영향 모니터링 필요.",
+  "summary": "중국 상무부가 희토류 수출 쿼터제 도입을 발표함. 연간 수출량 30% 감축. 휴림로봇는 기계장비제조업(C29)으로 모터/센서 등 희토류 사용 부품 원가 영향 모니터링 필요.",
   "evidence": [
     {
       "evidence_type": "EXTERNAL",
@@ -1140,7 +1140,7 @@ ENVIRONMENT_EXAMPLES = """
   "confidence": "HIGH",
   "retrieval_confidence": "VERBATIM",
   "title": "식량 자급률 제고 정책, 국산 원료 세제 혜택",
-  "summary": "농림축산식품부가 식량 자급률 제고 5개년 계획을 발표함. 국산 농산물 사용 기업에 세제 혜택 부여. 전북식품은 식품제조업(C10)으로 국산 원료 사용 시 세제 혜택 가능.",
+  "summary": "농림축산식품부가 식량 자급률 제고 5개년 계획을 발표함. 국산 농산물 사용 기업에 세제 혜택 부여. 삼성전자은 식품제조업(C10)으로 국산 원료 사용 시 세제 혜택 가능.",
   "evidence": [
     {
       "evidence_type": "EXTERNAL",

@@ -1557,18 +1557,16 @@ VITE_DEMO_MODE=true
 
 ## 16. Appendix
 
-### 16.1 Seed Data (6 Companies, 29 Signals)
+### 16.1 Seed Data (4 Companies)
 
 | Company | corp_id | Industry | Signals |
 |---------|---------|----------|---------|
 | 엠케이전자 | 8001-3719240 | C26 (Electronics) | 5 (D:3, I:1, E:1) |
 | 동부건설 | 8000-7647330 | F41 (Construction) | 6 (D:4, I:1, E:1) |
-| 전북식품 | 4028-1234567 | C10 (Food) | 5 (D:3, I:1, E:1) |
-| 광주정밀기계 | 6201-2345678 | C29 (Machinery) | 4 (D:2, I:1, E:1) |
 | 삼성전자 | 4301-3456789 | C21 (Pharma) | 5 (D:3, I:1, E:1) |
 | 휴림로봇 | 6701-4567890 | D35 (Utilities) | 4 (D:2, I:1, E:1) |
 
-**Signal Distribution**: DIRECT (17), INDUSTRY (7), ENVIRONMENT (5)
+**Signal Distribution**: DIRECT (12), INDUSTRY (4), ENVIRONMENT (4)
 
 ### 16.2 API Response Codes
 

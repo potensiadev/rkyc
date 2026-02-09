@@ -19,6 +19,8 @@ import DesignShowcasePage from "./pages/DesignShowcasePage";
 import NotFound from "./pages/NotFound";
 import LandingPage from "./pages/LandingPage";
 
+import BankingDataDemoPage from "./pages/BankingDataDemoPage";
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -30,6 +32,7 @@ const App = () => (
         <BrowserRouter>
           <Routes>
             <Route path="/landing" element={<LandingPage />} />
+            <Route path="/banking-demo" element={<BankingDataDemoPage />} />
             <Route path="/" element={<Index />} />
             <Route path="/corporations" element={<CorporationSearch />} />
             <Route path="/briefing" element={<DailyBriefingPage />} />
