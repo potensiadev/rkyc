@@ -300,12 +300,12 @@ async def update_signal_status(
 
     try:
         # rkyc_signal 테이블만 업데이트 (v11: signal_index 업데이트 제거)
+        # P0 Fix: last_updated_at 제거 (컬럼 미존재 가능성)
         await db.execute(
             text("""
                 UPDATE rkyc_signal
                 SET signal_status = CAST(:status AS signal_status_enum),
-                    reviewed_at = CASE WHEN :status = 'REVIEWED' THEN :now ELSE reviewed_at END,
-                    last_updated_at = :now
+                    reviewed_at = CASE WHEN :status = 'REVIEWED' THEN :now ELSE reviewed_at END
                 WHERE signal_id = CAST(:signal_id AS uuid)
             """),
             params
@@ -350,13 +350,13 @@ async def dismiss_signal(
 
     try:
         # rkyc_signal 테이블만 업데이트 (v11: signal_index 업데이트 제거)
+        # P0 Fix: last_updated_at 제거 (컬럼 미존재 가능성)
         await db.execute(
             text("""
                 UPDATE rkyc_signal
                 SET signal_status = CAST('DISMISSED' AS signal_status_enum),
                     dismissed_at = :now,
-                    dismiss_reason = :reason,
-                    last_updated_at = :now
+                    dismiss_reason = :reason
                 WHERE signal_id = CAST(:signal_id AS uuid)
             """),
             params
