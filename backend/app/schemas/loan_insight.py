@@ -1,9 +1,10 @@
 """
 LoanInsight Schemas
+PRD v1.0: 핵심 리스크/기회 요인 구조화
 """
 
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Union, Any
 from datetime import datetime
 from uuid import UUID
 
@@ -15,6 +16,18 @@ class LoanInsightStanceSchema(BaseModel):
     color: str  # red, orange, green, blue
 
 
+class KeyFactorSchema(BaseModel):
+    """핵심 리스크/기회 요인 스키마 (PRD v1.0)"""
+    priority: int  # 1-5 우선순위
+    text: str  # 분석 내용
+    source_signal_id: Optional[str] = None  # 근거 시그널 ID (클릭 시 상세 이동)
+    _corrected: Optional[bool] = None  # 숫자 보정 여부
+    _auto_generated: Optional[bool] = None  # Fallback 생성 여부
+
+    class Config:
+        from_attributes = True
+
+
 class LoanInsightResponse(BaseModel):
     """Loan Insight 응답 스키마"""
     insight_id: UUID
@@ -24,10 +37,11 @@ class LoanInsightResponse(BaseModel):
     stance: LoanInsightStanceSchema
 
     # Content
-    executive_summary: Optional[str] = None  # 사업개요 + 비즈니스모델 + 핵심 시그널 요약
+    executive_summary: Optional[str] = None
     narrative: str
-    key_risks: List[str]
-    key_opportunities: List[str] = []  # 핵심 기회 요인
+    # PRD v1.0: 구조화된 핵심 요인 (기존 string[] 호환)
+    key_risks: Union[List[KeyFactorSchema], List[str], List[Any]]
+    key_opportunities: Union[List[KeyFactorSchema], List[str], List[Any]] = []
     mitigating_factors: List[str]
     action_items: List[str]
 
@@ -65,7 +79,8 @@ class LoanInsightCreateRequest(BaseModel):
     stance_label: str
     stance_color: str
     narrative: str
-    key_risks: List[str]
+    key_risks: Union[List[KeyFactorSchema], List[str], List[Any]]
+    key_opportunities: Union[List[KeyFactorSchema], List[str], List[Any]] = []
     mitigating_factors: List[str]
     action_items: List[str]
     signal_count: int = 0

@@ -48,6 +48,14 @@ _LAZY_IMPORTS = {
     "BankInterpretationService": "app.worker.pipelines.bank_interpretation",
     "BankContext": "app.worker.pipelines.bank_interpretation",
     "BankInterpretation": "app.worker.pipelines.bank_interpretation",
+    # key_factors.py (PRD v1.1)
+    "KeyFactorsGenerator": "app.worker.pipelines.key_factors",
+    "EnrichedSignal": "app.worker.pipelines.key_factors",
+    "SignalBankingMapping": "app.worker.pipelines.key_factors",
+    # v1.1 추가: 은행 실무 기준 함수
+    "get_recommended_hedge_ratio": "app.worker.pipelines.key_factors",
+    "classify_overdue": "app.worker.pipelines.key_factors",
+    "INDUSTRY_LTV_THRESHOLDS": "app.worker.pipelines.key_factors",
 }
 
 
@@ -98,4 +106,12 @@ __all__ = [
     "BankInterpretationService",
     "BankContext",
     "BankInterpretation",
+    # PRD v1.1: Key Factors Generator (핵심 리스크/기회 요인)
+    "KeyFactorsGenerator",
+    "EnrichedSignal",
+    "SignalBankingMapping",
+    # v1.1 추가: 은행 실무 기준 함수
+    "get_recommended_hedge_ratio",
+    "classify_overdue",
+    "INDUSTRY_LTV_THRESHOLDS",
 ]

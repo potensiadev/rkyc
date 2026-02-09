@@ -1584,7 +1584,7 @@ export default function CorporateDetailPage() {
                           {/* Vertical Divider for Desktop */}
                           <div className="hidden md:block absolute top-0 bottom-0 left-1/2 w-px bg-slate-200 -ml-px"></div>
 
-                          {/* Risks */}
+                          {/* Risks - PRD v1.0 */}
                           <div className="bg-rose-50/0 rounded-xl relative">
                             <h4 className="flex items-center gap-2.5 text-base font-bold text-rose-700 mb-5">
                               <div className="p-1.5 bg-rose-100 rounded-lg">
@@ -1593,16 +1593,36 @@ export default function CorporateDetailPage() {
                               핵심 리스크 요인
                             </h4>
                             <ul className="space-y-4">
-                              {loanInsight?.key_risks?.map((risk: string, i: number) => (
-                                <li key={i} className="flex gap-3 text-[14px] text-slate-700 leading-relaxed group">
-                                  <span className="mt-2 w-1.5 h-1.5 rounded-full bg-rose-500 shadow-sm shadow-rose-200 shrink-0 group-hover:scale-125 transition-transform" />
-                                  <span className="group-hover:text-slate-900 transition-colors">{risk}</span>
-                                </li>
-                              )) || <li className="text-sm text-slate-400 italic pl-4">식별된 주요 리스크가 없습니다.</li>}
+                              {loanInsight?.key_risks?.map((risk, i: number) => {
+                                // PRD v1.0: 구조화된 객체 또는 기존 string 호환
+                                const isStructured = typeof risk === 'object' && risk !== null;
+                                const text = isStructured ? (risk as any).text : String(risk);
+                                const priority = isStructured ? (risk as any).priority : i + 1;
+                                const sourceSignalId = isStructured ? (risk as any).source_signal_id : null;
+
+                                return (
+                                  <li key={i} className="flex gap-3 text-[14px] text-slate-700 leading-relaxed group">
+                                    <span className="flex items-center justify-center w-5 h-5 rounded-full bg-rose-100 text-rose-600 text-[10px] font-bold shrink-0 mt-0.5">
+                                      {priority}
+                                    </span>
+                                    <div className="flex-1">
+                                      <span className="group-hover:text-slate-900 transition-colors">{text}</span>
+                                      {sourceSignalId && (
+                                        <button
+                                          onClick={() => navigate(`/signals/${sourceSignalId}`)}
+                                          className="ml-2 text-xs text-rose-500 hover:text-rose-700 hover:underline inline-flex items-center gap-1"
+                                        >
+                                          시그널 보기 →
+                                        </button>
+                                      )}
+                                    </div>
+                                  </li>
+                                );
+                              }) || <li className="text-sm text-slate-400 italic pl-4">식별된 주요 리스크가 없습니다.</li>}
                             </ul>
                           </div>
 
-                          {/* Opportunities */}
+                          {/* Opportunities - PRD v1.0 */}
                           <div className="bg-emerald-50/0 rounded-xl">
                             <h4 className="flex items-center gap-2.5 text-base font-bold text-emerald-700 mb-5">
                               <div className="p-1.5 bg-emerald-100 rounded-lg">
@@ -1611,12 +1631,32 @@ export default function CorporateDetailPage() {
                               핵심 기회 요인
                             </h4>
                             <ul className="space-y-4">
-                              {loanInsight?.key_opportunities?.map((opp: string, i: number) => (
-                                <li key={i} className="flex gap-3 text-[14px] text-slate-700 leading-relaxed group">
-                                  <span className="mt-2 w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-200 shrink-0 group-hover:scale-125 transition-transform" />
-                                  <span className="group-hover:text-slate-900 transition-colors">{opp}</span>
-                                </li>
-                              )) || <li className="text-sm text-slate-400 italic pl-4">식별된 주요 기회 요인이 없습니다.</li>}
+                              {loanInsight?.key_opportunities?.map((opp, i: number) => {
+                                // PRD v1.0: 구조화된 객체 또는 기존 string 호환
+                                const isStructured = typeof opp === 'object' && opp !== null;
+                                const text = isStructured ? (opp as any).text : String(opp);
+                                const priority = isStructured ? (opp as any).priority : i + 1;
+                                const sourceSignalId = isStructured ? (opp as any).source_signal_id : null;
+
+                                return (
+                                  <li key={i} className="flex gap-3 text-[14px] text-slate-700 leading-relaxed group">
+                                    <span className="flex items-center justify-center w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 text-[10px] font-bold shrink-0 mt-0.5">
+                                      {priority}
+                                    </span>
+                                    <div className="flex-1">
+                                      <span className="group-hover:text-slate-900 transition-colors">{text}</span>
+                                      {sourceSignalId && (
+                                        <button
+                                          onClick={() => navigate(`/signals/${sourceSignalId}`)}
+                                          className="ml-2 text-xs text-emerald-500 hover:text-emerald-700 hover:underline inline-flex items-center gap-1"
+                                        >
+                                          시그널 보기 →
+                                        </button>
+                                      )}
+                                    </div>
+                                  </li>
+                                );
+                              }) || <li className="text-sm text-slate-400 italic pl-4">식별된 주요 기회 요인이 없습니다.</li>}
                             </ul>
                           </div>
                         </div>

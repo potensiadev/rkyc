@@ -16,6 +16,7 @@ from app.worker.llm.service import LLMService
 from app.worker.llm.prompts import INSIGHT_GENERATION_PROMPT
 from app.worker.llm.exceptions import AllProvidersFailedError
 from app.worker.llm.embedding import get_embedding_service, EmbeddingError
+from app.worker.pipelines.key_factors import KeyFactorsGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -431,22 +432,47 @@ Summary: {target_signal.get('summary', '')}
         profile: Optional[Dict[str, Any]] = None,
         banking_data: Optional[Dict[str, Any]] = None,
     ) -> None:
-        """Generate Loan Insight via LLM and save to DB."""
+        """Generate Loan Insight via LLM and save to DB (PRD v1.0 적용)."""
         try:
             # 시그널 통계
             risk_count = sum(1 for s in signals if s.get("impact_direction") == "RISK")
             opp_count = sum(1 for s in signals if s.get("impact_direction") == "OPPORTUNITY")
 
-            # 시그널 컨텍스트 포맷
-            signals_context = self._format_signals_for_loan_insight(signals)
+            # ============================================================
+            # PRD v1.0: KeyFactorsGenerator로 핵심 리스크/기회 요인 생성
+            # ============================================================
+            corp_data = {
+                "corp_id": corp_id,
+                "corp_name": corp_name,
+                "industry_name": industry_name,
+                "industry_code": profile.get("industry_code", "") if profile else "",
+            }
 
+            key_factors_generator = KeyFactorsGenerator(llm_service=self.llm)
+            key_factors = key_factors_generator.generate(
+                signals=signals,
+                corp_data=corp_data,
+                banking_data=banking_data
+            )
+
+            # key_risks/key_opportunities를 구조화된 객체로 저장 (PRD v1.0)
+            # DB는 JSONB 타입이므로 객체 배열 그대로 저장 가능
+            key_risks = key_factors.get("key_risks", [])
+            key_opportunities = key_factors.get("key_opportunities", [])
+
+            # ============================================================
+            # 기존 로직: Executive Summary 및 Narrative 생성
+            # ============================================================
             # 프로필 컨텍스트 포맷
             profile_context = self._format_profile_for_loan_insight(profile, corp_name)
 
-            # Banking Data 컨텍스트 포맷 (v3.0 신규)
+            # Banking Data 컨텍스트 포맷
             banking_context = self._format_banking_data_for_loan_insight(banking_data, corp_name)
 
-            # LLM 호출
+            # 시그널 컨텍스트 포맷
+            signals_context = self._format_signals_for_loan_insight(signals)
+
+            # LLM 호출 (Executive Summary + Narrative 전용)
             system_prompt = LOAN_INSIGHT_SYSTEM_PROMPT.format(
                 corp_name=corp_name,
                 industry_name=industry_name,
@@ -459,6 +485,10 @@ Banking Data의 실제 숫자(여신 금액, LTV, 환헤지율 등)를 반드시
 
 [감지된 시그널 목록]
 {signals_context}
+
+[이미 생성된 핵심 요인 - 참고용]
+- 핵심 리스크: {len(key_risks)}건
+- 핵심 기회: {len(key_opportunities)}건
 """
 
             response_json = self.llm.call_with_json_response(
@@ -469,25 +499,25 @@ Banking Data의 실제 숫자(여신 금액, LTV, 환헤지율 등)를 반드시
                 temperature=0.2,
             )
 
-            # DB 저장
+            # DB 저장 (key_risks/key_opportunities는 KeyFactorsGenerator 결과 사용)
             self._save_loan_insight_to_db(
                 corp_id=corp_id,
-                stance_level=response_json.get("stance_level", "STABLE"),
-                stance_label=response_json.get("stance_label", "중립/안정적"),
+                stance_level=key_factors.get("stance_level", response_json.get("stance_level", "STABLE")),
+                stance_label=key_factors.get("stance_label", response_json.get("stance_label", "중립/안정적")),
                 executive_summary=response_json.get("executive_summary", ""),
                 narrative=response_json.get("narrative", ""),
-                key_risks=response_json.get("key_risks", []),
-                key_opportunities=response_json.get("key_opportunities", []),
+                key_risks=key_risks,  # PRD v1.0 결과
+                key_opportunities=key_opportunities,  # PRD v1.0 결과
                 mitigating_factors=response_json.get("mitigating_factors", []),
                 action_items=response_json.get("action_items", []),
                 signal_count=len(signals),
                 risk_count=risk_count,
                 opportunity_count=opp_count,
                 generation_model=self.llm.last_successful_model,
-                is_fallback=False,
+                is_fallback=key_factors.get("_is_fallback", False),
             )
 
-            logger.info(f"Loan Insight saved for corp_id={corp_id}, stance={response_json.get('stance_level')}")
+            logger.info(f"Loan Insight saved for corp_id={corp_id}, stance={key_factors.get('stance_level')}, key_risks={len(key_risks)}, key_opportunities={len(key_opportunities)}")
 
         except Exception as e:
             logger.error(f"Failed to generate Loan Insight via LLM: {e}")

@@ -768,6 +768,18 @@ export async function getCorporationReport(corpId: string): Promise<ApiReportRes
 // Loan Insight API (조건부 - 여신 유무 확인)
 // ============================================================
 
+// PRD v1.0: 핵심 리스크/기회 요인 구조화된 타입
+export interface ApiKeyFactor {
+  priority: number;           // 1-5 우선순위
+  text: string;               // 분석 내용
+  source_signal_id: string | null;  // 근거 시그널 ID (클릭 시 상세 이동)
+  _corrected?: boolean;       // 숫자 보정 여부
+  _auto_generated?: boolean;  // Fallback 생성 여부
+}
+
+// key_risks/key_opportunities는 구조화된 객체 또는 기존 string[] 호환
+export type ApiKeyFactorItem = ApiKeyFactor | string;
+
 // Loan Insight 내부 데이터 (insight 필드)
 export interface ApiLoanInsightData {
   insight_id: string;
@@ -779,8 +791,8 @@ export interface ApiLoanInsightData {
   };
   executive_summary: string | null;
   narrative: string;
-  key_risks: string[];
-  key_opportunities: string[];
+  key_risks: ApiKeyFactorItem[];  // PRD v1.0: 구조화된 타입
+  key_opportunities: ApiKeyFactorItem[];  // PRD v1.0: 구조화된 타입
   mitigating_factors: string[];
   action_items: string[];
   signal_count: number;
