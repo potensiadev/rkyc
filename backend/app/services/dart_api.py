@@ -692,6 +692,7 @@ class FinancialStatement:
     total_assets: Optional[int] = None  # 총자산
     total_liabilities: Optional[int] = None  # 총부채
     total_equity: Optional[int] = None  # 총자본
+    retained_earnings: Optional[int] = None  # 이익잉여금 (차익금)
     debt_ratio: Optional[float] = None  # 부채비율
     report_code: Optional[str] = None  # 보고서 코드 (11011=사업보고서)
     source: str = "DART"
@@ -706,6 +707,7 @@ class FinancialStatement:
             "total_assets": self.total_assets,
             "total_liabilities": self.total_liabilities,
             "total_equity": self.total_equity,
+            "retained_earnings": self.retained_earnings,
             "debt_ratio": self.debt_ratio,
             "report_code": self.report_code,
             "source": self.source,
@@ -806,6 +808,7 @@ def _parse_financial_items(items: list[dict], bsns_year: str, reprt_code: str) -
     total_assets = None
     total_liabilities = None
     total_equity = None
+    retained_earnings = None
 
     for item in items:
         account_nm = item.get("account_nm", "")
@@ -824,6 +827,8 @@ def _parse_financial_items(items: list[dict], bsns_year: str, reprt_code: str) -
             total_liabilities = parse_amount(thstrm_amount)
         elif account_nm == "자본총계":
             total_equity = parse_amount(thstrm_amount)
+        elif "이익잉여금" in account_nm or "잉여금" in account_nm:
+            retained_earnings = parse_amount(thstrm_amount)
 
     # 부채비율 계산
     debt_ratio = None
@@ -838,6 +843,7 @@ def _parse_financial_items(items: list[dict], bsns_year: str, reprt_code: str) -
         total_assets=total_assets,
         total_liabilities=total_liabilities,
         total_equity=total_equity,
+        retained_earnings=retained_earnings,
         debt_ratio=debt_ratio,
         report_code=reprt_code,
         source="DART",
