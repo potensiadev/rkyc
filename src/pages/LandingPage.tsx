@@ -457,13 +457,14 @@ const Footer = () => (
 
         <FadeUp className="relative z-10">
             <h2 className="text-4xl md:text-5xl font-bold text-white mb-8 tracking-tight word-keep-all">
-                지금 바로, <br />귀행의 데이터 잠재력을 확인하세요.
+                지금 바로, <br />KYC 데이터의 잠재력을 확인하세요.
             </h2>
 
             <div className="group relative inline-block">
                 <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full blur opacity-20 group-hover:opacity-75 transition duration-1000 group-hover:duration-200" />
-                <Button className="relative h-16 px-12 text-lg rounded-full bg-white text-black hover:bg-neutral-100 hover:scale-105 transition-all duration-300 shadow-[0_0_40px_rgba(255,255,255,0.3)] border border-white/50 word-keep-all">
-                    데모 체험 신청
+                <Button className="rounded-full h-14 px-8 text-lg bg-blue-600 hover:bg-blue-500 text-white transition-all hover:scale-105 shadow-[0_0_30px_rgba(37,99,235,0.4)]">
+                    데모 시작하기
+                    <ArrowRight className="ml-2 w-5 h-5" />
                 </Button>
             </div>
 

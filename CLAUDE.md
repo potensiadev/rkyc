@@ -437,7 +437,7 @@ rkyc/
    - DATABASE_URL: 비밀번호 특수문자 URL 인코딩 (`!` → `%21`)
    - pgbouncer 호환: `statement_cache_size=0` 설정
 4. API 테스트 완료
-   - `GET /api/v1/corporations` - 6개 기업 조회 성공
+   - `GET /api/v1/corporations` - 4개 기업 조회 성공
    - `GET /api/v1/signals` - 29개 시그널 조회 성공
 
 **기술 이슈 해결**:
@@ -647,7 +647,7 @@ rkyc/
 
 **테스트 결과**:
 - `GET /health` → ✅ `{"status":"healthy"}`
-- `GET /api/v1/corporations` → ✅ 6개 기업 반환
+- `GET /api/v1/corporations` → ✅ 4개 기업 반환
 - Frontend (Playwright) → ✅ Signal Inbox 정상 로드, 12개 시그널 표시
 
 **DATABASE_URL 형식 (Railway)**:
@@ -2133,7 +2133,7 @@ src/pages/CorporateDetailPage.tsx
 
 **PRD v2.0 Hackathon Edition 핵심 원칙**:
 1. 기존 시스템 유지 + Hard Validation 강화
-2. 6개 시드 기업 하드코딩 (추상화 X)
+2. 4개 시드 기업 하드코딩 (추상화 X)
 3. 최소 시그널 보장 (빈 화면 방지)
 4. 1주일 타임라인 (5주 Rule Engine 폐기)
 
@@ -2146,7 +2146,7 @@ src/pages/CorporateDetailPage.tsx
 
 #### 2. hackathon_config.py 신규 생성
 - `SignalGenerationMode` Enum: PRODUCTION / HACKATHON
-- `CORP_SENSITIVITY_CONFIG`: 6개 시드 기업별 설정
+- `CORP_SENSITIVITY_CONFIG`: 4개 시드 기업별 설정
   - 민감도 토픽 (수출규제, 환율, 금리 등)
   - min_signals / max_signals
   - expected_signal_types
@@ -2194,7 +2194,7 @@ CLAUDE.md
 | Day | 작업 | 상태 |
 |-----|------|------|
 | 1 | Hard Validation 강화 | ✅ 기존 구현 확인 |
-| 2 | 6개 기업 민감도 설정 | ✅ hackathon_config.py |
+| 2 | 4개 기업 민감도 설정 | ✅ hackathon_config.py |
 | 3 | 해커톤 모드 구현 | ✅ signal_extraction.py 통합 |
 | 4 | 시연 테스트 자동화 | ✅ test_demo_scenarios.py |
 | 5 | 시드 데이터 검증 | ⏳ 진행 중 |
@@ -2567,7 +2567,7 @@ src/components/demo/DemoPanel.tsx
 - `migration_v15_banking_data.sql`: `rkyc_banking_data` 테이블 생성
   - JSONB 컬럼: loan_exposure, deposit_trend, card_usage, collateral_detail, trade_finance, financial_statements
   - risk_alerts, opportunity_signals 배열
-- `seed_banking_data.sql`: 6개 시드 기업 Mock 데이터
+- `seed_banking_data.sql`: 4개 시드 기업 Mock 데이터
   - 기업별 특화 리스크/기회 시나리오 설정
 
 #### Phase 2: Backend API
