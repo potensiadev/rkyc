@@ -80,7 +80,7 @@ class LLMService:
             "max_tokens": 8192,
         },
         {
-            "model": "gemini/gemini-2.0-flash",  # Gemini 2.0 Flash
+            "model": "gemini/gemini-1.5-flash",  # Gemini 1.5 Flash (1M context)
             "provider": "google",
             "max_tokens": 8192,
         },

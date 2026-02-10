@@ -379,8 +379,9 @@ class GeminiGroundingProvider(BaseSearchProvider):
     provider_type = SearchProviderType.GEMINI_GROUNDING
 
     # 지원 모델 (litellm 형식)
-    GROUNDING_MODEL = "gemini/gemini-2.0-flash"  # litellm 사용
-    FALLBACK_MODEL = "gemini/gemini-2.0-flash"   # 동일 모델
+    # Fallback용 - 긴 컨텍스트 창(1M tokens)으로 suppliers/customers 분석에 유리
+    GROUNDING_MODEL = "gemini/gemini-1.5-flash"  # litellm 사용
+    FALLBACK_MODEL = "gemini/gemini-1.5-flash"   # 동일 모델
 
     def __init__(
         self,
@@ -631,7 +632,7 @@ class GeminiGroundingProvider(BaseSearchProvider):
 # =============================================================================
 # True: Gemini Grounding을 Primary로 사용 (Perplexity 비용 절약)
 # False: Perplexity를 Primary로 사용 (기존 동작)
-USE_GEMINI_AS_PRIMARY = True  # 비용 절약 모드
+USE_GEMINI_AS_PRIMARY = False  # Perplexity Primary (suppliers/customers 정확도)
 
 # 현재 설정 상태 (런타임 변경 가능)
 _search_config = {
