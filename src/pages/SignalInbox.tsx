@@ -23,12 +23,11 @@ import {
 } from "@/components/premium";
 import { motion, AnimatePresence } from "framer-motion";
 import { SignalStatus } from "@/types/signal";
-// @ts-ignore
-import { TinyArea } from "@ant-design/charts";
+import { Tiny } from "@ant-design/charts";
 
 import { GroupedSignalCard } from "@/components/dashboard/GroupedSignalCard";
 
-// KPI Card Component using AntV TinyArea
+// KPI Card Component using AntV Tiny.Area
 interface KPICardProps {
   icon: React.ElementType;
   label: string;
@@ -89,8 +88,7 @@ function KPICard({ icon: Icon, label, value, trend, trendLabel, colorTheme, data
       {/* Chart Container */}
       <div className="absolute bottom-0 left-0 right-0 h-16 opacity-60 group-hover:opacity-100 transition-opacity">
         <div className="w-full h-full px-0 safe-chart-container">
-          {/* @ts-ignore */}
-          <TinyArea {...config} />
+          <Tiny.Area {...config} />
         </div>
       </div>
     </motion.div>
