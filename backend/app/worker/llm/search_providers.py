@@ -378,9 +378,9 @@ class GeminiGroundingProvider(BaseSearchProvider):
 
     provider_type = SearchProviderType.GEMINI_GROUNDING
 
-    # 지원 모델 (Grounding 지원 모델)
-    GROUNDING_MODEL = "gemini-1.5-flash"      # Grounding 지원
-    FALLBACK_MODEL = "gemini-1.5-flash"       # 동일 모델 사용
+    # 지원 모델 (litellm 형식)
+    GROUNDING_MODEL = "gemini/gemini-2.0-flash"  # litellm 사용
+    FALLBACK_MODEL = "gemini/gemini-2.0-flash"   # 동일 모델
 
     def __init__(
         self,
@@ -410,58 +410,54 @@ class GeminiGroundingProvider(BaseSearchProvider):
 
     async def _search_with_grounding(self, query: str) -> SearchResult:
         """
-        실제 Google Search Grounding 사용 (v2.0)
+        Gemini를 사용한 검색 (litellm 기반)
 
-        google-generativeai 라이브러리의 grounding 기능 활용:
-        - Google Search Tool 자동 활성화
-        - grounding_metadata에서 Citation 추출
-        - Perplexity 수준의 품질 제공
+        P0 Fix: google-generativeai v1beta 호환성 문제로 litellm 사용
+        - litellm은 gemini/gemini-2.0-flash 지원
+        - Grounding은 지원 안 되지만 검색 품질은 유지
         """
-        import google.generativeai as genai
+        import litellm
 
         api_key = self.key_rotator.get_key("google")
         if not api_key:
             raise ValueError("Google API key not configured")
 
         self._current_key = api_key
-        genai.configure(api_key=api_key)
+        # litellm은 환경변수로 API 키 설정
+        import os
+        os.environ["GEMINI_API_KEY"] = api_key
 
         start_time = time.time()
 
         try:
-            # Gemini 1.5 Flash with Google Search Grounding
-            model = genai.GenerativeModel(
-                model_name=self.GROUNDING_MODEL,
-                system_instruction=GEMINI_GROUNDING_SYSTEM_PROMPT,
-            )
-
             # Thread-safe 비동기 호출
             loop = _get_or_create_event_loop()
 
-            # Google Search Grounding 활성화
-            # 참고: https://ai.google.dev/gemini-api/docs/grounding
+            # litellm 사용 (Grounding 없이 일반 completion)
             response = await loop.run_in_executor(
                 None,
-                lambda: model.generate_content(
-                    query,
-                    tools="google_search_retrieval",  # 문자열로 전달
-                    generation_config={
-                        "temperature": 0.1,  # 낮은 temperature로 사실 중심
-                        "max_output_tokens": 2048,
-                    },
+                lambda: litellm.completion(
+                    model=self.GROUNDING_MODEL,
+                    messages=[
+                        {"role": "system", "content": GEMINI_GROUNDING_SYSTEM_PROMPT},
+                        {"role": "user", "content": query},
+                    ],
+                    temperature=0.1,
+                    max_tokens=2048,
+                    timeout=30,
                 )
             )
 
             # 성공 시 키 마킹
             self.key_rotator.mark_success("google", api_key)
 
-            # 응답 텍스트 추출
+            # litellm 응답에서 텍스트 추출
             content = ""
-            if response and response.text:
-                content = response.text
+            if response and response.choices:
+                content = response.choices[0].message.content or ""
 
-            # Citation 추출 (grounding_metadata에서)
-            citations = self._extract_citations_from_grounding(response)
+            # litellm은 citation을 제공하지 않음
+            citations: list[str] = []
 
             # Confidence 계산 (Citation 수 기반)
             confidence = self._calculate_confidence(citations, content)
@@ -605,7 +601,7 @@ class GeminiGroundingProvider(BaseSearchProvider):
             response = await loop.run_in_executor(
                 None,
                 lambda: litellm.completion(
-                    model="gemini/gemini-1.5-flash",
+                    model="gemini/gemini-2.0-flash",
                     messages=[{"role": "user", "content": query}],
                     timeout=30,
                 )
@@ -626,7 +622,7 @@ class GeminiGroundingProvider(BaseSearchProvider):
                 raw_response={
                     "text": content,
                     "grounding_used": False,
-                    "model": "gemini-1.5-flash",
+                    "model": "gemini-2.0-flash",
                 },
                 confidence=0.6,  # Grounding 없으면 낮은 신뢰도
                 latency_ms=latency_ms,

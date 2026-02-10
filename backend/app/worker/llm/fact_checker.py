@@ -229,25 +229,47 @@ class GeminiFactChecker:
 
         genai.configure(api_key=api_key)
 
-        # Gemini 1.5 Flash with Google Search Grounding
-        model = genai.GenerativeModel(
-            model_name="gemini-1.5-flash",
-            system_instruction=self.FACT_CHECK_SYSTEM_PROMPT,
-        )
+        # P0 Fix: litellm 사용 (google-generativeai v1beta 모델 호환성 문제 해결)
+        # google-generativeai 라이브러리 대신 litellm 사용
+        import litellm
 
         # Thread-safe 비동기 호출
         loop = _get_or_create_event_loop()
 
         response = await loop.run_in_executor(
             None,
-            lambda: model.generate_content(
-                prompt,
-                tools="google_search_retrieval",  # Grounding 활성화
-                generation_config={
-                    "temperature": 0.1,  # 낮은 temperature로 일관된 응답
-                    "max_output_tokens": 1024,
-                },
+            lambda: litellm.completion(
+                model="gemini/gemini-2.0-flash",
+                messages=[
+                    {"role": "system", "content": self.FACT_CHECK_SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.1,
+                max_tokens=1024,
+                timeout=30,
             )
+        )
+
+        # litellm 응답에서 텍스트 추출
+        if response and response.choices:
+            return response.choices[0].message.content or ""
+        return ""
+
+    def _call_gemini_grounding_legacy(self, prompt: str) -> str:
+        """Legacy: google-generativeai 직접 호출 (백업용)"""
+        import google.generativeai as genai
+
+        model = genai.GenerativeModel(
+            model_name="gemini-2.0-flash",
+            system_instruction=self.FACT_CHECK_SYSTEM_PROMPT,
+        )
+
+        response = model.generate_content(
+            prompt,
+            generation_config={
+                "temperature": 0.1,
+                "max_output_tokens": 1024,
+            },
         )
 
         # 응답 텍스트 추출
