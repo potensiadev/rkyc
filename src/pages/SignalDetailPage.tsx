@@ -164,7 +164,7 @@ export default function SignalDetailPage() {
     );
   }
 
-  const matchingScore = signal.confidence === "HIGH" ? 92 : signal.confidence === "MED" ? 75 : 45;
+
   const currentStatus = signal.signal_status || "NEW";
   const statusConfig = STATUS_CONFIG[currentStatus] || STATUS_CONFIG.NEW;
 
@@ -301,24 +301,7 @@ export default function SignalDetailPage() {
                   )}
                 </div>
 
-                {/* Relevance Score */}
-                <div className="hidden sm:flex flex-col items-center gap-2 p-5 rounded-2xl bg-white/60 border border-slate-100 backdrop-blur-sm min-w-[110px] shadow-sm">
-                  <div className="relative w-16 h-16 flex items-center justify-center">
-                    <svg className="w-full h-full -rotate-90">
-                      <circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="6" fill="transparent" className="text-slate-100" />
-                      <circle
-                        cx="32" cy="32" r="28"
-                        stroke="currentColor" strokeWidth="6" fill="transparent"
-                        className={signal.confidence === "HIGH" ? "text-indigo-500" : "text-amber-500"}
-                        strokeDasharray="175"
-                        strokeDashoffset={175 - (175 * matchingScore) / 100}
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                    <span className="absolute text-xl font-bold text-slate-800">{matchingScore}</span>
-                  </div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Confidence</span>
-                </div>
+
               </div>
             </GlassCard>
 
@@ -331,11 +314,10 @@ export default function SignalDetailPage() {
                     당행 관점 분석
                   </h3>
                   {signal.portfolio_impact && (
-                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
-                      signal.portfolio_impact === 'HIGH' ? 'bg-rose-100 text-rose-700' :
+                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${signal.portfolio_impact === 'HIGH' ? 'bg-rose-100 text-rose-700' :
                       signal.portfolio_impact === 'MED' ? 'bg-amber-100 text-amber-700' :
-                      'bg-slate-100 text-slate-600'
-                    }`}>
+                        'bg-slate-100 text-slate-600'
+                      }`}>
                       포트폴리오 영향: {signal.portfolio_impact}
                     </span>
                   )}
@@ -347,11 +329,10 @@ export default function SignalDetailPage() {
 
                 {signal.recommended_action && (
                   <div className="flex items-start gap-3 p-4 rounded-xl bg-white border border-blue-100">
-                    <div className={`p-2 rounded-lg ${
-                      signal.action_priority === 'URGENT' ? 'bg-rose-100' :
+                    <div className={`p-2 rounded-lg ${signal.action_priority === 'URGENT' ? 'bg-rose-100' :
                       signal.action_priority === 'NORMAL' ? 'bg-amber-100' :
-                      'bg-slate-100'
-                    }`}>
+                        'bg-slate-100'
+                      }`}>
                       {signal.action_priority === 'URGENT' ? (
                         <AlertCircle className="w-4 h-4 text-rose-600" />
                       ) : signal.action_priority === 'NORMAL' ? (
@@ -364,13 +345,12 @@ export default function SignalDetailPage() {
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">권고 조치</span>
                         {signal.action_priority && (
-                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                            signal.action_priority === 'URGENT' ? 'bg-rose-600 text-white' :
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${signal.action_priority === 'URGENT' ? 'bg-rose-600 text-white' :
                             signal.action_priority === 'NORMAL' ? 'bg-amber-500 text-white' :
-                            'bg-slate-400 text-white'
-                          }`}>
+                              'bg-slate-400 text-white'
+                            }`}>
                             {signal.action_priority === 'URGENT' ? '긴급' :
-                             signal.action_priority === 'NORMAL' ? '일반' : '참고'}
+                              signal.action_priority === 'NORMAL' ? '일반' : '참고'}
                           </span>
                         )}
                       </div>

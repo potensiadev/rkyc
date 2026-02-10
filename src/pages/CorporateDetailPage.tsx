@@ -1407,9 +1407,11 @@ export default function CorporateDetailPage() {
                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Total Loan</p>
                         <div className="flex items-baseline gap-1">
                           <span className="text-3xl font-mono font-bold text-slate-900">
-                            {snapshot?.snapshot_json?.credit?.loan_summary?.total_exposure_krw
-                              ? `${(snapshot.snapshot_json.credit.loan_summary.total_exposure_krw / 100000000).toFixed(0)}`
-                              : corporation.bankRelationship.loanBalance ? corporation.bankRelationship.loanBalance.replace(/[^0-9]/g, '') : "0"}
+                            {(bankingData?.loan_exposure as any)?.total_exposure_krw
+                              ? `${((bankingData.loan_exposure as any).total_exposure_krw / 100000000).toFixed(0)}`
+                              : snapshot?.snapshot_json?.credit?.loan_summary?.total_exposure_krw
+                                ? `${(snapshot.snapshot_json.credit.loan_summary.total_exposure_krw / 100000000).toFixed(0)}`
+                                : "0"}
                           </span>
                           <span className="text-sm font-medium text-slate-500">억원</span>
                         </div>

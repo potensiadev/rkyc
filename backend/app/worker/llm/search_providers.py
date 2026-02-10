@@ -380,7 +380,7 @@ class GeminiGroundingProvider(BaseSearchProvider):
 
     # 지원 모델 (Grounding 지원 모델)
     GROUNDING_MODEL = "gemini-2.0-flash-exp"  # Grounding 지원
-    FALLBACK_MODEL = "gemini-1.5-flash"       # Grounding 미지원 시 Fallback
+    FALLBACK_MODEL = "gemini-2.0-flash"       # Grounding 미지원 시 Fallback
 
     def __init__(
         self,
@@ -618,7 +618,7 @@ class GeminiGroundingProvider(BaseSearchProvider):
             response = await loop.run_in_executor(
                 None,
                 lambda: litellm.completion(
-                    model="gemini/gemini-1.5-flash",
+                    model="gemini/gemini-2.0-flash",
                     messages=[{"role": "user", "content": query}],
                     timeout=30,
                 )
@@ -639,7 +639,7 @@ class GeminiGroundingProvider(BaseSearchProvider):
                 raw_response={
                     "text": content,
                     "grounding_used": False,
-                    "model": "gemini-1.5-flash",
+                    "model": "gemini-2.0-flash",
                 },
                 confidence=0.6,  # Grounding 없으면 낮은 신뢰도
                 latency_ms=latency_ms,
