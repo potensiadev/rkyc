@@ -681,8 +681,88 @@ export default function CorporateDetailPage() {
                     </div>
                   </div>
                 )}
+
+                {/* Detail Grid: Competitors, Macro, Shareholders, Global Sites */}
+                <div className="mt-6 pt-6 border-t border-slate-100">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+                    {/* Left: Competitors & Macro */}
+                    <div className="space-y-6">
+                      <div className="bg-slate-50/50 rounded-2xl p-6 border border-slate-100">
+                        <h5 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">Competitors</h5>
+                        <div className="space-y-3">
+                          {profile?.competitors?.slice(0, 3).map(c => (
+                            <div key={c.name} className="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
+                              <div>
+                                <div className="text-xs font-bold text-slate-800">{c.name}</div>
+                              </div>
+                            </div>
+                          ))}
+                          {(!profile?.competitors || profile.competitors.length === 0) && (
+                            <div className="text-xs text-slate-400 italic">No Data</div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-50/50 rounded-2xl p-6 border border-slate-100">
+                        <h5 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">Macro Factors</h5>
+                        <div className="flex flex-wrap gap-2">
+                          {profile?.macro_factors?.map(f => (
+                            <StatusBadge
+                              key={f.factor}
+                              variant={f.impact === 'POSITIVE' ? 'success' : f.impact === 'NEGATIVE' ? 'danger' : 'neutral'}
+                              className="bg-white border-opacity-50"
+                            >
+                              {f.factor}
+                            </StatusBadge>
+                          ))}
+                          {(!profile?.macro_factors || profile.macro_factors.length === 0) && (
+                            <div className="text-xs text-slate-400 italic">No Data</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right: Shareholders & Global Sites */}
+                    <div className="space-y-6">
+                      <div className="bg-slate-50/50 rounded-2xl p-6 border border-slate-100 h-full">
+                        <h5 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">Shareholders</h5>
+                        <table className="w-full text-xs text-left">
+                          <tbody>
+                            {profile?.shareholders?.slice(0, 5).map((s) => (
+                              <tr key={s.name} className="border-b border-slate-100 last:border-0 hover:bg-white/50 transition-colors">
+                                <td className="py-2 text-slate-600 font-medium pl-2">{s.name}</td>
+                                <td className="py-2 text-slate-800 font-mono text-right pr-2">{s.ownership_pct || s.ratio_pct}%</td>
+                              </tr>
+                            ))}
+                            {(!profile?.shareholders || profile.shareholders.length === 0) && (
+                              <tr><td colSpan={2} className="text-xs text-slate-400 italic py-2 text-center">No Data</td></tr>
+                            )}
+                          </tbody>
+                        </table>
+
+                        <div className="mt-8 pt-6 border-t border-slate-200">
+                          <h5 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Global Sites</h5>
+                          <div className="flex flex-wrap gap-2">
+                            {profile?.overseas_business?.subsidiaries?.slice(0, 3).map(s => (
+                              <div key={s.name} className="flex items-center gap-1.5 px-2 py-1 bg-white border border-slate-200 rounded-md shadow-sm">
+                                <Globe className="w-3 h-3 text-indigo-400" />
+                                <span className="text-[10px] font-medium text-slate-700">{s.name} ({s.country})</span>
+                              </div>
+                            ))}
+                            {(!profile?.overseas_business?.subsidiaries || profile.overseas_business.subsidiaries.length === 0) && (
+                              <div className="text-xs text-slate-400 italic">No Data</div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                  </div>
+                </div>
               </GlassCard>
             </div>
+            
 
             {/* 2.5 DART Financial Statements (100% Fact) */}
             <div id="dart-financials">
@@ -1180,6 +1260,8 @@ export default function CorporateDetailPage() {
 
                 <div className="space-y-8 mt-6">
                   {/* AI Risk Opinion (Loan Insight) - Full Width */}
+                  {/* 시그널이 있을 때만 Loan Insight 표시 */}
+                  {apiSignals && apiSignals.length > 0 && (
                   <GlassCard id="loan-insight" className="overflow-hidden border-indigo-100 shadow-xl shadow-indigo-50/40">
                     {/* Header Section */}
                     <div className="px-8 py-6 border-b border-slate-100 bg-white/60 backdrop-blur-sm flex items-center justify-between">
@@ -1228,7 +1310,7 @@ export default function CorporateDetailPage() {
                               <div className="p-1.5 bg-rose-100 rounded-lg">
                                 <AlertTriangle className="w-4 h-4 text-rose-600" />
                               </div>
-                              핵심 리스크 요인
+                              외부 리스크 요소
                             </h4>
                             <ul className="space-y-4">
                               {loanInsight?.key_risks?.map((risk, i: number) => {
@@ -1266,7 +1348,7 @@ export default function CorporateDetailPage() {
                               <div className="p-1.5 bg-emerald-100 rounded-lg">
                                 <TrendingUp className="w-4 h-4 text-emerald-600" />
                               </div>
-                              핵심 기회 요인
+                              외부 기회 요소
                             </h4>
                             <ul className="space-y-4">
                               {loanInsight?.key_opportunities?.map((opp, i: number) => {
@@ -1417,6 +1499,7 @@ export default function CorporateDetailPage() {
 
                     </div>
                   </GlassCard>
+                  )}
 
                   {/* Detail Grid: Competitors, Macro, Shareholders */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

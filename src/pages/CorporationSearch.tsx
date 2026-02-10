@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
-import { Search, Building2, ChevronRight, AlertCircle, Loader2, BarChart3, TrendingUp } from "lucide-react";
+import { Search, Building2, ChevronRight, AlertCircle, Loader2, BarChart3, TrendingUp, ArrowUpRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
@@ -169,54 +169,83 @@ export default function CorporationSearch() {
                 key={corp.id}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
+                whileHover={{ y: -4, scale: 1.005 }}
                 transition={{ delay: 0.1 + (idx * 0.05) }}
                 onClick={() => handleCorporationClick(corp.id, corp.name)}
+                className="group relative h-full"
               >
-                <GlassCard className="h-full cursor-pointer hover:bg-white transition-all duration-300 hover:shadow-xl hover:shadow-indigo-500/10 group border-l-4 border-l-transparent hover:border-l-indigo-500">
-                  <div className="p-5 flex flex-col h-full">
-                    {/* Header */}
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-slate-50 to-slate-100 border border-slate-200 flex items-center justify-center shadow-inner group-hover:from-indigo-50 group-hover:to-white group-hover:border-indigo-100 transition-colors">
-                          <Building2 className="w-6 h-6 text-slate-400 group-hover:text-indigo-500 transition-colors" />
+                <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-purple-500/5 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                <GlassCard className="h-full relative overflow-hidden border-slate-200/60 group-hover:border-indigo-500/30 transition-colors bg-white/80 backdrop-blur-xl">
+
+                  <div className="p-6 flex flex-col h-full relative z-10">
+                    {/* Top Row: Identification & Risk */}
+                    <div className="flex justify-between items-start mb-6">
+                      <div className="space-y-3">
+                        {/* Industry Tag - Minimalist */}
+                        <div className="flex items-center gap-2">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-500 border border-slate-200/50">
+                            {corp.industry}
+                          </span>
+                          <span className="text-[10px] font-mono text-slate-300">
+                            {corp.businessNumber.substring(0, 3)}-**
+                          </span>
                         </div>
-                        <div>
-                          <h3 className="font-bold text-slate-800 text-lg leading-tight group-hover:text-indigo-700 transition-colors">{corp.name}</h3>
-                          <p className="text-xs text-slate-400 mt-0.5">{corp.industry}</p>
+                        {/* Company Name - Clean & Bold */}
+                        <h3 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight group-hover:text-indigo-900 transition-colors leading-none">
+                          {corp.name}
+                        </h3>
+                      </div>
+
+                      {/* Risk Indicator Pulse */}
+                      {signalCounts.total > 0 && (
+                        <div className="relative flex items-center justify-center w-8 h-8 rounded-full bg-slate-50 border border-slate-100 shadow-sm ml-4">
+                          <div className={`absolute w-full h-full rounded-full animate-ping opacity-20 ${signalCounts.direct > 0 ? 'bg-rose-500' : 'bg-amber-400'}`} />
+                          <div className={`relative w-2.5 h-2.5 rounded-full ${signalCounts.direct > 0 ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]' : 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.6)]'}`} />
                         </div>
+                      )}
+                    </div>
+
+                    {/* Middle: Financial Impact Hero */}
+                    <div className="mb-8">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1.5 opacity-80">
+                        <BarChart3 className="w-3 h-3" />
+                        Total Exposure
+                      </p>
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-4xl font-bold text-slate-800 tracking-tighter tabular-nums group-hover:text-indigo-600 transition-colors leading-none">
+                          {formatLoanBalance(loanBalance).replace(/[^\d.]/g, '')}
+                        </span>
+                        <span className="text-sm font-semibold text-slate-400 mb-1">
+                          {formatLoanBalance(loanBalance).replace(/[\d.]/g, '')}
+                        </span>
                       </div>
                     </div>
 
-                    {/* Loan Info */}
-                    <div className="mb-4 p-3 bg-slate-50 rounded-xl border border-slate-100 group-hover:bg-indigo-50/30 group-hover:border-indigo-100/50 transition-colors">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">총 여신 잔액</span>
-                        <span className="font-mono font-bold text-slate-700">{formatLoanBalance(loanBalance)}</span>
+                    {/* Bottom: Signal Visualization Grid */}
+                    <div className="mt-auto pt-4 border-t border-slate-100/50 flex items-center justify-between group-hover:border-indigo-100/50 transition-colors">
+                      <div className="flex flex-col gap-1.5">
+                        <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide opacity-80">Signal Profile</span>
+                        <div className="flex items-center gap-1 h-4">
+                          {signalCounts.total === 0 ? (
+                            <span className="text-[10px] text-slate-300 font-medium tracking-tight">Active Signals Cleared</span>
+                          ) : (
+                            <>
+                              {/* Visual Dots for Signals - Direct */}
+                              {Array.from({ length: Math.min(signalCounts.direct, 5) }).map((_, i) => (
+                                <div key={`d-${i}`} className="w-1 h-3 rounded-full bg-rose-500 group-hover:shadow-[0_0_6px_rgba(244,63,94,0.4)] transition-all" title="Direct Risk" />
+                              ))}
+                              {/* Visual Dots for Signals - Industry */}
+                              {Array.from({ length: Math.min(signalCounts.industry, 5) }).map((_, i) => (
+                                <div key={`i-${i}`} className="w-1 h-2 rounded-full bg-indigo-300 group-hover:bg-indigo-400 transition-colors" title="Industry Risk" />
+                              ))}
+                            </>
+                          )}
+                        </div>
                       </div>
-                    </div>
 
-                    {/* Footer (Signals) */}
-                    <div className="mt-auto pt-3 border-t border-slate-100 flex items-center justify-between">
-                      <div className="flex gap-1.5 flex-wrap">
-                        {signalCounts.total === 0 ? (
-                          <span className="text-xs text-slate-400 italic">활성 시그널 없음</span>
-                        ) : (
-                          <>
-                            {signalCounts.direct > 0 && (
-                              <Tag className="text-[10px] py-0.5 h-5 bg-indigo-50 text-indigo-600 border-indigo-100">
-                                직접 {signalCounts.direct}
-                              </Tag>
-                            )}
-                            {signalCounts.industry > 0 && (
-                              <Tag className="text-[10px] py-0.5 h-5 bg-cyan-50 text-cyan-600 border-cyan-100">
-                                산업 {signalCounts.industry}
-                              </Tag>
-                            )}
-                          </>
-                        )}
-                      </div>
-                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-slate-300 group-hover:text-indigo-500 group-hover:bg-indigo-50 transition-all">
-                        <ChevronRight className="w-5 h-5" />
+                      {/* Action Arrow */}
+                      <div className="w-8 h-8 rounded-full border border-slate-100 bg-white flex items-center justify-center text-slate-300 shadow-sm group-hover:border-indigo-100 group-hover:text-indigo-600 group-hover:bg-indigo-50 group-hover:scale-110 transition-all duration-300">
+                        <ArrowUpRight className="w-4 h-4" />
                       </div>
                     </div>
                   </div>
