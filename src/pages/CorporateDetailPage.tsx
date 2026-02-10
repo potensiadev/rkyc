@@ -1191,14 +1191,138 @@ export default function CorporateDetailPage() {
                   <Button variant="outline" size="sm" className="h-7 text-[10px] uppercase font-bold text-slate-500 border-slate-200">Export Report</Button>
                 </div>
 
-                {/* Business Overview */}
-                <div className="bg-slate-50/50 rounded-2xl p-6 border border-slate-100">
+                {/* Business Overview - Enhanced */}
+                <div className="bg-slate-50/50 rounded-2xl p-6 border border-slate-100 space-y-6">
                   <h4 className="text-xs font-bold text-slate-800 mb-3 flex items-center gap-2">
                     <span className="w-1 h-4 bg-indigo-500 rounded-full" /> Business Overview
                   </h4>
-                  <p className="text-[13px] leading-relaxed text-slate-600 text-justify mb-6">
-                    {profile?.business_summary || profile?.business_model || "No business overview available."}
-                  </p>
+
+                  {/* 1. 사업 요약 */}
+                  <div>
+                    <p className="text-[13px] leading-relaxed text-slate-600 text-justify">
+                      {profile?.business_summary || profile?.business_model || "No business overview available."}
+                    </p>
+                  </div>
+
+                  {/* 2. 산업 현황 & 비즈니스 모델 Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* 산업 현황 */}
+                    {profile?.industry_overview && (
+                      <div className="bg-white rounded-xl p-4 border border-slate-100">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Factory className="w-4 h-4 text-indigo-500" />
+                          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Industry Position</span>
+                        </div>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          {profile.industry_overview}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* 비즈니스 모델 */}
+                    {profile?.business_model && (
+                      <div className="bg-white rounded-xl p-4 border border-slate-100">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Target className="w-4 h-4 text-emerald-500" />
+                          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Business Model</span>
+                        </div>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          {profile.business_model}
+                        </p>
+                        {/* B2B/B2C 추론 태그 */}
+                        <div className="mt-2 flex gap-1">
+                          {profile.key_customers && profile.key_customers.length > 0 && (
+                            <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-600 border border-blue-100">
+                              B2B
+                            </span>
+                          )}
+                          {profile.export_ratio_pct && profile.export_ratio_pct > 30 && (
+                            <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-purple-50 text-purple-600 border border-purple-100">
+                              수출 {profile.export_ratio_pct}%
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 3. 경쟁 구도 */}
+                  {profile?.competitors && profile.competitors.length > 0 && (
+                    <div className="bg-white rounded-xl p-4 border border-slate-100">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Users className="w-4 h-4 text-amber-500" />
+                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Competitive Landscape</span>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {profile.competitors.slice(0, 5).map((c, idx) => (
+                          <div
+                            key={c.name}
+                            className={`px-3 py-1.5 rounded-lg border text-xs font-medium flex items-center gap-2 ${
+                              idx === 0 ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-slate-50 border-slate-200 text-slate-600'
+                            }`}
+                          >
+                            {idx === 0 && <span className="text-[9px]">🥇</span>}
+                            {idx === 1 && <span className="text-[9px]">🥈</span>}
+                            {idx === 2 && <span className="text-[9px]">🥉</span>}
+                            {c.name}
+                            {c.market_share_pct && (
+                              <span className="text-[9px] text-slate-400">({c.market_share_pct}%)</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      <p className="mt-2 text-[10px] text-slate-400">
+                        * 시장 내 주요 경쟁사 (순서는 시장점유율 순이 아닐 수 있음)
+                      </p>
+                    </div>
+                  )}
+
+                  {/* 4. 핵심 강점 추론 (기존 데이터 기반) */}
+                  <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-4 border border-indigo-100">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Zap className="w-4 h-4 text-indigo-500" />
+                      <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">Inferred Strengths</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {/* 수출 비중 기반 */}
+                      {profile?.export_ratio_pct && profile.export_ratio_pct >= 50 && (
+                        <span className="px-2.5 py-1 rounded-full text-[10px] font-medium bg-white border border-indigo-200 text-indigo-700">
+                          🌏 글로벌 경쟁력 (수출 {profile.export_ratio_pct}%)
+                        </span>
+                      )}
+                      {/* 고객사 기반 */}
+                      {profile?.key_customers && profile.key_customers.some(c =>
+                        c.toLowerCase().includes('삼성') || c.toLowerCase().includes('samsung') ||
+                        c.toLowerCase().includes('sk') || c.toLowerCase().includes('lg')
+                      ) && (
+                        <span className="px-2.5 py-1 rounded-full text-[10px] font-medium bg-white border border-emerald-200 text-emerald-700">
+                          🏢 대기업 공급망 진입
+                        </span>
+                      )}
+                      {/* 공급사 다변화 기반 */}
+                      {profile?.supply_chain?.supplier_countries && Object.keys(profile.supply_chain.supplier_countries).length >= 3 && (
+                        <span className="px-2.5 py-1 rounded-full text-[10px] font-medium bg-white border border-blue-200 text-blue-700">
+                          ⛓️ 공급망 다변화
+                        </span>
+                      )}
+                      {/* 해외 법인 기반 */}
+                      {profile?.overseas_business?.subsidiaries && profile.overseas_business.subsidiaries.length > 0 && (
+                        <span className="px-2.5 py-1 rounded-full text-[10px] font-medium bg-white border border-purple-200 text-purple-700">
+                          🏭 해외 생산기지 보유
+                        </span>
+                      )}
+                      {/* 업력 기반 */}
+                      {profile?.founded_year && (new Date().getFullYear() - profile.founded_year) >= 20 && (
+                        <span className="px-2.5 py-1 rounded-full text-[10px] font-medium bg-white border border-amber-200 text-amber-700">
+                          ⏳ {new Date().getFullYear() - profile.founded_year}년 업력
+                        </span>
+                      )}
+                      {/* 데이터 없을 때 */}
+                      {!profile?.export_ratio_pct && !profile?.key_customers?.length && !profile?.supply_chain?.supplier_countries && (
+                        <span className="text-xs text-slate-400 italic">추론할 데이터가 부족합니다</span>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
                 {/* Value Chain Flow */}
