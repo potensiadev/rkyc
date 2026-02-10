@@ -206,31 +206,89 @@ class VerificationResult:
 
 
 # ============================================================================
-# Corp Code Lookup
+# Corp Code Lookup (with File Cache for Worker Persistence)
 # ============================================================================
+
+import json
+import os
+import tempfile
 
 # In-memory cache for corp codes (loaded from DART ZIP file)
 _corp_code_cache: dict[str, str] = {}
 _corp_code_by_name: dict[str, str] = {}
 _corp_code_loaded: bool = False
 
+# P0 Performance: File-based cache to avoid re-download across workers
+CORP_CODE_CACHE_FILE = os.path.join(tempfile.gettempdir(), "dart_corp_codes.json")
+CORP_CODE_CACHE_TTL_HOURS = 24  # 24시간마다 갱신
+
+
+def _is_cache_file_valid() -> bool:
+    """Check if cache file exists and is fresh (within TTL)."""
+    if not os.path.exists(CORP_CODE_CACHE_FILE):
+        return False
+    try:
+        mtime = os.path.getmtime(CORP_CODE_CACHE_FILE)
+        age_hours = (datetime.now().timestamp() - mtime) / 3600
+        return age_hours < CORP_CODE_CACHE_TTL_HOURS
+    except Exception:
+        return False
+
+
+def _load_from_cache_file() -> bool:
+    """Load corp codes from file cache."""
+    global _corp_code_cache, _corp_code_by_name, _corp_code_loaded
+
+    try:
+        with open(CORP_CODE_CACHE_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            _corp_code_cache = data.get("cache", {})
+            _corp_code_by_name = data.get("by_name", {})
+            _corp_code_loaded = True
+            logger.info(f"[DartAPI] Loaded {len(_corp_code_cache)} corp codes from file cache")
+            return True
+    except Exception as e:
+        logger.warning(f"[DartAPI] Failed to load from cache file: {e}")
+        return False
+
+
+def _save_to_cache_file() -> None:
+    """Save corp codes to file cache."""
+    try:
+        with open(CORP_CODE_CACHE_FILE, 'w', encoding='utf-8') as f:
+            json.dump({
+                "cache": _corp_code_cache,
+                "by_name": _corp_code_by_name,
+                "updated_at": datetime.now().isoformat(),
+            }, f)
+        logger.info(f"[DartAPI] Saved {len(_corp_code_cache)} corp codes to file cache")
+    except Exception as e:
+        logger.warning(f"[DartAPI] Failed to save cache file: {e}")
+
 
 async def load_corp_codes() -> bool:
     """
     DART 기업 고유번호 목록 다운로드 및 캐시
 
-    DART는 기업별 고유번호(corp_code)를 ZIP 파일로 제공합니다.
-    이 함수는 ZIP 파일을 다운로드하고 파싱하여 메모리에 캐시합니다.
+    P0 Performance: File-based cache로 Worker간 공유 (10초 → 0.1초)
+    - 메모리 캐시 확인 → 파일 캐시 확인 → DART 다운로드
 
     Returns:
         True if successful, False otherwise
     """
     global _corp_code_cache, _corp_code_by_name, _corp_code_loaded
 
+    # 1. 메모리 캐시 확인
     if _corp_code_loaded and _corp_code_cache:
-        logger.debug("[DartAPI] Corp codes already loaded")
+        logger.debug("[DartAPI] Corp codes already in memory")
         return True
 
+    # 2. 파일 캐시 확인 (Worker간 공유)
+    if _is_cache_file_valid():
+        if _load_from_cache_file():
+            return True
+
+    # 3. DART에서 다운로드
     url = f"{DART_BASE_URL}/corpCode.xml?crtfc_key={DART_API_KEY}"
 
     try:
@@ -266,6 +324,9 @@ async def load_corp_codes() -> bool:
 
             _corp_code_loaded = True
             logger.info(f"[DartAPI] Loaded {len(_corp_code_cache)} corp codes")
+
+            # 파일 캐시에 저장 (다른 Worker가 재사용)
+            _save_to_cache_file()
             return True
 
     except httpx.HTTPError as e:

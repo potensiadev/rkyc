@@ -1371,7 +1371,7 @@ class FactCheckerStatusResponse(BaseModel):
     """팩트체커 상태 응답"""
     enabled: bool
     available: bool
-    provider: str = "gemini-2.0-flash"
+    provider: str = "gemini-1.5-flash"
     grounding: str = "Google Search"
 
 
@@ -1407,7 +1407,7 @@ async def get_fact_checker_status():
     return FactCheckerStatusResponse(
         enabled=fact_checker._enabled,
         available=fact_checker.is_available(),
-        provider="gemini-2.0-flash",
+        provider="gemini-1.5-flash",
         grounding="Google Search",
     )
 
