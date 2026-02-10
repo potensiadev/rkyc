@@ -557,7 +557,7 @@ STRUCTURED_SUMMARY_USER_PROMPT = """다음 검색 결과를 구조화된 형식�
   "names": {{
     "ceo_name": "대표이사명",
     "key_customers": ["고객사1", "고객사2"],
-    "key_suppliers": ["공급사1", "공급사2"],
+    "key_suppliers": ["원자재 공급 회사명 (예: 다나까 금속, 헤라우스, 니폰 금속 - 반드시 실제 회사명!)"],
     "competitors": ["경쟁사1", "경쟁사2"],
     "shareholders": [{{"name": "주주명", "ratio_pct": 지분율}}]
   }},
@@ -831,6 +831,9 @@ AI 반도체 수요 증가로 HBM용 본딩와이어 매출이 급성장하고 �
 **supply_chain 추론:**
 - 제조업이면 → 업종별 주요 원자재 포함 (confidence: LOW)
 - 예: 반도체 기업 → key_materials: ["실리콘", "금", "구리"]
+- **key_suppliers는 반드시 실제 회사명으로 추출** (추상적 표현 금지!)
+- 예: "원자재 공급사" (X) → "다나까 금속", "헤라우스 그룹" (O)
+- 검색 결과에 "거래처", "공급사", "매입처", "납품" 등이 나오면 해당 회사명 추출
 
 **key_customers 추론:**
 - B2B 기업이면 → 업종 내 대기업 고객 추정 (confidence: LOW)
@@ -941,14 +944,14 @@ PROFILE_EXTRACTION_USER_PROMPT = """## 검색 결과
   }},
   "supply_chain": {{
     "value": {{
-      "key_suppliers": ["공급사1", "공급사2"],
-      "supplier_countries": {{"국가명": 비중(%)}},
-      "single_source_risk": ["단일 조달처 위험 품목1", "단일 조달처 위험 품목2"] (단일 공급처에 의존하는 원자재/부품 목록) 또는 [],
+      "key_suppliers": ["원자재 공급 회사 실명 (예: 다나까 금속, 헤라우스 그룹, 니폰 금속, Tanaka, Heraeus 등 - 반드시 실제 거래처 공급사명!)"],
+      "supplier_countries": {{"일본": 50, "독일": 30, "국내": 20}},
+      "single_source_risk": ["특정 공급사에만 의존하는 원자재/부품 목록"],
       "material_import_ratio_pct": "integer 0-100 (원자재 수입 비율)"
     }} 또는 null,
     "confidence": "HIGH|MED|LOW",
     "source_url": "url 또는 null",
-    "excerpt": "뒷받침 텍스트 또는 null"
+    "excerpt": "원자재 공급사 관련 원문 텍스트"
   }},
   "overseas_business": {{
     "value": {{
@@ -1678,6 +1681,30 @@ _industry_hints_cache: dict[str, dict] = {}
 _industry_hints_lock = threading.Lock()
 
 
+def clear_industry_hints_cache(industry_code: str = None) -> int:
+    """
+    업종 힌트 캐시 클리어.
+
+    Args:
+        industry_code: 특정 업종만 클리어 (None이면 전체 클리어)
+
+    Returns:
+        클리어된 항목 수
+    """
+    with _industry_hints_lock:
+        if industry_code:
+            if industry_code in _industry_hints_cache:
+                del _industry_hints_cache[industry_code]
+                logger.info(f"Cleared industry hints cache for {industry_code}")
+                return 1
+            return 0
+        else:
+            count = len(_industry_hints_cache)
+            _industry_hints_cache.clear()
+            logger.info(f"Cleared all industry hints cache ({count} items)")
+            return count
+
+
 def get_industry_name(industry_code: str) -> str:
     """Get industry name from code."""
     return INDUSTRY_NAMES.get(industry_code, f"업종코드 {industry_code}")
@@ -1689,7 +1716,7 @@ INDUSTRY_HINTS_PROMPT = """업종코드 {industry_code} ({industry_name})의 일
 ```json
 {{
   "typical_materials": ["주요 원자재 5개 이상 - 이 업종에서 일반적으로 사용하는 원자재/부품"],
-  "typical_suppliers": ["공급사 유형 5개 이상 - 이 업종의 기업들이 거래하는 공급사 종류"],
+  "typical_suppliers": ["실제 공급사 회사명 5개 이상 - 이 업종의 한국 기업들이 실제로 거래하는 글로벌 공급사 이름 (예: 다나까 금속, 헤라우스 등)"],
   "export_markets": ["주요 수출 시장 5개 이상 - 이 업종의 한국 기업들이 주로 수출하는 국가"],
   "risk_factors": ["업종 리스크 3개 이상 - 이 업종 특유의 리스크 요인"],
   "growth_drivers": ["성장 동력 3개 이상 - 이 업종의 성장을 이끄는 요인"]
@@ -1697,8 +1724,8 @@ INDUSTRY_HINTS_PROMPT = """업종코드 {industry_code} ({industry_name})의 일
 ```
 
 예시 (반도체 C26):
-- typical_materials: ["실리콘 웨이퍼", "금", "구리", "희토류", "화학물질", "리드프레임"]
-- typical_suppliers: ["웨이퍼 공급사", "화학재료 공급사", "장비 공급사", "패키징 재료사", "가스 공급사"]
+- typical_materials: ["실리콘 웨이퍼", "금 (Au)", "은 (Ag)", "구리 (Cu)", "희토류", "화학물질", "리드프레임"]
+- typical_suppliers: ["다나까 금속 (Tanaka)", "헤라우스 그룹 (Heraeus)", "니폰 금속 (NIPPON)", "스미토모", "SK실트론", "듀폰", "린데"]
 - export_markets: ["중국", "미국", "대만", "베트남", "일본", "유럽"]
 - risk_factors: ["반도체 사이클", "미중 무역분쟁", "기술 경쟁", "설비 투자 부담"]
 - growth_drivers: ["AI 수요", "전기차", "데이터센터", "IoT"]
@@ -1726,13 +1753,23 @@ async def get_industry_hints(industry_code: str, llm_service=None) -> dict:
 
     # LLM 서비스가 없으면 기본 힌트 반환
     if llm_service is None:
-        default_hints = {
-            "typical_materials": ["원자재", "부품", "소재"],
-            "typical_suppliers": ["원자재 공급사", "부품 공급사", "장비 공급사"],
-            "export_markets": ["중국", "미국", "베트남", "일본", "유럽"],
-            "risk_factors": ["경기 변동", "환율 리스크", "공급망 리스크"],
-            "growth_drivers": ["기술 혁신", "시장 확대", "정부 정책"],
-        }
+        # 반도체 업종(C26)인 경우 특화된 힌트 제공
+        if industry_code == "C26":
+            default_hints = {
+                "typical_materials": ["금 (Au)", "은 (Ag)", "구리 (Cu)", "실리콘", "리드프레임"],
+                "typical_suppliers": ["다나까 금속 (Tanaka)", "헤라우스 그룹 (Heraeus)", "니폰 금속 (NIPPON)", "스미토모", "듀폰"],
+                "export_markets": ["중국", "미국", "대만", "베트남", "일본"],
+                "risk_factors": ["반도체 사이클", "미중 무역분쟁", "금 가격 변동"],
+                "growth_drivers": ["AI 수요", "전기차", "HBM"],
+            }
+        else:
+            default_hints = {
+                "typical_materials": ["원자재", "부품", "소재"],
+                "typical_suppliers": ["원자재 공급사", "부품 공급사", "장비 공급사"],
+                "export_markets": ["중국", "미국", "베트남", "일본", "유럽"],
+                "risk_factors": ["경기 변동", "환율 리스크", "공급망 리스크"],
+                "growth_drivers": ["기술 혁신", "시장 확대", "정부 정책"],
+            }
         return default_hints
 
     try:
@@ -1764,7 +1801,15 @@ async def get_industry_hints(industry_code: str, llm_service=None) -> dict:
 
     except Exception as e:
         logger.warning(f"Failed to generate industry hints for {industry_code}: {e}")
-        # 실패 시 기본 힌트 반환
+        # 실패 시 기본 힌트 반환 (반도체 C26인 경우 특화)
+        if industry_code == "C26":
+            return {
+                "typical_materials": ["금 (Au)", "은 (Ag)", "구리 (Cu)", "실리콘", "리드프레임"],
+                "typical_suppliers": ["다나까 금속 (Tanaka)", "헤라우스 그룹 (Heraeus)", "니폰 금속 (NIPPON)"],
+                "export_markets": ["중국", "미국", "대만", "베트남", "일본"],
+                "risk_factors": ["반도체 사이클", "미중 무역분쟁"],
+                "growth_drivers": ["AI 수요", "전기차"],
+            }
         return {
             "typical_materials": ["원자재", "부품", "소재"],
             "typical_suppliers": ["원자재 공급사", "부품 공급사"],
@@ -1862,22 +1907,26 @@ def build_phase3_query(corp_name: str, industry_name: str, industry_hints: dict 
               competitors, shareholders, macro_factors
     """
     materials_hint = ""
+    suppliers_hint = ""
     if industry_hints:
         materials = industry_hints.get("typical_materials", [])[:5]
-        suppliers = industry_hints.get("typical_suppliers", [])[:3]
+        suppliers = industry_hints.get("typical_suppliers", [])[:5]
         if materials:
-            materials_hint = f"\n(참고: {industry_name} 업종 주요 원자재: {', '.join(materials)})"
+            materials_hint = f"\n   (이 업종 주요 원자재: {', '.join(materials)})"
+        if suppliers:
+            suppliers_hint = f"\n   (이 업종 대표 공급사 예시: {', '.join(suppliers)})"
 
     return f"""{corp_name} 공급망 및 이해관계자 (한국 기업, 2026년 기준):
 
 다음 정보를 정확한 수치와 함께 찾아주세요:
 
-1. **공급망 정보** (가장 중요!){materials_hint}
-   - 주요 공급사 회사명 (구체적 회사명)
-   - 공급사 국가별 비중 (국내 vs 해외)
-   - 주요 원자재/부품 목록
+1. **원자재 공급사/매입처 (가장 중요!)** {materials_hint}{suppliers_hint}
+   - {corp_name}에 원자재를 납품하는 **거래처 공급사 회사명** (예: 다나까 금속, 헤라우스, 니폰 금속 등)
+   - 반드시 **실제 회사명**을 찾아주세요 (추상적 표현 금지)
+   - 공급사 국가별 비중 (일본, 독일, 국내 등)
+   - 주요 원자재/부품 목록 (금, 은, 구리, 실리콘 등)
    - 원자재 수입 비율 (%)
-   - 단일 조달처 위험 품목 (특정 공급사 의존 품목)
+   - 단일 조달처 위험 품목 (특정 공급사에만 의존하는 품목)
 
 2. **고객 정보**
    - 주요 고객사 (B2B인 경우 회사명)

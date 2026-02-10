@@ -267,159 +267,180 @@ export default function SignalDetailPage() {
           <div className="lg:col-span-8 space-y-6">
 
             {/* Executive Summary Card */}
-            <GlassCard className="p-8 border-t-4 border-t-indigo-500 relative overflow-hidden group">
+            <GlassCard className="p-8 relative overflow-hidden group border-0 ring-1 ring-slate-200/50 shadow-xl shadow-indigo-500/5">
               {/* Background Glow */}
-              <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-50 rounded-full blur-3xl -z-10 opacity-50 group-hover:opacity-100 transition-opacity" />
+              <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-50/50 rounded-full blur-3xl -z-10 opacity-50 group-hover:opacity-100 transition-opacity" />
 
               <div className="flex items-start justify-between gap-6">
                 <div className="space-y-4 flex-1">
-                  <div className="flex items-center gap-3">
-                    <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                      <Sparkles className="w-5 h-5 text-indigo-500" />
-                      Executive Summary
-                    </h2>
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="p-2 bg-indigo-50 rounded-lg">
+                      <Sparkles className="w-5 h-5 text-indigo-600" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold text-slate-900 leading-none">Executive Summary</h2>
+                      <p className="text-xs text-slate-400 font-medium mt-1">AI-generated insight based on collected evidence</p>
+                    </div>
+                  </div>
+
+                  <div className="bg-white/50 backdrop-blur-sm rounded-2xl p-6 border border-indigo-50/50 shadow-sm">
+                    <p className="text-slate-700 leading-relaxed text-lg font-medium">
+                      {signal.summary}
+                    </p>
+                  </div>
+
+                  {/* Context Tags */}
+                  <div className="flex flex-wrap gap-2 mt-2">
                     {signal.impact_direction && (
-                      <Tag className={signal.impact_direction === 'RISK' ? 'bg-rose-50 text-rose-600 border-rose-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'}>
-                        {getImpactDirectionLabel(signal.impact_direction)} {impactStrength && `· ${getStrengthLabel(impactStrength)}`}
+                      <Tag className={signal.impact_direction === 'RISK' ? 'bg-rose-50 text-rose-600 border-rose-100 px-3 py-1 text-xs' : 'bg-emerald-50 text-emerald-600 border-emerald-100 px-3 py-1 text-xs'}>
+                        {getImpactDirectionLabel(signal.impact_direction)}
+                        {impactStrength && <span className="opacity-60 mx-1">|</span>}
+                        {impactStrength && getStrengthLabel(impactStrength)}
                       </Tag>
                     )}
-                  </div>
-                  <p className="text-slate-700 leading-relaxed text-lg font-medium">
-                    {signal.summary}
-                  </p>
-
-                  {/* AI Insight Highlight */}
-                  {signal.insight_excerpt && (
-                    <div className="mt-4 p-5 rounded-2xl bg-gradient-to-br from-indigo-50 to-white border border-indigo-100 shadow-sm relative">
-                      <div className="absolute top-3 left-3 text-indigo-200">
-                        <Sparkles className="w-4 h-4" />
+                    {signal.insight_excerpt && (
+                      <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-100 text-indigo-700 text-xs font-medium">
+                        <Brain className="w-3 h-3" />
+                        AI Focus: {signal.insight_excerpt.substring(0, 30)}...
                       </div>
-                      <p className="text-sm text-indigo-900 leading-relaxed italic pl-6">
-                        "{signal.insight_excerpt}"
-                      </p>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
-
-
               </div>
             </GlassCard>
 
-            {/* Bank Interpretation (MVP) - 은행 관점 재해석 */}
-            {signal.bank_interpretation && (
-              <GlassCard className="p-7 border-l-4 border-l-blue-500 bg-gradient-to-br from-blue-50/50 to-white">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wide flex items-center gap-2">
-                    <Landmark className="w-4 h-4 text-blue-600" />
-                    당행 관점 분석
-                  </h3>
-                  {signal.portfolio_impact && (
-                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${signal.portfolio_impact === 'HIGH' ? 'bg-rose-100 text-rose-700' :
-                      signal.portfolio_impact === 'MED' ? 'bg-amber-100 text-amber-700' :
-                        'bg-slate-100 text-slate-600'
-                      }`}>
-                      포트폴리오 영향: {signal.portfolio_impact}
-                    </span>
+            {/* 1. Deep Dive Grid: Impact vs Reasoning */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+              {/* Left Column: Impact Metrics (5/12) */}
+              <div className="lg:col-span-5 space-y-4">
+                <div className="flex items-center gap-2 px-1">
+                  <BarChart3 className="w-4 h-4 text-slate-500" />
+                  <h3 className="text-sm font-bold text-slate-900">Impact Analysis</h3>
+                </div>
+                {signal.impact_analysis && signal.impact_analysis.length > 0 ? (
+                  <div className="space-y-4">
+                    {signal.impact_analysis.map((impact) => (
+                      <ImpactCard key={impact.id} impact={impact} />
+                    ))}
+                  </div>
+                ) : (
+                  <GlassCard className="p-6 text-center text-slate-400 text-sm">
+                    No quantitative impact analysis available.
+                  </GlassCard>
+                )}
+              </div>
+
+              {/* 2. Reasoning & Evidence (Reasoning Process + Supporting Evidence) */}
+              {(signal.analysis_reasoning || (signal.evidences && signal.evidences.length > 0)) && (
+                <div className="bg-slate-50/80 rounded-2xl border border-slate-200/60 p-6 space-y-8 shadow-sm">
+
+                  {/* Reasoning */}
+                  {signal.analysis_reasoning && (
+                    <div className="space-y-3">
+                      <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide flex items-center gap-2">
+                        <Brain className="w-3.5 h-3.5 text-slate-400" />
+                        Reasoning Process
+                      </h3>
+                      <div className="prose prose-sm prose-slate max-w-none text-slate-700">
+                        <ContextualHighlight text={signal.analysis_reasoning} reason="AI Logic" />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Evidence - Integrated visually */}
+                  {signal.evidences && signal.evidences.length > 0 && (
+                    <div className="space-y-3 border-t border-slate-200 pt-6">
+                      <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide flex items-center gap-2">
+                        <FileText className="w-3.5 h-3.5 text-slate-400" />
+                        Supporting Evidence ({signal.evidences.length})
+                      </h3>
+                      <div className="grid grid-cols-1 gap-3">
+                        {signal.evidences.map((evidence) => (
+                          <EvidenceCard key={evidence.evidence_id} evidence={evidence} />
+                        ))}
+                      </div>
+                    </div>
                   )}
                 </div>
+              )}
 
-                <p className="text-slate-700 leading-relaxed text-base mb-4">
-                  {signal.bank_interpretation}
-                </p>
+              {/* 3. Bank Perspective (Moved to bottom) */}
+              {signal.bank_interpretation && (
+                <GlassCard className="p-7 border border-slate-200 shadow-sm bg-white">
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                      <div className="p-1.5 bg-slate-100 rounded-md">
+                        <Landmark className="w-4 h-4 text-slate-600" />
+                      </div>
+                      Bank's Perspective
+                    </h3>
+                    {signal.portfolio_impact && (
+                      <span className={`text-xs font-bold px-3 py-1 rounded-full border ${signal.portfolio_impact === 'HIGH' ? 'bg-rose-50 text-rose-700 border-rose-100' :
+                        signal.portfolio_impact === 'MED' ? 'bg-amber-50 text-amber-700 border-amber-100' :
+                          'bg-slate-50 text-slate-600 border-slate-100'
+                        }`}>
+                        Impact: {signal.portfolio_impact}
+                      </span>
+                    )}
+                  </div>
 
-                {signal.recommended_action && (
-                  <div className="flex items-start gap-3 p-4 rounded-xl bg-white border border-blue-100">
-                    <div className={`p-2 rounded-lg ${signal.action_priority === 'URGENT' ? 'bg-rose-100' :
-                      signal.action_priority === 'NORMAL' ? 'bg-amber-100' :
-                        'bg-slate-100'
-                      }`}>
-                      {signal.action_priority === 'URGENT' ? (
-                        <AlertCircle className="w-4 h-4 text-rose-600" />
-                      ) : signal.action_priority === 'NORMAL' ? (
-                        <Target className="w-4 h-4 text-amber-600" />
-                      ) : (
-                        <ClipboardList className="w-4 h-4 text-slate-500" />
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">권고 조치</span>
-                        {signal.action_priority && (
-                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${signal.action_priority === 'URGENT' ? 'bg-rose-600 text-white' :
-                            signal.action_priority === 'NORMAL' ? 'bg-amber-500 text-white' :
-                              'bg-slate-400 text-white'
-                            }`}>
-                            {signal.action_priority === 'URGENT' ? '긴급' :
-                              signal.action_priority === 'NORMAL' ? '일반' : '참고'}
-                          </span>
+                  <div className="pl-4 border-l-2 border-slate-100 ml-2">
+                    <p className="text-slate-700 leading-relaxed text-base mb-6">
+                      {signal.bank_interpretation}
+                    </p>
+                  </div>
+
+                  {signal.recommended_action && (
+                    <div className="flex items-start gap-4 p-5 rounded-xl bg-slate-50 border border-slate-100">
+                      <div className={`p-2.5 rounded-full shrink-0 ${signal.action_priority === 'URGENT' ? 'bg-rose-100 text-rose-600' :
+                        signal.action_priority === 'NORMAL' ? 'bg-amber-100 text-amber-600' :
+                          'bg-slate-200 text-slate-500'
+                        }`}>
+                        {signal.action_priority === 'URGENT' ? (
+                          <AlertCircle className="w-5 h-5" />
+                        ) : signal.action_priority === 'NORMAL' ? (
+                          <Target className="w-5 h-5" />
+                        ) : (
+                          <ClipboardList className="w-5 h-5" />
                         )}
                       </div>
-                      <p className="text-sm text-slate-700 font-medium">{signal.recommended_action}</p>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Recommended Action</span>
+                          {signal.action_priority && (
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${signal.action_priority === 'URGENT' ? 'bg-rose-100 text-rose-700' :
+                              signal.action_priority === 'NORMAL' ? 'bg-amber-100 text-amber-700' :
+                                'bg-slate-200 text-slate-600'
+                              }`}>
+                              {signal.action_priority}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm text-slate-800 font-semibold mt-1">{signal.recommended_action}</p>
+                      </div>
                     </div>
-                  </div>
-                )}
-              </GlassCard>
-            )}
-
-            {/* AI Reasoning */}
-            {signal.analysis_reasoning && (
-              <GlassCard className="p-7">
-                <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wide flex items-center gap-2 mb-4">
-                  <Brain className="w-4 h-4 text-purple-500" />
-                  AI Reasoning
-                </h3>
-                <div className="prose prose-sm prose-slate max-w-none text-slate-600 bg-slate-50/50 p-4 rounded-xl border border-slate-100">
-                  <ContextualHighlight text={signal.analysis_reasoning} reason="AI analyzed correlation" />
-                </div>
-              </GlassCard>
-            )}
-
-            {/* Evidence List */}
-            {signal.evidences && signal.evidences.length > 0 && (
-              <div className="space-y-4">
-                <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wide flex items-center gap-2 px-1 mt-4">
-                  <FileText className="w-4 h-4" />
-                  Key Evidence ({signal.evidences.length})
-                </h3>
-                <div className="grid grid-cols-1 gap-3">
-                  {signal.evidences.map((evidence) => (
-                    <EvidenceCard key={evidence.evidence_id} evidence={evidence} />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Impact Analysis */}
-            {signal.impact_analysis && signal.impact_analysis.length > 0 && (
-              <div className="space-y-4">
-                <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wide flex items-center gap-2 px-1 mt-4">
-                  <BarChart3 className="w-4 h-4" />
-                  Impact Analysis
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {signal.impact_analysis.map((impact) => (
-                    <ImpactCard key={impact.id} impact={impact} />
-                  ))}
-                </div>
-              </div>
-            )}
+                  )}
+                </GlassCard>
+              )}
+            </div>
           </div>
 
           {/* Side Column (4) */}
           <div className="lg:col-span-4 space-y-6">
             {/* Corp Profile */}
             {(signal.corp_context || corpProfile) && (
-              <GlassCard className="p-0 overflow-hidden border-t-4 border-t-slate-200">
-                <div className="p-5 border-b border-slate-100 bg-slate-50/30 flex items-center justify-between backdrop-blur-sm">
-                  <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                    <Building2 className="w-4 h-4 text-slate-500" />
+              <GlassCard className="p-0 overflow-hidden border border-slate-100 shadow-lg shadow-slate-200/50">
+                <div className="p-4 border-b border-slate-50 bg-slate-50/50 flex items-center justify-between backdrop-blur-sm">
+                  <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm">
+                    <Building2 className="w-3.5 h-3.5 text-slate-500" />
                     Corporate Profile
                   </h3>
                   <Link to={`/corporations/${signal.corp_id}`} className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 transition-colors flex items-center gap-1 group">
                     Details <ChevronRight className="w-3 h-3 transition-transform group-hover:translate-x-0.5" />
                   </Link>
                 </div>
-                <div className="p-6">
+                <div className="p-5">
                   {signal.corp_context ? (
                     <CorpContextCard context={signal.corp_context} />
                   ) : corpProfile ? (
@@ -509,10 +530,10 @@ function EvidenceCard({ evidence }: { evidence: ApiEnrichedEvidence }) {
   const typeLabel = evidence.evidence_type;
 
   return (
-    <GlassCard className="p-4 bg-white/60 hover:bg-white/90 transition-all border-l-4 border-l-slate-200">
+    <GlassCard className="p-4 bg-white hover:bg-slate-50/50 transition-all border border-slate-100 shadow-sm group">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <StatusBadge variant="neutral" className="py-0 px-1.5 h-5 text-[10px] font-semibold border-slate-200 bg-slate-50 text-slate-500">
+          <StatusBadge variant="neutral" className="py-0 px-2 h-5 text-[10px] font-semibold border-slate-200 bg-slate-100 text-slate-500 group-hover:bg-white transition-colors">
             {typeLabel}
           </StatusBadge>
           <div className="h-3 w-px bg-slate-200" />

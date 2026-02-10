@@ -1802,3 +1802,59 @@ async def get_search_providers_health():
             else "Perplexity Primary (default)"
         ),
     }
+
+
+# ============================================================================
+# Industry Hints Cache API (공급사 정보 개선)
+# ============================================================================
+
+
+@router.post(
+    "/industry-hints/clear",
+    summary="업종 힌트 캐시 클리어",
+    description="업종별 힌트 캐시를 클리어합니다. 공급사 정보 개선 후 적용에 필요합니다.",
+)
+async def clear_industry_hints_cache_endpoint(industry_code: Optional[str] = Query(None)):
+    """
+    업종 힌트 캐시 클리어
+
+    Args:
+        industry_code: 특정 업종만 클리어 (None이면 전체 클리어)
+
+    Returns:
+        클리어된 항목 수
+    """
+    from app.worker.pipelines.corp_profiling import clear_industry_hints_cache
+
+    count = clear_industry_hints_cache(industry_code)
+    return {
+        "success": True,
+        "cleared_count": count,
+        "industry_code": industry_code or "ALL",
+        "message": f"Cleared {count} industry hints cache entries",
+    }
+
+
+@router.get(
+    "/industry-hints/status",
+    summary="업종 힌트 캐시 상태",
+    description="현재 캐시된 업종 힌트 목록을 조회합니다.",
+)
+async def get_industry_hints_cache_status():
+    """
+    업종 힌트 캐시 상태 조회
+
+    Returns:
+        캐시된 업종 코드 목록 및 캐시 크기
+    """
+    from app.worker.pipelines.corp_profiling import _industry_hints_cache, _industry_hints_lock
+
+    with _industry_hints_lock:
+        cached_codes = list(_industry_hints_cache.keys())
+        cache_size = len(cached_codes)
+
+    return {
+        "cached_industry_codes": cached_codes,
+        "cache_size": cache_size,
+        "hint": "Use POST /admin/industry-hints/clear to reset cache after prompt changes",
+    }

@@ -56,6 +56,7 @@ import { Progress } from "@/components/ui/progress";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import ReportPreviewModal from "@/components/reports/ReportPreviewModal";
 import { useCorporation, useSignals, useCorporationSnapshot, useCorpProfile, useCorpProfileDetail, useRefreshCorpProfile, useJobStatus, useLoanInsight, useBankingData, useBankingInsights, useDartFinancials } from "@/hooks/useApi";
+import { BankingPulseDashboard } from "@/components/dashboard/BankingPulseDashboard";
 import { toast } from "sonner";
 import type { ProfileConfidence, CorpProfile } from "@/types/profile";
 import { useQueryClient } from "@tanstack/react-query";
@@ -577,16 +578,7 @@ export default function CorporateDetailPage() {
               <GlassCard className="md:col-span-3 p-8" id="summary-card">
                 <div className="flex justify-between items-start mb-6">
                   <h3 className="text-lg font-bold text-slate-900">Executive Summary</h3>
-                  {loanInsight && (
-                    <StatusBadge variant={
-                      loanInsight.stance.level === 'CAUTION' ? 'danger' :
-                        loanInsight.stance.level === 'MONITORING' ? 'brand' :
-                          loanInsight.stance.level === 'STABLE' ? 'success' :
-                            loanInsight.stance.level === 'POSITIVE' ? 'success' : 'neutral'
-                    }>
-                      {loanInsight.stance.label} Outlook
-                    </StatusBadge>
-                  )}
+
                 </div>
                 <div className="text-[14px] leading-relaxed text-slate-600 mb-6 bg-slate-50/50 p-4 rounded-xl border border-slate-100">
                   {loanInsight?.executive_summary ? (
@@ -958,11 +950,10 @@ export default function CorporateDetailPage() {
                               {bankingInsights.risk_insights.slice(0, 3).map((insight, idx) => (
                                 <div key={idx} className="bg-white/70 rounded-lg p-3 border border-rose-100">
                                   <div className="flex items-start gap-2">
-                                    <span className={`shrink-0 mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                                      insight.priority === 'HIGH' ? 'bg-rose-600 text-white' :
+                                    <span className={`shrink-0 mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold ${insight.priority === 'HIGH' ? 'bg-rose-600 text-white' :
                                       insight.priority === 'MED' ? 'bg-orange-500 text-white' :
-                                      'bg-amber-400 text-amber-900'
-                                    }`}>
+                                        'bg-amber-400 text-amber-900'
+                                      }`}>
                                       {insight.priority}
                                     </span>
                                     <div className="flex-1 min-w-0">
@@ -996,11 +987,10 @@ export default function CorporateDetailPage() {
                               {bankingInsights.opportunity_insights.slice(0, 3).map((insight, idx) => (
                                 <div key={idx} className="bg-white/70 rounded-lg p-3 border border-emerald-100">
                                   <div className="flex items-start gap-2">
-                                    <span className={`shrink-0 mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                                      insight.priority === 'HIGH' ? 'bg-emerald-600 text-white' :
+                                    <span className={`shrink-0 mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold ${insight.priority === 'HIGH' ? 'bg-emerald-600 text-white' :
                                       insight.priority === 'MED' ? 'bg-teal-500 text-white' :
-                                      'bg-cyan-400 text-cyan-900'
-                                    }`}>
+                                        'bg-cyan-400 text-cyan-900'
+                                      }`}>
                                       {insight.priority}
                                     </span>
                                     <div className="flex-1 min-w-0">
@@ -1026,361 +1016,7 @@ export default function CorporateDetailPage() {
                     )}
 
                     {/* Main Dashboard Grid - High Density */}
-                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-
-                      {/* Left Column (Main Charts) - 8/12 */}
-                      <div className="lg:col-span-8 space-y-6">
-
-                        {/* Loan Exposure Chart - Stacked Bar */}
-                        <div className="bg-slate-50/50 rounded-xl p-5 border border-slate-200 shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
-                          <div className="flex justify-between items-end mb-4">
-                            <div>
-                              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1.5">
-                                여신 잔액 추이 (Loan Exposure Trend)
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-600 border border-indigo-100">
-                                  등급: {(bankingData.loan_exposure as any)?.risk_indicators?.internal_grade || 'N/A'}
-                                </span>
-                              </p>
-                              <div className="flex items-baseline gap-3">
-                                <h3 className="text-2xl font-bold text-slate-900 font-mono tracking-tight">
-                                  {formatKRW((bankingData.loan_exposure as any)?.total_exposure_krw)}
-                                </h3>
-                                {(() => {
-                                  const trend = (bankingData.loan_exposure as any)?.yearly_trend || [];
-                                  if (trend.length >= 2) {
-                                    const latest = trend[trend.length - 1]?.total || 0;
-                                    const prev = trend[trend.length - 2]?.total || 0;
-                                    const change = prev > 0 ? ((latest - prev) / prev * 100).toFixed(1) : 0;
-                                    const isUp = Number(change) >= 0;
-                                    return (
-                                      <span className={`text-xs font-medium font-mono flex items-center gap-0.5 ${isUp ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                        {isUp ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                                        {isUp ? '+' : ''}{change}% YoY
-                                      </span>
-                                    );
-                                  }
-                                  return null;
-                                })()}
-                              </div>
-                            </div>
-                            <div className="flex gap-3 text-[11px] text-slate-500 font-medium">
-                              <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-indigo-600" />담보대출</div>
-                              <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-violet-500" />신용대출</div>
-                              <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-pink-500" />외화대출</div>
-                            </div>
-                          </div>
-
-                          <div className="h-[280px] w-full relative">
-                            <ResponsiveContainer width="100%" height="100%">
-                              <BarChart
-                                data={(bankingData.loan_exposure as any)?.yearly_trend || []}
-                                margin={{ top: 25, right: 10, left: 10, bottom: 5 }}
-                                onClick={(data) => {
-                                  if (data && data.activePayload && data.activePayload.length > 0) {
-                                    handleDrillDown(`여신 상세 내역 (${data.activePayload[0].payload.year})`, data.activePayload[0].payload);
-                                  }
-                                }}
-                                style={{ cursor: 'pointer' }}
-                                barCategoryGap="25%"
-                              >
-                                <defs>
-                                  <linearGradient id="barSecured" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="0%" stopColor="#4f46e5" />
-                                    <stop offset="100%" stopColor="#6366f1" />
-                                  </linearGradient>
-                                  <linearGradient id="barUnsecured" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="0%" stopColor="#7c3aed" />
-                                    <stop offset="100%" stopColor="#8b5cf6" />
-                                  </linearGradient>
-                                  <linearGradient id="barFx" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="0%" stopColor="#db2777" />
-                                    <stop offset="100%" stopColor="#ec4899" />
-                                  </linearGradient>
-                                </defs>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                                <XAxis
-                                  dataKey="year"
-                                  stroke="#64748b"
-                                  fontSize={12}
-                                  tickLine={false}
-                                  axisLine={{ stroke: '#cbd5e1' }}
-                                  tickMargin={8}
-                                  fontWeight={600}
-                                />
-                                <YAxis
-                                  stroke="#94a3b8"
-                                  fontSize={10}
-                                  tickLine={false}
-                                  axisLine={false}
-                                  fontFamily="monospace"
-                                  tickFormatter={(val) => `${(val / 10).toLocaleString()}억`}
-                                  width={50}
-                                />
-                                <Tooltip
-                                  contentStyle={{
-                                    borderRadius: '12px',
-                                    border: '1px solid #e2e8f0',
-                                    boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
-                                    fontSize: '12px',
-                                    fontFamily: 'monospace',
-                                    padding: '12px 16px'
-                                  }}
-                                  formatter={(value: number, name: string) => {
-                                    const labels: Record<string, string> = {
-                                      secured: '담보대출',
-                                      unsecured: '신용대출',
-                                      fx: '외화대출',
-                                      total: '합계'
-                                    };
-                                    return [`${(value / 10).toLocaleString()}억원`, labels[name] || name];
-                                  }}
-                                  labelFormatter={(label) => `${label}년`}
-                                  cursor={{ fill: 'rgba(99, 102, 241, 0.08)' }}
-                                />
-                                <Bar
-                                  dataKey="secured"
-                                  stackId="loan"
-                                  fill="url(#barSecured)"
-                                  name="secured"
-                                  radius={[0, 0, 0, 0]}
-                                >
-                                  <LabelList
-                                    dataKey="secured"
-                                    position="center"
-                                    fill="#ffffff"
-                                    fontSize={11}
-                                    fontWeight={700}
-                                    formatter={(value: number) => value > 0 ? `${(value / 10).toLocaleString()}` : ''}
-                                  />
-                                </Bar>
-                                <Bar
-                                  dataKey="unsecured"
-                                  stackId="loan"
-                                  fill="url(#barUnsecured)"
-                                  name="unsecured"
-                                  radius={[0, 0, 0, 0]}
-                                >
-                                  <LabelList
-                                    dataKey="unsecured"
-                                    position="center"
-                                    fill="#ffffff"
-                                    fontSize={11}
-                                    fontWeight={700}
-                                    formatter={(value: number) => value > 0 ? `${(value / 10).toLocaleString()}` : ''}
-                                  />
-                                </Bar>
-                                <Bar
-                                  dataKey="fx"
-                                  stackId="loan"
-                                  fill="url(#barFx)"
-                                  name="fx"
-                                  radius={[6, 6, 0, 0]}
-                                >
-                                  <LabelList
-                                    dataKey="fx"
-                                    position="center"
-                                    fill="#ffffff"
-                                    fontSize={11}
-                                    fontWeight={700}
-                                    formatter={(value: number) => value > 0 ? `${(value / 10).toLocaleString()}` : ''}
-                                  />
-                                </Bar>
-                                {/* Total label on top of bars */}
-                                <Bar
-                                  dataKey="total"
-                                  stackId="total-invisible"
-                                  fill="transparent"
-                                  name="total"
-                                >
-                                  <LabelList
-                                    dataKey="total"
-                                    position="top"
-                                    fill="#1e293b"
-                                    fontSize={13}
-                                    fontWeight={800}
-                                    formatter={(value: number) => `${(value / 10).toLocaleString()}억`}
-                                    offset={8}
-                                  />
-                                </Bar>
-                              </BarChart>
-                            </ResponsiveContainer>
-                          </div>
-
-                          {/* Composition Summary */}
-                          <div className="mt-4 pt-4 border-t border-slate-200">
-                            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-3">현재 여신 구성 (Current Composition)</p>
-                            <div className="grid grid-cols-3 gap-3">
-                              {(() => {
-                                const composition = (bankingData.loan_exposure as any)?.composition || {};
-                                const items = [
-                                  { key: 'secured_loan', label: '담보대출', color: 'bg-indigo-600', textColor: 'text-indigo-600' },
-                                  { key: 'unsecured_loan', label: '신용대출', color: 'bg-violet-500', textColor: 'text-violet-600' },
-                                  { key: 'fx_loan', label: '외화대출', color: 'bg-pink-500', textColor: 'text-pink-600' },
-                                ];
-                                return items.map(item => {
-                                  const data = composition[item.key] || {};
-                                  return (
-                                    <div key={item.key} className="bg-white rounded-lg p-3 border border-slate-100 shadow-sm">
-                                      <div className="flex items-center gap-2 mb-2">
-                                        <div className={`w-2.5 h-2.5 rounded-sm ${item.color}`} />
-                                        <span className="text-[11px] font-medium text-slate-600">{item.label}</span>
-                                      </div>
-                                      <p className={`text-lg font-bold font-mono ${item.textColor}`}>
-                                        {formatKRW(data.amount || 0)}
-                                      </p>
-                                      <p className="text-[11px] text-slate-400 font-mono mt-0.5">
-                                        비중: {data.ratio?.toFixed(1) || 0}%
-                                      </p>
-                                    </div>
-                                  );
-                                });
-                              })()}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Trade Finance Grid */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div
-                            className="bg-slate-50/50 rounded-xl p-5 border border-slate-200 cursor-pointer hover:border-indigo-300 transition-colors group"
-                            onClick={() => handleDrillDown("무역금융 상세 (Trade Finance)", bankingData.trade_finance)}
-                          >
-                            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-3 group-hover:text-indigo-600 transition-colors">무역금융 (Trade Finance)</p>
-                            <div className="flex justify-between items-center mb-5">
-                              <div>
-                                <p className="text-[10px] text-slate-500 mb-0.5">수출 채권 (Export Recv.)</p>
-                                <p className="text-lg font-bold text-blue-600 font-mono tracking-tight">${((bankingData.trade_finance as any)?.export?.current_receivables_usd / 1000000)?.toFixed(1)}M</p>
-                              </div>
-                              <div className="text-right">
-                                <p className="text-[10px] text-slate-500 mb-0.5">수입 채무 (Import Payables)</p>
-                                <p className="text-lg font-bold text-rose-500 font-mono tracking-tight">${((bankingData.trade_finance as any)?.import?.current_payables_usd / 1000000)?.toFixed(1)}M</p>
-                              </div>
-                            </div>
-                            {/* Stacked Bar Visual */}
-                            <div className="relative h-2.5 rounded-full overflow-hidden bg-slate-100 flex">
-                              <div className="bg-blue-500 transition-all duration-1000" style={{ width: '60%' }} />
-                              <div className="bg-rose-500 transition-all duration-1000" style={{ width: '40%' }} />
-                            </div>
-                            <div className="flex justify-between text-[10px] text-slate-400 mt-1.5 font-mono">
-                              <span>60%</span>
-                              <span>40%</span>
-                            </div>
-                          </div>
-
-                          <div className="bg-slate-50/50 rounded-xl p-5 border border-slate-200">
-                            <div className="flex justify-between items-start mb-1">
-                              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">환헤지 비율 (Hedge Ratio)</p>
-                              <div className="flex items-center gap-1 px-2 py-0.5 bg-amber-50 text-amber-700 rounded text-[10px] font-medium border border-amber-100">
-                                <AlertTriangle className="w-3 h-3" /> 주의 필요
-                              </div>
-                            </div>
-
-                            <div className="flex items-end gap-3 mt-4 mb-3">
-                              <p className="text-3xl font-bold text-slate-900 font-mono tracking-tighter">{(bankingData.trade_finance as any)?.fx_exposure?.hedge_ratio}%</p>
-                              <p className="text-[11px] text-slate-500 mb-1.5">권고치 (50%) 미달</p>
-                            </div>
-
-                            <div className="relative">
-                              <Progress value={(bankingData.trade_finance as any)?.fx_exposure?.hedge_ratio || 0} className="h-2.5 bg-slate-100" indicatorClassName="bg-amber-400" />
-                              <div className="absolute top-0 bottom-0 w-0.5 bg-slate-400 opacity-30 z-10" style={{ left: '50%' }} />
-                              <span className="absolute -top-4 left-[48%] text-[9px] text-slate-400 font-mono">Target</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Right Column (Side Data) - 4/12 */}
-                      <div className="lg:col-span-4 space-y-6">
-
-                        {/* Collateral & LTV */}
-                        <div className="bg-slate-50/50 rounded-xl p-5 border border-slate-200 flex flex-col h-auto">
-                          <div className="flex justify-between items-center mb-4">
-                            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">주요 담보 (Collateral)</p>
-                            <span className="text-[11px] font-bold text-slate-900 font-mono bg-white px-2 py-1 rounded border border-slate-200">Avg LTV: {(bankingData.collateral_detail as any)?.avg_ltv}%</span>
-                          </div>
-
-                          {/* AI Insight Inline */}
-                          <div className="mb-4 px-3 py-2 bg-indigo-50/50 border border-indigo-100 rounded-lg flex items-start gap-2">
-                            <Sparkles className="w-3.5 h-3.5 text-indigo-500 mt-0.5 flex-shrink-0" />
-                            <p className="text-[11px] text-indigo-800 leading-snug">
-                              <span className="font-bold">AI Note:</span> 울산 공장 인근 인프라 개발 호재로 감정가 상승 예상 (+15%)
-                            </p>
-                          </div>
-
-                          <div className="space-y-3 flex-1">
-                            {((bankingData.collateral_detail as any)?.collaterals || []).slice(0, 3).map((col: any, i: number) => (
-                              <div key={i} className="bg-white p-3 rounded-lg border border-slate-100 shadow-sm transition-shadow hover:shadow-md cursor-default">
-                                <div className="flex items-center gap-3 mb-2">
-                                  <div className="w-8 h-8 rounded bg-slate-50 flex items-center justify-center text-slate-500 border border-slate-100">
-                                    <Building2 className="w-4 h-4" />
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-xs font-bold text-slate-800 truncate">{col.description}</p>
-                                    <p className="text-[10px] text-slate-400 truncate">{col.type} · {formatKRW(col.value)}</p>
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-[10px] text-slate-500 w-6 font-mono">LTV</span>
-                                  <div className="h-1.5 flex-1 bg-slate-100 rounded-full overflow-hidden">
-                                    <div className={`h-full rounded-full ${col.ltv_ratio > 70 ? 'bg-red-500' : 'bg-emerald-500'}`} style={{ width: `${col.ltv_ratio}%` }} />
-                                  </div>
-                                  <span className={`text-[10px] font-bold font-mono w-8 text-right ${col.ltv_ratio > 70 ? 'text-red-600' : 'text-emerald-600'}`}>{col.ltv_ratio}%</span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Card Usage Donut */}
-                        <div className="bg-slate-50/50 rounded-xl p-5 border border-slate-200">
-                          <div className="flex flex-col h-full">
-                            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-4">법인카드 지출 (Expense)</p>
-                            <div className="flex items-center justify-between">
-                              <div className="h-[120px] w-[120px] relative">
-                                <ResponsiveContainer width="100%" height="100%">
-                                  <PieChart>
-                                    <Pie
-                                      data={[
-                                        { name: '출장', value: 35, fill: '#6366f1' },
-                                        { name: '접대', value: 25, fill: '#8b5cf6' },
-                                        { name: '기타', value: 40, fill: '#cbd5e1' },
-                                      ]}
-                                      cx="50%" cy="50%"
-                                      innerRadius={35} outerRadius={50}
-                                      paddingAngle={3}
-                                      dataKey="value"
-                                    >
-                                      <Cell fill="#6366f1" />
-                                      <Cell fill="#8b5cf6" />
-                                      <Cell fill="#e2e8f0" />
-                                    </Pie>
-                                  </PieChart>
-                                </ResponsiveContainer>
-                                <div className="absolute inset-0 flex items-center justify-center pointer-events-none flex-col">
-                                  <span className="text-sm font-bold text-slate-800 font-mono">55M</span>
-                                </div>
-                              </div>
-                              <div className="flex-1 pl-4 space-y-2">
-                                <p className="text-[10px] text-slate-400 mb-1">카테고리별 비중</p>
-                                <div className="flex items-center justify-between text-[11px]">
-                                  <span className="flex items-center gap-1.5 text-slate-600"><div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />출장비</span>
-                                  <span className="font-mono font-medium text-slate-900">35%</span>
-                                </div>
-                                <div className="flex items-center justify-between text-[11px]">
-                                  <span className="flex items-center gap-1.5 text-slate-600"><div className="w-1.5 h-1.5 rounded-full bg-purple-500" />접대비</span>
-                                  <span className="font-mono font-medium text-slate-900">25%</span>
-                                </div>
-                                <div className="flex items-center justify-between text-[11px]">
-                                  <span className="flex items-center gap-1.5 text-slate-600"><div className="w-1.5 h-1.5 rounded-full bg-slate-300" />기타</span>
-                                  <span className="font-mono font-medium text-slate-900">40%</span>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-
-                      </div>
-                    </div>
+                    <BankingPulseDashboard bankingData={bankingData} className="w-full" />
 
                   </div>
                 ) : (
@@ -1701,17 +1337,17 @@ export default function CorporateDetailPage() {
                                   <div className="w-2 h-2 rounded-full bg-indigo-500" />
                                   <span className="text-xs font-bold text-indigo-700 uppercase tracking-wider">DIRECT</span>
                                   <span className="ml-auto text-[10px] font-mono text-indigo-500 bg-indigo-100 px-1.5 py-0.5 rounded">
-                                    {apiSignals.filter(s => s.signalType === 'DIRECT').length}
+                                    {apiSignals.filter(s => s.signalCategory === 'direct').length}
                                   </span>
                                 </div>
                                 <ul className="space-y-2">
-                                  {apiSignals.filter(s => s.signalType === 'DIRECT').slice(0, 3).map((signal, i) => (
+                                  {apiSignals.filter(s => s.signalCategory === 'direct').slice(0, 3).map((signal, i) => (
                                     <li key={i} className="text-[12px] text-slate-600 flex items-start gap-2">
-                                      <span className={`mt-1 w-1.5 h-1.5 rounded-full shrink-0 ${signal.impactDirection === 'RISK' ? 'bg-rose-400' : signal.impactDirection === 'OPPORTUNITY' ? 'bg-emerald-400' : 'bg-slate-300'}`} />
+                                      <span className={`mt-1 w-1.5 h-1.5 rounded-full shrink-0 ${signal.impact === 'risk' ? 'bg-rose-400' : signal.impact === 'opportunity' ? 'bg-emerald-400' : 'bg-slate-300'}`} />
                                       <span className="line-clamp-2">{signal.title || signal.summary?.slice(0, 50)}</span>
                                     </li>
                                   ))}
-                                  {apiSignals.filter(s => s.signalType === 'DIRECT').length === 0 && (
+                                  {apiSignals.filter(s => s.signalCategory === 'direct').length === 0 && (
                                     <li className="text-[11px] text-slate-400 italic">탐지된 시그널 없음</li>
                                   )}
                                 </ul>
@@ -1723,17 +1359,17 @@ export default function CorporateDetailPage() {
                                   <div className="w-2 h-2 rounded-full bg-violet-500" />
                                   <span className="text-xs font-bold text-violet-700 uppercase tracking-wider">INDUSTRY</span>
                                   <span className="ml-auto text-[10px] font-mono text-violet-500 bg-violet-100 px-1.5 py-0.5 rounded">
-                                    {apiSignals.filter(s => s.signalType === 'INDUSTRY').length}
+                                    {apiSignals.filter(s => s.signalCategory === 'industry').length}
                                   </span>
                                 </div>
                                 <ul className="space-y-2">
-                                  {apiSignals.filter(s => s.signalType === 'INDUSTRY').slice(0, 3).map((signal, i) => (
+                                  {apiSignals.filter(s => s.signalCategory === 'industry').slice(0, 3).map((signal, i) => (
                                     <li key={i} className="text-[12px] text-slate-600 flex items-start gap-2">
-                                      <span className={`mt-1 w-1.5 h-1.5 rounded-full shrink-0 ${signal.impactDirection === 'RISK' ? 'bg-rose-400' : signal.impactDirection === 'OPPORTUNITY' ? 'bg-emerald-400' : 'bg-slate-300'}`} />
+                                      <span className={`mt-1 w-1.5 h-1.5 rounded-full shrink-0 ${signal.impact === 'risk' ? 'bg-rose-400' : signal.impact === 'opportunity' ? 'bg-emerald-400' : 'bg-slate-300'}`} />
                                       <span className="line-clamp-2">{signal.title || signal.summary?.slice(0, 50)}</span>
                                     </li>
                                   ))}
-                                  {apiSignals.filter(s => s.signalType === 'INDUSTRY').length === 0 && (
+                                  {apiSignals.filter(s => s.signalCategory === 'industry').length === 0 && (
                                     <li className="text-[11px] text-slate-400 italic">탐지된 시그널 없음</li>
                                   )}
                                 </ul>
@@ -1745,17 +1381,17 @@ export default function CorporateDetailPage() {
                                   <div className="w-2 h-2 rounded-full bg-teal-500" />
                                   <span className="text-xs font-bold text-teal-700 uppercase tracking-wider">ENVIRONMENT</span>
                                   <span className="ml-auto text-[10px] font-mono text-teal-500 bg-teal-100 px-1.5 py-0.5 rounded">
-                                    {apiSignals.filter(s => s.signalType === 'ENVIRONMENT').length}
+                                    {apiSignals.filter(s => s.signalCategory === 'environment').length}
                                   </span>
                                 </div>
                                 <ul className="space-y-2">
-                                  {apiSignals.filter(s => s.signalType === 'ENVIRONMENT').slice(0, 3).map((signal, i) => (
+                                  {apiSignals.filter(s => s.signalCategory === 'environment').slice(0, 3).map((signal, i) => (
                                     <li key={i} className="text-[12px] text-slate-600 flex items-start gap-2">
-                                      <span className={`mt-1 w-1.5 h-1.5 rounded-full shrink-0 ${signal.impactDirection === 'RISK' ? 'bg-rose-400' : signal.impactDirection === 'OPPORTUNITY' ? 'bg-emerald-400' : 'bg-slate-300'}`} />
+                                      <span className={`mt-1 w-1.5 h-1.5 rounded-full shrink-0 ${signal.impact === 'risk' ? 'bg-rose-400' : signal.impact === 'opportunity' ? 'bg-emerald-400' : 'bg-slate-300'}`} />
                                       <span className="line-clamp-2">{signal.title || signal.summary?.slice(0, 50)}</span>
                                     </li>
                                   ))}
-                                  {apiSignals.filter(s => s.signalType === 'ENVIRONMENT').length === 0 && (
+                                  {apiSignals.filter(s => s.signalCategory === 'environment').length === 0 && (
                                     <li className="text-[11px] text-slate-400 italic">탐지된 시그널 없음</li>
                                   )}
                                 </ul>
