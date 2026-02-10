@@ -333,7 +333,7 @@ export default function SignalDetailPage() {
 
               {/* 2. Reasoning & Evidence (Reasoning Process + Supporting Evidence) */}
               {(signal.analysis_reasoning || (signal.evidences && signal.evidences.length > 0)) && (
-                <div className="bg-slate-50/80 rounded-2xl border border-slate-200/60 p-6 space-y-8 shadow-sm">
+                <div className="lg:col-span-7 bg-slate-50/80 rounded-2xl border border-slate-200/60 p-6 space-y-8 shadow-sm">
 
                   {/* Reasoning */}
                   {signal.analysis_reasoning && (
