@@ -465,8 +465,7 @@ class GeminiGroundingProvider(BaseSearchProvider):
             latency_ms = int((time.time() - start_time) * 1000)
 
             logger.info(
-                f"[GeminiGrounding] Search success: {len(citations)} citations, "
-                f"confidence={confidence:.2f}, latency={latency_ms}ms"
+                f"[Gemini] Search success: confidence={confidence:.2f}, latency={latency_ms}ms"
             )
 
             return SearchResult(
@@ -475,7 +474,7 @@ class GeminiGroundingProvider(BaseSearchProvider):
                 citations=citations,
                 raw_response={
                     "text": content,
-                    "grounding_used": True,
+                    "grounding_used": False,  # litellm doesn't support grounding
                     "model": self.GROUNDING_MODEL,
                 },
                 confidence=confidence,
@@ -484,12 +483,7 @@ class GeminiGroundingProvider(BaseSearchProvider):
 
         except Exception as e:
             self.key_rotator.mark_failed("google", api_key)
-            logger.error(f"[GeminiGrounding] Search failed: {e}")
-
-            # Grounding 실패 시 Fallback 시도
-            if "grounding" in str(e).lower() or "tool" in str(e).lower():
-                logger.warning("[GeminiGrounding] Grounding failed, trying fallback")
-                return await self._search_legacy(query)
+            logger.error(f"[Gemini] Search failed: {e}")
             raise
 
     def _extract_citations_from_grounding(self, response) -> list[str]:
