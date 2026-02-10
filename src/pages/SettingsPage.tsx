@@ -34,7 +34,7 @@ export default function SettingsPage() {
                     </div>
                 </motion.div>
 
-                {/* System Features */}
+                System Features
                 <section className="space-y-6">
 
                     <motion.div
