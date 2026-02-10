@@ -254,12 +254,17 @@ DEFAULT_INDUSTRY_KEYWORDS = {
 # =============================================================================
 
 ENVIRONMENT_QUERY_TEMPLATES = {
-    "US_INTEREST_RATE": "{industry_name} 미국 기준금리 인상 인하 영향 2026",
-    "KR_INTEREST_RATE": "{industry_name} 한국 기준금리 인상 인하 영향 2026",
-    "OIL_PRICE": "{industry_name} 원유 가격 변동 유가 상승 하락 영향 2026",
-    "USD_EXCHANGE": "{industry_name} 원달러 환율 상승 하락 USD 환율 변동 영향 2026",
-    "LOGISTICS_COST": "{industry_name} 운임 물류비용 해상운임 항공운임 변동 영향 2026",
-    "SUPPLY_CHAIN_RISK": "{industry_name} 공급망 리스크 전쟁 분쟁 관세 수출규제 영향 2026",
+    "FX_RISK": "{industry_name} 환율 영향 리스크 수출기업 원/달러",
+    "TRADE_BLOC": "{industry_name} 무역 관세 FTA 수출규제 통상",
+    "GEOPOLITICAL": "{industry_name} 지정학 리스크 미중갈등 공급망 탈중국",
+    "SUPPLY_CHAIN": "{industry_name} 공급망 원자재 조달 리스크 재고",
+    "REGULATION": "{industry_name} 규제 정책 법률 변경 영향 정부",
+    "COMMODITY": "{industry_name} 원자재 가격 변동 원가 상승 하락",
+    "PANDEMIC_HEALTH": "{industry_name} 팬데믹 감염병 방역 영향 공장",
+    "POLITICAL_INSTABILITY": "{industry_name} 정치 불안정 해외진출 리스크 국가",
+    "CYBER_TECH": "{industry_name} 사이버보안 기술규제 데이터 개인정보",
+    "ENERGY_SECURITY": "{industry_name} 에너지 전력 가스 공급 안정성 요금",
+    "FOOD_SECURITY": "{industry_name} 식량안보 농산물 원료 가격 수입",
 }
 
 
