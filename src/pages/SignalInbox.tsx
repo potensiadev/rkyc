@@ -197,7 +197,7 @@ export default function SignalInbox() {
         <div className="flex justify-center items-center h-[80vh]">
           <div className="flex flex-col items-center">
             <div className="w-12 h-12 border-4 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin mb-4" />
-            <p className="text-slate-400 font-medium">Loading Intelligence...</p>
+            <p className="text-slate-400 font-medium">인텔리전스 분석 중...</p>
           </div>
         </div>
       </MainLayout>
@@ -219,7 +219,7 @@ export default function SignalInbox() {
               </span>
             </h1>
             <p className="text-slate-500 mt-2 text-lg">
-              Real-time risk monitoring and opportunity detection.
+              실시간 리스크 모니터링 및 기회 탐지
             </p>
           </motion.div>
 
@@ -229,14 +229,14 @@ export default function SignalInbox() {
                 onClick={() => setStatusFilter("active")}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${statusFilter === 'active' ? 'bg-slate-100 text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
               >
-                Active Only
+                진행 중 (Active)
               </button>
               <div className="w-px h-4 bg-slate-200" />
               <button
                 onClick={() => setStatusFilter("all")}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${statusFilter === 'all' ? 'bg-slate-100 text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
               >
-                All History
+                전체 히스토리
               </button>
             </div>
           </motion.div>
@@ -255,11 +255,11 @@ export default function SignalInbox() {
                 <Beaker className="w-5 h-5" />
               </div>
               <div className="font-medium">
-                Demo Environment Active <span className="text-indigo-200 text-sm ml-2 font-normal">Simulated data stream</span>
+                데모 환경 활성화 <span className="text-indigo-200 text-sm ml-2 font-normal">시뮬레이션 데이터 스트림</span>
               </div>
             </div>
             <Link to="/settings" className="relative z-10 flex items-center gap-2 px-4 py-2 bg-white text-indigo-700 rounded-lg font-bold text-sm hover:bg-indigo-50 transition-colors">
-              <Settings className="w-4 h-4" /> Configure
+              <Settings className="w-4 h-4" /> 설정
             </Link>
           </motion.div>
         )}
@@ -273,7 +273,7 @@ export default function SignalInbox() {
         >
           <KPICard
             icon={Activity}
-            label="New Signals"
+            label="신규 시그널"
             value={counts.todayNew}
             colorTheme="indigo"
             trend="up"
@@ -282,7 +282,7 @@ export default function SignalInbox() {
           />
           <KPICard
             icon={TrendingDown}
-            label="Risk Alerts"
+            label="리스크 경보"
             value={counts.riskHigh7d}
             colorTheme="rose"
             trend="up"
@@ -291,7 +291,7 @@ export default function SignalInbox() {
           />
           <KPICard
             icon={TrendingUp}
-            label="Opportunities"
+            label="기회 포착"
             value={counts.opportunity7d}
             colorTheme="emerald"
             trend="up"
@@ -300,7 +300,7 @@ export default function SignalInbox() {
           />
           <KPICard
             icon={CheckCircle}
-            label="Reviewed"
+            label="검토 완료"
             value={counts.reviewed}
             colorTheme="amber"
             trend="up"
@@ -318,17 +318,17 @@ export default function SignalInbox() {
         >
           <div className="bg-white/80 backdrop-blur-xl border border-slate-200/60 p-1.5 rounded-2xl shadow-lg shadow-slate-200/50 flex flex-nowrap overflow-x-auto no-scrollbar gap-2">
             <button onClick={() => setStatusFilter("active")} className={getTabStyle("active")}>
-              <Activity className="w-4 h-4" /> Active Pulse
+              <Activity className="w-4 h-4" /> 전체 활성
             </button>
             <button onClick={() => setStatusFilter("new")} className={getTabStyle("new")}>
-              <AlertCircle className="w-4 h-4" /> New
+              <AlertCircle className="w-4 h-4" /> 신규
               <span className="bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded textxs">{counts.todayNew}</span>
             </button>
             <button onClick={() => setStatusFilter("reviewed")} className={getTabStyle("reviewed")}>
-              <CheckCircle className="w-4 h-4" /> Reviewed
+              <CheckCircle className="w-4 h-4" /> 검토 완료
             </button>
             <button onClick={() => setStatusFilter("dismissed")} className={getTabStyle("dismissed")}>
-              <EyeOff className="w-4 h-4" /> Dismissed
+              <EyeOff className="w-4 h-4" /> 기각됨
             </button>
           </div>
         </motion.div>
@@ -353,7 +353,7 @@ export default function SignalInbox() {
                   <div className="absolute -top-3 left-4 z-10">
                     <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-400 text-white shadow-lg shadow-amber-400/40">
                       <Lightbulb className="w-3 h-3 fill-white" />
-                      Just Added
+                      최근 분석됨
                     </span>
                   </div>
                 )}
@@ -376,12 +376,12 @@ export default function SignalInbox() {
               <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
                 <Filter className="w-8 h-8 text-slate-300" />
               </div>
-              <h3 className="text-lg font-bold text-slate-900">No Signals Found</h3>
+              <h3 className="text-lg font-bold text-slate-900">시그널이 없습니다</h3>
               <p className="text-slate-500 mt-1 max-w-sm">
-                No signals match your current status filter. Try clearing filters or checking back later.
+                현재 필터 조건에 맞는 시그널이 없습니다. 필터를 변경하시거나 나중에 다시 확인해주세요.
               </p>
               <button onClick={() => setStatusFilter("all")} className="mt-6 text-indigo-600 font-semibold text-sm hover:underline">
-                View All History
+                전체 히스토리 보기
               </button>
             </div>
           )}
