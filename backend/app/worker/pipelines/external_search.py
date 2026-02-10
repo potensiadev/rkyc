@@ -254,17 +254,17 @@ DEFAULT_INDUSTRY_KEYWORDS = {
 # =============================================================================
 
 ENVIRONMENT_QUERY_TEMPLATES = {
-    "FX_RISK": "{industry_name} 환율 영향 리스크 수출기업 원/달러",
-    "TRADE_BLOC": "{industry_name} 무역 관세 FTA 수출규제 통상",
-    "GEOPOLITICAL": "{industry_name} 지정학 리스크 미중갈등 공급망 탈중국",
-    "SUPPLY_CHAIN": "{industry_name} 공급망 원자재 조달 리스크 재고",
-    "REGULATION": "{industry_name} 규제 정책 법률 변경 영향 정부",
-    "COMMODITY": "{industry_name} 원자재 가격 변동 원가 상승 하락",
-    "PANDEMIC_HEALTH": "{industry_name} 팬데믹 감염병 방역 영향 공장",
-    "POLITICAL_INSTABILITY": "{industry_name} 정치 불안정 해외진출 리스크 국가",
-    "CYBER_TECH": "{industry_name} 사이버보안 기술규제 데이터 개인정보",
-    "ENERGY_SECURITY": "{industry_name} 에너지 전력 가스 공급 안정성 요금",
-    "FOOD_SECURITY": "{industry_name} 식량안보 농산물 원료 가격 수입",
+    "FX_RISK": "{industry_name} 환율 영향 리스크 수출기업 원/달러 환율 정책 2026",
+    "TRADE_BLOC": "{industry_name} 무역 관세 FTA 수출규제 통상 무역 정책 2026",
+    "GEOPOLITICAL": "{industry_name} 지정학 리스크 미중갈등 공급망 탈중국 정책 2026",
+    "SUPPLY_CHAIN": "{industry_name} 공급망 원자재 조달 리스크 재고 공급망 정책 2026",
+    "REGULATION": "{industry_name} 규제 정책 법률 변경 영향 정부 규제 정책 2026",
+    "COMMODITY": "{industry_name} 원자재 가격 변동 원가 상승 하락 원자재 정책 2026",
+    "PANDEMIC_HEALTH": "{industry_name} 팬데믹 감염병 방역 영향 공장 보건 정책 2026",
+    "POLITICAL_INSTABILITY": "{industry_name} 정치 불안정 해외진출 리스크 국가 정치 정책 2026",
+    "CYBER_TECH": "{industry_name} 사이버보안 기술규제 데이터 개인정보 기술 정책 2026",
+    "ENERGY_SECURITY": "{industry_name} 에너지 전력 가스 공급 안정성 요금 에너지 정책 2026",
+    "FOOD_SECURITY": "{industry_name} 식량안보 농산물 원료 가격 수입 식량 정책 2026",
 }
 
 

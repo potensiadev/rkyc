@@ -140,7 +140,7 @@ export function DemoPanel() {
     enabled: !!currentJobId,
   });
 
-  const isDemoMode = import.meta.env.VITE_DEMO_MODE?.toLowerCase() === 'true';
+  const isDemoMode = import.meta.env.VITE_DEMO_MODE?.toLowerCase() === 'true' || import.meta.env.DEV;
 
   // 이전 상태 추적 (중복 새로고침 방지)
   const prevStatusRef = useRef<string | null>(null);

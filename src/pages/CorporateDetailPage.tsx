@@ -53,7 +53,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
-import { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import ReportPreviewModal from "@/components/reports/ReportPreviewModal";
 import { useCorporation, useSignals, useCorporationSnapshot, useCorpProfile, useCorpProfileDetail, useRefreshCorpProfile, useJobStatus, useLoanInsight, useBankingData, useBankingInsights, useDartFinancials } from "@/hooks/useApi";
 import { BankingPulseDashboard } from "@/components/dashboard/BankingPulseDashboard";
@@ -149,6 +149,57 @@ function formatKRW(value: number | null | undefined): string {
   if (value >= 1_0000_0000) return `${(value / 1_0000_0000).toFixed(0)}억원`;
   if (value >= 1_0000) return `${(value / 1_0000).toFixed(0)}만원`;
   return `${value.toLocaleString()}원`;
+}
+
+// 자동 폰트 크기 조정 컴포넌트 (줄바꿈 방지)
+function AutoFitText({
+  children,
+  className = "",
+  minFontSize = 12,
+  maxFontSize = 20
+}: {
+  children: React.ReactNode;
+  className?: string;
+  minFontSize?: number;
+  maxFontSize?: number;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const textRef = useRef<HTMLSpanElement>(null);
+  const [fontSize, setFontSize] = useState(maxFontSize);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    const text = textRef.current;
+    if (!container || !text) return;
+
+    // Reset to max size first
+    setFontSize(maxFontSize);
+
+    // Use requestAnimationFrame to ensure DOM has updated
+    requestAnimationFrame(() => {
+      let currentSize = maxFontSize;
+      const containerWidth = container.offsetWidth;
+
+      // Binary search for optimal font size
+      while (currentSize > minFontSize && text.scrollWidth > containerWidth) {
+        currentSize -= 1;
+        text.style.fontSize = `${currentSize}px`;
+      }
+
+      setFontSize(currentSize);
+    });
+  }, [children, minFontSize, maxFontSize]);
+
+  return (
+    <div ref={containerRef} className={`overflow-hidden ${className}`}>
+      <span
+        ref={textRef}
+        style={{ fontSize: `${fontSize}px`, whiteSpace: 'nowrap', display: 'inline-block' }}
+      >
+        {children}
+      </span>
+    </div>
+  );
 }
 
 const useScrollSpy = (ids: string[], offset: number = 100) => {
@@ -793,7 +844,9 @@ export default function CorporateDetailPage() {
                           <>
                             <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-100">
                               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">매출액</p>
-                              <p className="text-xl font-bold text-slate-900 font-mono">{formatKRW(latest?.revenue)}</p>
+                              <AutoFitText className="font-bold text-slate-900 font-mono" minFontSize={12} maxFontSize={20}>
+                                {formatKRW(latest?.revenue)}
+                              </AutoFitText>
                               {revenueChange !== null && (
                                 <p className={`text-[11px] font-medium font-mono flex items-center gap-0.5 mt-1 ${revenueChange >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                                   {revenueChange >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
@@ -803,9 +856,9 @@ export default function CorporateDetailPage() {
                             </div>
                             <div className="bg-gradient-to-br from-emerald-50 to-green-50 rounded-xl p-4 border border-emerald-100">
                               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">영업이익</p>
-                              <p className={`text-xl font-bold font-mono ${(latest?.operating_profit ?? 0) >= 0 ? 'text-slate-900' : 'text-rose-600'}`}>
+                              <AutoFitText className={`font-bold font-mono ${(latest?.operating_profit ?? 0) >= 0 ? 'text-slate-900' : 'text-rose-600'}`} minFontSize={12} maxFontSize={20}>
                                 {formatKRW(latest?.operating_profit)}
-                              </p>
+                              </AutoFitText>
                               {opChange !== null && (
                                 <p className={`text-[11px] font-medium font-mono flex items-center gap-0.5 mt-1 ${opChange >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                                   {opChange >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
@@ -815,9 +868,9 @@ export default function CorporateDetailPage() {
                             </div>
                             <div className="bg-gradient-to-br from-violet-50 to-purple-50 rounded-xl p-4 border border-violet-100">
                               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">당기순이익</p>
-                              <p className={`text-xl font-bold font-mono ${(latest?.net_income ?? 0) >= 0 ? 'text-slate-900' : 'text-rose-600'}`}>
+                              <AutoFitText className={`font-bold font-mono ${(latest?.net_income ?? 0) >= 0 ? 'text-slate-900' : 'text-rose-600'}`} minFontSize={12} maxFontSize={20}>
                                 {formatKRW(latest?.net_income)}
-                              </p>
+                              </AutoFitText>
                               {netChange !== null && (
                                 <p className={`text-[11px] font-medium font-mono flex items-center gap-0.5 mt-1 ${netChange >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                                   {netChange >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
@@ -827,7 +880,9 @@ export default function CorporateDetailPage() {
                             </div>
                             <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl p-4 border border-amber-100">
                               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">자산총계</p>
-                              <p className="text-xl font-bold text-slate-900 font-mono">{formatKRW(latest?.total_assets)}</p>
+                              <AutoFitText className="font-bold text-slate-900 font-mono" minFontSize={12} maxFontSize={20}>
+                                {formatKRW(latest?.total_assets)}
+                              </AutoFitText>
                               {assetChange !== null && (
                                 <p className={`text-[11px] font-medium font-mono flex items-center gap-0.5 mt-1 ${assetChange >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                                   {assetChange >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
