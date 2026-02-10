@@ -59,7 +59,7 @@ function PipelineStep({ step, status, isLast }: PipelineStepProps) {
   const Icon = step.icon;
 
   return (
-    <div className="flex items-center">
+    <div className={cn("flex items-center", !isLast && "flex-1")}>
       <div className="flex flex-col items-center">
         {/* Step Circle */}
         <div
@@ -109,10 +109,10 @@ function PipelineStep({ step, status, isLast }: PipelineStepProps) {
 
       {/* Connector Line */}
       {!isLast && (
-        <div className="flex items-center mx-1 -mt-6">
+        <div className="flex items-center mx-1 -mt-6 flex-1">
           <div
             className={cn(
-              "w-6 h-0.5 transition-all duration-500",
+              "w-full h-0.5 transition-all duration-500",
               status === 'completed' ? "bg-green-400" : "bg-slate-200"
             )}
           />
@@ -322,7 +322,7 @@ export function DemoPanel() {
           )}
 
           {/* 8-Stage Pipeline */}
-          <div className="flex items-start justify-between overflow-x-auto pb-2">
+          <div className="flex items-start justify-between w-full">
             {PIPELINE_STEPS.map((step, index) => (
               <PipelineStep
                 key={step.id}
