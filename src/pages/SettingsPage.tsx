@@ -1,18 +1,12 @@
 import { MainLayout } from "@/components/layout/MainLayout";
-import { DemoPanel } from "@/components/demo/DemoPanel";
-import { SchedulerPanel } from "@/components/demo/SchedulerPanel";
-import { Badge } from "@/components/ui/badge";
-import { Activity, Settings as SettingsIcon, Database, Network, Zap, Workflow, Cpu, Bot, Search, Globe, GitMerge, Building2, Factory, Landmark, FileText, ShieldCheck, Ban, Calculator, Link as LinkIcon, Fingerprint, Sparkles, Layers, ArrowRight, Laptop, Server, Lock, Clock } from "lucide-react";
+import { Settings as SettingsIcon, Database, Network, Zap, Workflow, Cpu, Bot, Search, Globe, GitMerge, Building2, Factory, Landmark, FileText, ShieldCheck, Ban, Calculator, Link as LinkIcon, Fingerprint, Sparkles, Layers, ArrowRight, Laptop, Server, Lock } from "lucide-react";
 import {
     DynamicBackground,
-    GlassCard,
-    StatusBadge
+    GlassCard
 } from "@/components/premium";
 import { motion } from "framer-motion";
 
 export default function SettingsPage() {
-    const enableScheduler = import.meta.env.VITE_ENABLE_SCHEDULER === 'true' || import.meta.env.DEV;
-    const demoMode = import.meta.env.VITE_DEMO_MODE === 'true' || import.meta.env.DEV;
     const apiUrl = import.meta.env.VITE_API_URL;
 
     return (
@@ -33,72 +27,6 @@ export default function SettingsPage() {
                         <p className="text-slate-500 font-medium mt-1">Configure system behavior and manage demo environments.</p>
                     </div>
                 </motion.div>
-
-                System Features
-                <section className="space-y-6">
-
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ delay: 0.1 }}
-                        className="flex items-center gap-2 mb-4"
-                    >
-                        <Activity className="w-5 h-5 text-indigo-500" />
-                        <h2 className="text-lg font-bold text-slate-800">Feature Control</h2>
-                    </motion.div>
-
-                    <div className="grid gap-8">
-                        {/* Scheduler Panel (Env Controlled) */}
-                        <motion.div
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.2 }}
-                        >
-                            <div className="flex items-center justify-between mb-3">
-                                <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Automated Scheduler</h3>
-                                <StatusBadge variant={enableScheduler ? "success" : "neutral"}>
-                                    {enableScheduler ? "Active" : "Disabled (Env)"}
-                                </StatusBadge>
-                            </div>
-
-                            {enableScheduler ? (
-                                <div className="bg-white/50 backdrop-blur-sm rounded-xl border border-slate-200 shadow-sm p-1">
-                                    <SchedulerPanel />
-                                </div>
-                            ) : (
-                                <GlassCard className="bg-slate-50/50 border-dashed border-slate-300 p-8 text-center flex flex-col items-center justify-center gap-2">
-                                    <h4 className="text-slate-900 font-semibold">Scheduler Disabled</h4>
-                                    <p className="text-slate-500 text-sm max-w-md">The scheduler feature is disabled by the environment variable (VITE_ENABLE_SCHEDULER). Please check your configuration.</p>
-                                </GlassCard>
-                            )}
-                        </motion.div>
-
-                        {/* Demo Mode Panel */}
-                        <motion.div
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.3 }}
-                        >
-                            <div className="flex items-center justify-between mb-3">
-                                <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Demo Environment</h3>
-                                <StatusBadge variant={demoMode ? "brand" : "neutral"}>
-                                    {demoMode ? "Demo Mode Active" : "Production Mode"}
-                                </StatusBadge>
-                            </div>
-
-                            {demoMode ? (
-                                <div className="bg-gradient-to-br from-indigo-50/50 to-purple-50/50 backdrop-blur-sm rounded-xl border border-indigo-100 shadow-sm p-1">
-                                    <DemoPanel />
-                                </div>
-                            ) : (
-                                <GlassCard className="bg-slate-50/50 border-dashed border-slate-300 p-8 text-center flex flex-col items-center justify-center gap-2">
-                                    <h4 className="text-slate-900 font-semibold">Production Mode</h4>
-                                    <p className="text-slate-500 text-sm max-w-md">Demo controls are hidden in production mode.</p>
-                                </GlassCard>
-                            )}
-                        </motion.div>
-                    </div>
-                </section>
 
                 {/* Orchestrator Architecture */}
                 <section className="space-y-6">
