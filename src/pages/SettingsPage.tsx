@@ -1,12 +1,15 @@
 import { MainLayout } from "@/components/layout/MainLayout";
+import { DemoPanel } from "@/components/demo/DemoPanel";
 import { Settings as SettingsIcon, Database, Network, Zap, Workflow, Cpu, Bot, Search, Globe, GitMerge, Building2, Factory, Landmark, FileText, ShieldCheck, Ban, Calculator, Link as LinkIcon, Fingerprint, Sparkles, Layers, ArrowRight, Laptop, Server, Lock } from "lucide-react";
 import {
     DynamicBackground,
-    GlassCard
+    GlassCard,
+    StatusBadge
 } from "@/components/premium";
 import { motion } from "framer-motion";
 
 export default function SettingsPage() {
+    const demoMode = import.meta.env.VITE_DEMO_MODE === 'true' || import.meta.env.DEV;
     const apiUrl = import.meta.env.VITE_API_URL;
 
     return (
@@ -27,6 +30,33 @@ export default function SettingsPage() {
                         <p className="text-slate-500 font-medium mt-1">Configure system behavior and manage demo environments.</p>
                     </div>
                 </motion.div>
+
+                {/* Demo Environment Panel */}
+                <section className="space-y-6">
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.2 }}
+                    >
+                        <div className="flex items-center justify-between mb-3">
+                            <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Demo Environment</h3>
+                            <StatusBadge variant={demoMode ? "brand" : "neutral"}>
+                                {demoMode ? "Demo Mode Active" : "Production Mode"}
+                            </StatusBadge>
+                        </div>
+
+                        {demoMode ? (
+                            <div className="bg-gradient-to-br from-indigo-50/50 to-purple-50/50 backdrop-blur-sm rounded-xl border border-indigo-100 shadow-sm p-1">
+                                <DemoPanel />
+                            </div>
+                        ) : (
+                            <GlassCard className="bg-slate-50/50 border-dashed border-slate-300 p-8 text-center flex flex-col items-center justify-center gap-2">
+                                <h4 className="text-slate-900 font-semibold">Production Mode</h4>
+                                <p className="text-slate-500 text-sm max-w-md">Demo controls are hidden in production mode.</p>
+                            </GlassCard>
+                        )}
+                    </motion.div>
+                </section>
 
                 {/* Orchestrator Architecture */}
                 <section className="space-y-6">
