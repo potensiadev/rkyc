@@ -1024,7 +1024,7 @@ export default function CorporateDetailPage() {
                           <div className="bg-gradient-to-br from-rose-50 to-orange-50 rounded-xl p-5 border border-rose-200">
                             <h4 className="text-sm font-bold text-rose-800 mb-3 flex items-center gap-2">
                               <AlertTriangle className="w-4 h-4" />
-                              핵심 리스크 요인 ({bankingInsights.total_risk_count})
+                              리스크 관리 필요 ({bankingInsights.total_risk_count})
                             </h4>
                             <div className="space-y-3">
                               {bankingInsights.risk_insights.slice(0, 3).map((insight, idx) => (
@@ -1061,7 +1061,7 @@ export default function CorporateDetailPage() {
                           <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl p-5 border border-emerald-200">
                             <h4 className="text-sm font-bold text-emerald-800 mb-3 flex items-center gap-2">
                               <TrendingUp className="w-4 h-4" />
-                              핵심 기회 요인 ({bankingInsights.total_opportunity_count})
+                              영업 기회 포착 ({bankingInsights.total_opportunity_count})
                             </h4>
                             <div className="space-y-3">
                               {bankingInsights.opportunity_insights.slice(0, 3).map((insight, idx) => (
@@ -1199,11 +1199,6 @@ export default function CorporateDetailPage() {
                   <p className="text-[13px] leading-relaxed text-slate-600 text-justify mb-6">
                     {profile?.business_summary || profile?.business_model || "No business overview available."}
                   </p>
-                  <div className="flex gap-8 flex-wrap">
-                    <DataField label="Revenue" value={profile?.revenue_krw ? formatKRW(Math.floor(profile.revenue_krw)) : '-'} />
-                    <DataField label="Export" value={typeof profile?.export_ratio_pct === 'number' ? `${profile.export_ratio_pct}%` : '-'} />
-                    <DataField label="Employees" value={profile?.employee_count ? `${profile.employee_count}명` : '-'} />
-                  </div>
                 </div>
 
                 {/* Value Chain Flow */}

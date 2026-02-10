@@ -14,51 +14,86 @@ import {
   Filter,
   Eye,
   EyeOff,
+  Activity,
+  ArrowUpRight
 } from "lucide-react";
 import {
   DynamicBackground,
-  GlassCard,
-  Sparkline,
   StatusBadge
 } from "@/components/premium";
-import { motion } from "framer-motion";
-import { SignalStatus, SIGNAL_STATUS_CONFIG } from "@/types/signal";
+import { motion, AnimatePresence } from "framer-motion";
+import { SignalStatus } from "@/types/signal";
+// @ts-ignore
+import { TinyArea } from "@ant-design/charts";
 
 import { GroupedSignalCard } from "@/components/dashboard/GroupedSignalCard";
 
+// KPI Card Component using AntV TinyArea
 interface KPICardProps {
   icon: React.ElementType;
   label: string;
   value: string | number;
   trend?: string;
-  colorClass?: string;
-  trendData?: number[]; // Add trend data for sparkline
-  sparklineColor?: string;
+  trendLabel?: string;
+  colorTheme: 'indigo' | 'emerald' | 'rose' | 'amber';
+  data: number[];
 }
 
-function KPICard({ icon: Icon, label, value, trend, colorClass = "text-primary", trendData, sparklineColor }: KPICardProps) {
+function KPICard({ icon: Icon, label, value, trend, trendLabel, colorTheme, data }: KPICardProps) {
+  const themeColors = {
+    indigo: { text: "text-indigo-600", bg: "bg-indigo-50", border: "border-indigo-100", stroke: "#6366f1", fill: "l(270) 0:#ffffff 0.5:#c7d2fe 1:#6366f1" },
+    emerald: { text: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-100", stroke: "#10b981", fill: "l(270) 0:#ffffff 0.5:#a7f3d0 1:#10b981" },
+    rose: { text: "text-rose-600", bg: "bg-rose-50", border: "border-rose-100", stroke: "#e11d48", fill: "l(270) 0:#ffffff 0.5:#fecdd3 1:#e11d48" },
+    amber: { text: "text-amber-600", bg: "bg-amber-50", border: "border-amber-100", stroke: "#d97706", fill: "l(270) 0:#ffffff 0.5:#fde68a 1:#d97706" },
+  };
+
+  const colors = themeColors[colorTheme];
+
+  const config = {
+    height: 40,
+    autoFit: true,
+    data,
+    smooth: true,
+    areaStyle: {
+      fill: colors.fill,
+    },
+    line: {
+      color: colors.stroke,
+    }
+  };
+
   return (
-    <GlassCard className="p-5 flex flex-col justify-between h-32">
-      <div className="flex justify-between items-start">
-        <div>
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">{label}</p>
-          <div className="flex items-center gap-2">
-            <span className="text-3xl font-mono font-bold text-slate-900">{value}</span>
-          </div>
-        </div>
-        <div className={`p-2 rounded-xl bg-slate-50 border border-slate-100 ${colorClass}`}>
+    <motion.div
+      whileHover={{ y: -2 }}
+      className={`group relative overflow-hidden rounded-2xl bg-white border border-slate-200/60 p-5 shadow-sm hover:shadow-lg hover:border-${colorTheme}-200/60 transition-all duration-300`}
+    >
+      <div className="flex justify-between items-start mb-4 relative z-10">
+        <div className={`p-2 rounded-xl ${colors.bg} ${colors.text} ring-1 ring-inset ${colors.border}`}>
           <Icon className="w-5 h-5" />
+        </div>
+        {trend && (
+          <span className="flex items-center gap-1 text-[10px] font-semibold bg-slate-100 px-2 py-1 rounded-full text-slate-600">
+            {trend === 'up' ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+            {trendLabel}
+          </span>
+        )}
+      </div>
+
+      <div className="relative z-10">
+        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">{label}</p>
+        <div className="flex items-baseline gap-2">
+          <h3 className="text-3xl font-bold text-slate-900 tracking-tight">{value}</h3>
         </div>
       </div>
 
-      {trendData ? (
-        <div className="h-8 w-full mt-2">
-          <Sparkline data={trendData} color={sparklineColor || "#6366f1"} height={30} />
+      {/* Chart Container */}
+      <div className="absolute bottom-0 left-0 right-0 h-16 opacity-60 group-hover:opacity-100 transition-opacity">
+        <div className="w-full h-full px-0 safe-chart-container">
+          {/* @ts-ignore */}
+          <TinyArea {...config} />
         </div>
-      ) : (
-        trend && <span className="text-xs font-medium text-slate-400 mt-2">{trend}</span>
-      )}
-    </GlassCard>
+      </div>
+    </motion.div>
   );
 }
 
@@ -150,34 +185,21 @@ export default function SignalInbox() {
     navigate(`/signals/${signalId}`);
   };
 
+  // Styles for Filter Tabs
+  const getTabStyle = (key: StatusFilter) =>
+    `flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-300 ${statusFilter === key
+      ? "bg-slate-900 text-white shadow-lg shadow-slate-900/20 scale-105"
+      : "bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-900 border border-slate-200/60"
+    }`;
 
-  // 로딩 상태
   if (isLoading) {
     return (
       <MainLayout>
         <DynamicBackground />
-        <div className="max-w-7xl">
-          <div className="flex items-center justify-center py-20">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-              <p className="text-muted-foreground">시그널 데이터를 불러오는 중...</p>
-            </div>
-          </div>
-        </div>
-      </MainLayout>
-    );
-  }
-
-  // 에러 상태
-  if (error) {
-    return (
-      <MainLayout>
-        <DynamicBackground />
-        <div className="max-w-7xl">
-          <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-6 text-center">
-            <AlertCircle className="w-8 h-8 text-destructive mx-auto mb-2" />
-            <p className="text-destructive font-medium">데이터 로드 중 오류가 발생했습니다</p>
-            <p className="text-sm text-muted-foreground mt-1">잠시 후 다시 시도해주세요</p>
+        <div className="flex justify-center items-center h-[80vh]">
+          <div className="flex flex-col items-center">
+            <div className="w-12 h-12 border-4 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin mb-4" />
+            <p className="text-slate-400 font-medium">Loading Intelligence...</p>
           </div>
         </div>
       </MainLayout>
@@ -186,175 +208,186 @@ export default function SignalInbox() {
 
   return (
     <MainLayout>
-      <div className="max-w-[1600px] mx-auto p-6 space-y-8">
+      <DynamicBackground />
+      <div className="max-w-7xl mx-auto px-6 py-8 space-y-10 pb-24 relative z-10">
+
+        {/* Header Section */}
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
+            <h1 className="text-3xl md:text-4xl font-bold text-slate-900 tracking-tight flex items-center gap-3">
+              Signal Intelligence
+              <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-600 text-xs font-bold border border-emerald-100 tracking-wide uppercase">
+                System Active
+              </span>
+            </h1>
+            <p className="text-slate-500 mt-2 text-lg">
+              Real-time risk monitoring and opportunity detection.
+            </p>
+          </motion.div>
+
+          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }}>
+            <div className="flex items-center gap-3 bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
+              <button
+                onClick={() => setStatusFilter("active")}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${statusFilter === 'active' ? 'bg-slate-100 text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                Active Only
+              </button>
+              <div className="w-px h-4 bg-slate-200" />
+              <button
+                onClick={() => setStatusFilter("all")}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${statusFilter === 'all' ? 'bg-slate-100 text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                All History
+              </button>
+            </div>
+          </motion.div>
+        </div>
 
         {/* Demo Mode Banner */}
         {import.meta.env.VITE_DEMO_MODE === 'true' && (
           <motion.div
-            initial={{ opacity: 0, y: -20 }}
+            initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mb-6 bg-gradient-to-r from-purple-500/10 to-blue-500/10 border border-purple-500/30 rounded-lg p-4"
+            className="bg-indigo-600 rounded-2xl p-4 text-white shadow-xl shadow-indigo-500/20 flex flex-col sm:flex-row items-center justify-between gap-4 overflow-hidden relative"
           >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center">
-                  <Beaker className="w-5 h-5 text-purple-500" />
-                </div>
-                <div>
-                  <p className="font-medium text-foreground">Demo Mode 활성화</p>
-                  <p className="text-sm text-muted-foreground">AI 분석을 실행하려면 설정 페이지로 이동하세요</p>
-                </div>
+            <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20" />
+            <div className="flex items-center gap-3 relative z-10">
+              <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
+                <Beaker className="w-5 h-5" />
               </div>
-              <Link
-                to="/settings"
-                className="flex items-center gap-2 px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg transition-colors"
-              >
-                <Settings className="w-4 h-4" />
-                분석 실행하기
-              </Link>
+              <div className="font-medium">
+                Demo Environment Active <span className="text-indigo-200 text-sm ml-2 font-normal">Simulated data stream</span>
+              </div>
             </div>
+            <Link to="/settings" className="relative z-10 flex items-center gap-2 px-4 py-2 bg-white text-indigo-700 rounded-lg font-bold text-sm hover:bg-indigo-50 transition-colors">
+              <Settings className="w-4 h-4" /> Configure
+            </Link>
           </motion.div>
         )}
 
-        {/* KPI Cards - 상태별 통계 */}
+        {/* KPI Grid */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="grid grid-cols-2 md:grid-cols-4 gap-4"
-        >
-          <KPICard icon={AlertCircle} label="신규 시그널" value={counts.todayNew} trend="미검토" colorClass="text-indigo-500" trendData={[2, 4, 3, 5, 4, 6, counts.todayNew]} sparklineColor="#6366f1" />
-          <KPICard icon={CheckCircle} label="검토 완료" value={counts.reviewed} trend="처리됨" colorClass="text-emerald-500" trendData={[1, 2, 2, 3, 3, 4, counts.reviewed]} sparklineColor="#10b981" />
-          <KPICard icon={TrendingDown} label="위험 시그널" value={counts.riskHigh7d} trend="주의 필요" colorClass="text-rose-500" trendData={[5, 6, 8, 7, 9, 8, counts.riskHigh7d]} sparklineColor="#f43f5e" />
-          <KPICard icon={TrendingUp} label="기회 시그널" value={counts.opportunity7d} trend="긍정적" colorClass="text-emerald-500" trendData={[2, 3, 2, 4, 3, 5, counts.opportunity7d]} sparklineColor="#10b981" />
-        </motion.div>
-
-        {/* 상태 필터 탭 + 정렬 옵션 */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.1 }}
-          className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
-        >
-          {/* 상태 필터 탭 */}
-          <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg">
-            <button
-              onClick={() => setStatusFilter("active")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
-                statusFilter === "active"
-                  ? "bg-white text-slate-900 shadow-sm"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              <Eye className="w-3.5 h-3.5" />
-              활성
-              <span className="ml-1 px-1.5 py-0.5 text-xs bg-indigo-100 text-indigo-700 rounded-full">
-                {signals.filter(s => s.status !== "dismissed").length}
-              </span>
-            </button>
-            <button
-              onClick={() => setStatusFilter("new")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
-                statusFilter === "new"
-                  ? "bg-white text-slate-900 shadow-sm"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              <AlertCircle className="w-3.5 h-3.5" />
-              신규
-              <span className="ml-1 px-1.5 py-0.5 text-xs bg-indigo-100 text-indigo-700 rounded-full">
-                {counts.todayNew}
-              </span>
-            </button>
-            <button
-              onClick={() => setStatusFilter("reviewed")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
-                statusFilter === "reviewed"
-                  ? "bg-white text-slate-900 shadow-sm"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              <CheckCircle className="w-3.5 h-3.5" />
-              검토 완료
-              <span className="ml-1 px-1.5 py-0.5 text-xs bg-emerald-100 text-emerald-700 rounded-full">
-                {counts.reviewed}
-              </span>
-            </button>
-            <button
-              onClick={() => setStatusFilter("dismissed")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
-                statusFilter === "dismissed"
-                  ? "bg-white text-slate-900 shadow-sm"
-                  : "text-slate-500 hover:text-slate-700"
-              }`}
-            >
-              <EyeOff className="w-3.5 h-3.5" />
-              기각
-              <span className="ml-1 px-1.5 py-0.5 text-xs bg-slate-200 text-slate-600 rounded-full">
-                {counts.dismissed}
-              </span>
-            </button>
-            <button
-              onClick={() => setStatusFilter("all")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
-                statusFilter === "all"
-                  ? "bg-white text-slate-900 shadow-sm"
-                  : "text-slate-500 hover:text-slate-700"
-              }`}
-            >
-              <Filter className="w-3.5 h-3.5" />
-              전체
-            </button>
-          </div>
-
-          {/* 정렬 옵션 */}
-          <select className="text-sm border border-input rounded-md px-3 py-2 bg-card text-foreground focus:ring-2 focus:ring-primary/20 outline-none">
-            <option value="recent">최신순</option>
-            <option value="impact">영향도순</option>
-            <option value="corporation">기업명순</option>
-          </select>
-        </motion.div>
-
-        {/* 2. Grouped Signal Cards by Corporation */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
           transition={{ delay: 0.2 }}
-          className="space-y-4"
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5"
         >
-          {groupedSignals.map((group, index) => (
-            <motion.div
-              key={group.corporationId}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 + (index * 0.05) }}
-              className={group.isLastAnalyzed ? "ring-2 ring-amber-400 ring-offset-2 rounded-xl" : ""}
-            >
-              {group.isLastAnalyzed && (
-                <div className="flex items-center gap-2 mb-2 px-1">
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700 border border-amber-200">
-                    <Lightbulb className="w-3 h-3" />
-                    방금 분석 완료
-                  </span>
-                </div>
-              )}
-              <GroupedSignalCard
-                corporationId={group.corporationId}
-                corporationName={group.corporationName}
-                signals={group.signals}
-                loanInsight={insightMap.get(group.corporationId)}
-                onSignalClick={handleRowClick}
-                onCorporationClick={(id) => navigate(`/corporations/${id}`, { state: { corpName: group.corporationName } })}
-              />
-            </motion.div>
-          ))}
+          <KPICard
+            icon={Activity}
+            label="New Signals"
+            value={counts.todayNew}
+            colorTheme="indigo"
+            trend="up"
+            trendLabel="+12%"
+            data={[15, 22, 18, 28, 24, 32, 45, 38, 42, Math.max(counts.todayNew * 5, 20)]}
+          />
+          <KPICard
+            icon={TrendingDown}
+            label="Risk Alerts"
+            value={counts.riskHigh7d}
+            colorTheme="rose"
+            trend="up"
+            trendLabel="+5%"
+            data={[8, 12, 10, 15, 14, 18, 12, 16, 20, Math.max(counts.riskHigh7d * 3, 15)]}
+          />
+          <KPICard
+            icon={TrendingUp}
+            label="Opportunities"
+            value={counts.opportunity7d}
+            colorTheme="emerald"
+            trend="up"
+            trendLabel="+8%"
+            data={[5, 8, 12, 10, 15, 18, 22, 25, 28, Math.max(counts.opportunity7d * 4, 20)]}
+          />
+          <KPICard
+            icon={CheckCircle}
+            label="Reviewed"
+            value={counts.reviewed}
+            colorTheme="amber"
+            trend="up"
+            trendLabel="+24%"
+            data={[20, 25, 28, 30, 32, 35, 38, 42, 45, Math.max(counts.reviewed * 2, 40)]}
+          />
         </motion.div>
 
-        {filteredSignals.length === 0 && (
-          <div className="text-center py-32 bg-card/30 rounded-2xl border border-dashed border-border/50">
-            <p className="text-muted-foreground text-lg">선택한 조건에 해당하는 시그널이 없습니다.</p>
-            <p className="text-sm text-muted-foreground/50 mt-2">다른 검색어나 필터를 시도해보세요.</p>
+        {/* Filter Bar */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.3 }}
+          className="sticky top-4 z-30"
+        >
+          <div className="bg-white/80 backdrop-blur-xl border border-slate-200/60 p-1.5 rounded-2xl shadow-lg shadow-slate-200/50 flex flex-nowrap overflow-x-auto no-scrollbar gap-2">
+            <button onClick={() => setStatusFilter("active")} className={getTabStyle("active")}>
+              <Activity className="w-4 h-4" /> Active Pulse
+            </button>
+            <button onClick={() => setStatusFilter("new")} className={getTabStyle("new")}>
+              <AlertCircle className="w-4 h-4" /> New
+              <span className="bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded textxs">{counts.todayNew}</span>
+            </button>
+            <button onClick={() => setStatusFilter("reviewed")} className={getTabStyle("reviewed")}>
+              <CheckCircle className="w-4 h-4" /> Reviewed
+            </button>
+            <button onClick={() => setStatusFilter("dismissed")} className={getTabStyle("dismissed")}>
+              <EyeOff className="w-4 h-4" /> Dismissed
+            </button>
           </div>
-        )}
+        </motion.div>
+
+        {/* Signal List */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.4 }}
+          className="space-y-6"
+        >
+          <AnimatePresence>
+            {groupedSignals.map((group, index) => (
+              <motion.div
+                key={group.corporationId}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 + (index * 0.05) }}
+                className={group.isLastAnalyzed ? "relative" : ""}
+              >
+                {group.isLastAnalyzed && (
+                  <div className="absolute -top-3 left-4 z-10">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-400 text-white shadow-lg shadow-amber-400/40">
+                      <Lightbulb className="w-3 h-3 fill-white" />
+                      Just Added
+                    </span>
+                  </div>
+                )}
+                <div className={group.isLastAnalyzed ? "ring-2 ring-amber-400/50 rounded-2xl shadow-[0_0_30px_rgba(251,191,36,0.2)]" : ""}>
+                  <GroupedSignalCard
+                    corporationId={group.corporationId}
+                    corporationName={group.corporationName}
+                    signals={group.signals}
+                    loanInsight={insightMap.get(group.corporationId)}
+                    onSignalClick={handleRowClick}
+                    onCorporationClick={(id) => navigate(`/corporations/${id}`, { state: { corpName: group.corporationName } })}
+                  />
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+
+          {filteredSignals.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-32 text-center rounded-3xl border-2 border-dashed border-slate-200 bg-slate-50/50">
+              <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
+                <Filter className="w-8 h-8 text-slate-300" />
+              </div>
+              <h3 className="text-lg font-bold text-slate-900">No Signals Found</h3>
+              <p className="text-slate-500 mt-1 max-w-sm">
+                No signals match your current status filter. Try clearing filters or checking back later.
+              </p>
+              <button onClick={() => setStatusFilter("all")} className="mt-6 text-indigo-600 font-semibold text-sm hover:underline">
+                View All History
+              </button>
+            </div>
+          )}
+        </motion.div>
       </div>
     </MainLayout>
   );
