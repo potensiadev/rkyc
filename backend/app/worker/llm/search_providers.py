@@ -379,8 +379,8 @@ class GeminiGroundingProvider(BaseSearchProvider):
     provider_type = SearchProviderType.GEMINI_GROUNDING
 
     # 지원 모델 (Grounding 지원 모델)
-    GROUNDING_MODEL = "gemini-2.0-flash-exp"  # Grounding 지원
-    FALLBACK_MODEL = "gemini-2.0-flash"       # Grounding 미지원 시 Fallback
+    GROUNDING_MODEL = "gemini-1.5-flash"      # Grounding 지원
+    FALLBACK_MODEL = "gemini-1.5-flash"       # 동일 모델 사용
 
     def __init__(
         self,
@@ -429,35 +429,22 @@ class GeminiGroundingProvider(BaseSearchProvider):
         start_time = time.time()
 
         try:
-            # Google Search Tool 생성 (Grounding 활성화)
-            # 최신 SDK에서는 google_search_retrieval 사용
-            from google.generativeai.types import Tool
-
-            # Gemini 2.0 Flash Exp는 자동 grounding 지원
+            # Gemini 1.5 Flash with Google Search Grounding
             model = genai.GenerativeModel(
                 model_name=self.GROUNDING_MODEL,
                 system_instruction=GEMINI_GROUNDING_SYSTEM_PROMPT,
             )
 
-            # Google Search Grounding Tool 생성
-            # 참고: https://ai.google.dev/gemini-api/docs/grounding
-            google_search_tool = Tool.from_google_search_retrieval(
-                google_search_retrieval=genai.protos.GoogleSearchRetrieval(
-                    dynamic_retrieval_config=genai.protos.DynamicRetrievalConfig(
-                        mode=genai.protos.DynamicRetrievalConfig.Mode.MODE_DYNAMIC,
-                        dynamic_threshold=0.3,  # 낮을수록 검색 더 자주 수행
-                    )
-                )
-            )
-
             # Thread-safe 비동기 호출
             loop = _get_or_create_event_loop()
 
+            # Google Search Grounding 활성화
+            # 참고: https://ai.google.dev/gemini-api/docs/grounding
             response = await loop.run_in_executor(
                 None,
                 lambda: model.generate_content(
                     query,
-                    tools=[google_search_tool],
+                    tools="google_search_retrieval",  # 문자열로 전달
                     generation_config={
                         "temperature": 0.1,  # 낮은 temperature로 사실 중심
                         "max_output_tokens": 2048,
@@ -618,7 +605,7 @@ class GeminiGroundingProvider(BaseSearchProvider):
             response = await loop.run_in_executor(
                 None,
                 lambda: litellm.completion(
-                    model="gemini/gemini-2.0-flash",
+                    model="gemini/gemini-1.5-flash",
                     messages=[{"role": "user", "content": query}],
                     timeout=30,
                 )
@@ -639,7 +626,7 @@ class GeminiGroundingProvider(BaseSearchProvider):
                 raw_response={
                     "text": content,
                     "grounding_used": False,
-                    "model": "gemini-2.0-flash",
+                    "model": "gemini-1.5-flash",
                 },
                 confidence=0.6,  # Grounding 없으면 낮은 신뢰도
                 latency_ms=latency_ms,

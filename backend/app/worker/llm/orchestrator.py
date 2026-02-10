@@ -475,7 +475,11 @@ class MultiAgentOrchestrator:
                         issue_count = len(validation_result.issues)
                         error_issues = [i for i in validation_result.issues if hasattr(i, 'severity') and i.severity.value == "ERROR"]
                         if error_issues:
-                            provenance["openai_validation_errors"] = len(error_issues)
+                            # provenance에는 dict/str만 저장 가능 (int 금지)
+                            provenance["_meta_validation_errors"] = {
+                                "count": len(error_issues),
+                                "type": "openai_validation"
+                            }
                             logger.warning(
                                 f"[Orchestrator][{trace_id}] OpenAI validation found {len(error_issues)} errors"
                             )

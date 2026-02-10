@@ -229,10 +229,9 @@ class GeminiFactChecker:
 
         genai.configure(api_key=api_key)
 
-        # 최신 SDK: google_search_retrieval을 GenerateContentConfig에서 설정
-        # Tool.from_google_search_retrieval이 deprecated됨
+        # Gemini 1.5 Flash with Google Search Grounding
         model = genai.GenerativeModel(
-            model_name="gemini-2.0-flash-exp",  # Grounding 지원 모델
+            model_name="gemini-1.5-flash",
             system_instruction=self.FACT_CHECK_SYSTEM_PROMPT,
         )
 
@@ -243,6 +242,7 @@ class GeminiFactChecker:
             None,
             lambda: model.generate_content(
                 prompt,
+                tools="google_search_retrieval",  # Grounding 활성화
                 generation_config={
                     "temperature": 0.1,  # 낮은 temperature로 일관된 응답
                     "max_output_tokens": 1024,

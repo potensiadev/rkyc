@@ -64,14 +64,18 @@ class ProfileAgent(BaseAgent):
 
             # 결과 변환
             profile_data = {
-                "profile": profile_result.profile,
+                "profile": profile_result.profile or {},  # None 대신 빈 dict
                 "selected_queries": profile_result.selected_queries,
                 "query_details": profile_result.query_details,
                 "is_cached": profile_result.is_cached,
             }
 
+            # P0 Fix: profile이 None일 수 있음
             metadata = {
-                "confidence": profile_result.profile.get("profile_confidence", "UNKNOWN"),
+                "confidence": (
+                    profile_result.profile.get("profile_confidence", "UNKNOWN")
+                    if profile_result.profile else "UNKNOWN"
+                ),
                 "query_count": len(profile_result.selected_queries),
                 "is_cached": profile_result.is_cached,
             }

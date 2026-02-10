@@ -371,14 +371,19 @@ def run_analysis_pipeline(self, job_id: str, corp_id: str, skip_cache: bool = Fa
                     )
                 finally:
                     loop.close()
+            # P0 Fix: profile이 None일 수 있음
+            profile_confidence = (
+                profile_result.profile.get('profile_confidence')
+                if profile_result.profile else "N/A"
+            )
             logger.info(
-                f"PROFILING completed: confidence={profile_result.profile.get('profile_confidence')}, "
+                f"PROFILING completed: confidence={profile_confidence}, "
                 f"queries_selected={len(profile_result.selected_queries)}, "
                 f"is_cached={profile_result.is_cached}"
             )
             # Store profile data for context building
             profile_data = {
-                "profile": profile_result.profile,
+                "profile": profile_result.profile or {},  # None 대신 빈 dict
                 "selected_queries": profile_result.selected_queries,
                 "query_details": profile_result.query_details,
             }
